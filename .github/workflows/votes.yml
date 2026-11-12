@@ -1,0 +1,39 @@
+name: Snapshot votes
+# Run by hand once voting closes: Actions > Snapshot votes > Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: Episode number this vote decides (e.g. 1)
+        required: true
+      reel:
+        description: Link to the Reel (or its media id)
+        required: true
+      hours:
+        description: Hours voting stays open after posting
+        default: '24'
+permissions:
+  contents: write
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Collect and rank comments
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          DAY: ${{ inputs.day }}
+          REEL: ${{ inputs.reel }}
+          HOURS: ${{ inputs.hours }}
+        run: node tools/collect-comments.mjs --day "$DAY" --reel "$REEL" --hours "$HOURS"
+      - name: Publish the ledger
+        env:
+          DAY: ${{ inputs.day }}
+        run: |
+          git config user.name "crail-votes"
+          git config user.email "crail-votes@users.noreply.github.com"
+          git add ledger
+          git diff --cached --quiet || git commit -m "Vote snapshot for day $DAY"
+          git push

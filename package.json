@@ -1,0 +1,27 @@
+{
+  "name": "crail",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "CRAIL - a browser game that starts as one cube and is built by Instagram comments.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "capture": "node tools/capture.mjs",
+    "votes": "node tools/collect-comments.mjs"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
