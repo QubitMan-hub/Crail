@@ -3,7 +3,10 @@
 //
 //   npm run build && npm run reel -- day-000                 -> captures/day-000.mp4
 //   npm run reel -- day-000 --voice voice.m4a                -> same, with your voice-over mixed in
-//   npm run reel -- day-000 --no-captions                    -> without the caption lines
+//
+// A shot list (tools/reels/<name>.mjs) exports:
+//   seconds, keys [[from, to, key]], camera(t) -> {zoom}, html(t) -> overlay markup,
+//   css, sfx [[time, 'boom' | 'pop' | 'tick']], and optionally world(t) -> {cubeY, impactAt}.
 import { chromium } from 'playwright';
 import { preview } from 'vite';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -14,11 +17,7 @@ import path from 'node:path';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: {
-    voice: { type: 'string' },
-    'no-captions': { type: 'boolean', default: false },
-    day: { type: 'string' },
-  },
+  options: { voice: { type: 'string' }, day: { type: 'string' } },
 });
 const name = positionals[0];
 if (!name) throw new Error('Usage: npm run reel -- <shot list name, e.g. day-000>');
@@ -34,20 +33,11 @@ await mkdir(dir, { recursive: true });
 
 const OVERLAY_CSS = `
   .hud, #sound { display: none !important; }
-  #reel-title, #reel-caption {
-    position: fixed; left: 0; right: 0; text-align: center; white-space: pre-line;
-    font-family: 'Inter Display', 'Inter', system-ui, sans-serif; color: #1d1b19;
-    transition: none; pointer-events: none;
-  }
-  /* Kept clear of Instagram's own buttons: nothing in the top 12% or bottom 22%. */
-  #reel-title { top: 15%; font-weight: 900; font-size: 46px; line-height: 1.08; letter-spacing: 0.02em; }
-  #reel-title.small { font-weight: 800; font-size: 30px; letter-spacing: 0.04em; }
-  #reel-caption { top: 66%; padding: 0 56px; }
-  #reel-caption span {
-    display: inline; font-weight: 700; font-size: 21px; line-height: 1.5;
-    background: #1d1b19; color: #f4efe4; padding: 3px 9px; border-radius: 4px;
-    box-decoration-break: clone; -webkit-box-decoration-break: clone;
-  }
+  /* Shot lists draw into this layer. Keep clear of Instagram's own buttons:
+     nothing important in the top 11% or the bottom 22%. */
+  #reel { position: fixed; inset: 0; overflow: hidden; pointer-events: none; color: #1d1b19;
+          font-family: 'Inter Display', 'Inter', system-ui, sans-serif; }
+  ${shots.css ?? ''}
 `;
 
 const server = await preview({ preview: { port: 4175, strictPort: true }, logLevel: 'silent' });
@@ -60,28 +50,12 @@ try {
   await page.waitForFunction(() => window.__crail?.game);
   await page.addStyleTag({ content: OVERLAY_CSS });
   await page.evaluate(() => {
-    for (const id of ['reel-title', 'reel-caption']) {
-      const el = document.createElement('div');
-      el.id = id;
-      document.body.appendChild(el);
-    }
+    document.body.appendChild(Object.assign(document.createElement('div'), { id: 'reel' }));
     window.__landings = 0;
-    window.__crail.game.ctx.events.on('cube:rolled', () => window.__landings++);
+    const { game } = window.__crail;
+    game.ctx.events.on('cube:rolled', () => window.__landings++);
+    window.__cube = game.ctx.scene.children.find((o) => o.isMesh && o.castShadow);
   });
-
-  const at = (list, t) => list.find(([a, b]) => t >= a && t < b)?.[2] ?? '';
-  const smooth = (x) => x * x * (3 - 2 * x);
-  const zoomAt = (t) => {
-    const z = shots.zoom;
-    if (t <= z[0][0]) return z[0][1];
-    for (let i = 1; i < z.length; i++) {
-      if (t <= z[i][0]) {
-        const k = smooth((t - z[i - 1][0]) / (z[i][0] - z[i - 1][0]));
-        return z[i - 1][1] + (z[i][1] - z[i - 1][1]) * k;
-      }
-    }
-    return z[z.length - 1][1];
-  };
 
   const held = new Set();
   let seen = 0;
@@ -90,21 +64,21 @@ try {
     const want = new Set(shots.keys.filter(([a, b]) => t >= a && t < b).map(([, , key]) => `Key${key}`));
     for (const code of held) if (!want.has(code)) { await page.keyboard.up(code); held.delete(code); }
     for (const code of want) if (!held.has(code)) { await page.keyboard.down(code); held.add(code); }
+
+    const world = shots.world?.(t) ?? {};
+    const impact = world.impactAt !== undefined && t >= world.impactAt && t - 1 / FPS < world.impactAt;
     const count = await page.evaluate(
-      ({ dt, zoom, title, caption }) => {
+      ({ dt, zoom, html, cubeY, impact }) => {
         const { game } = window.__crail;
         game.ctx.camera.zoom = zoom;
         game.ctx.camera.updateProjectionMatrix();
+        if (cubeY !== undefined && !game.ctx.state.cube.moving) window.__cube.position.y = cubeY;
+        if (impact) game.ctx.bump(0.45);
         game.step(dt);
-        const tEl = document.getElementById('reel-title');
-        tEl.textContent = title;
-        tEl.className = title === title.toUpperCase() ? '' : 'small';
-        const cEl = document.getElementById('reel-caption');
-        cEl.replaceChildren();
-        if (caption) cEl.appendChild(Object.assign(document.createElement('span'), { textContent: caption }));
+        document.getElementById('reel').innerHTML = html;
         return window.__landings;
       },
-      { dt: 1 / FPS, zoom: zoomAt(t), title: at(shots.titles, t), caption: values['no-captions'] ? '' : at(shots.captions, t) },
+      { dt: 1 / FPS, zoom: shots.camera(t).zoom, html: shots.html(t), cubeY: world.cubeY, impact },
     );
     for (; seen < count; seen++) landings.push(t);
     await page.screenshot({ path: `${dir}/${String(f).padStart(5, '0')}.jpg`, quality: 95, type: 'jpeg' });
@@ -115,32 +89,44 @@ try {
   await server.close();
 }
 
-// The game's sound is made in code, so remake the same thud for each landing.
+// The game's sound is made in code, so remake the same thud for each landing,
+// plus the shot list's own effects.
 const RATE = 48000;
 const pcm = new Float32Array(Math.ceil(shots.seconds * RATE));
+/** A sine whose pitch slides from f0 to f1 over `slide` seconds, with exponential decay. */
+function blip(at, { f0, f1, slide, decay, len, gain }) {
+  const start = Math.round(at * RATE);
+  const k = Math.log(f1 / f0) / slide;
+  for (let n = 0; n < RATE * len && start + n < pcm.length; n++) {
+    const s = n / RATE;
+    const phase =
+      (2 * Math.PI * f0 * (Math.exp(k * Math.min(s, slide)) - 1)) / k + 2 * Math.PI * f1 * Math.max(0, s - slide);
+    pcm[start + n] += gain * Math.sin(phase) * Math.exp(-decay * s) * Math.min(1, n / 48);
+  }
+}
+const SOUNDS = {
+  boom: { f0: 150, f1: 38, slide: 0.22, decay: 9, len: 0.6, gain: 0.8 },
+  pop: { f0: 520, f1: 880, slide: 0.05, decay: 45, len: 0.12, gain: 0.22 },
+  tick: { f0: 1500, f1: 1400, slide: 0.02, decay: 110, len: 0.05, gain: 0.16 },
+};
 landings.forEach((t, i) => {
   const f0 = 105 + ((i * 37) % 25);
-  const start = Math.round(t * RATE);
-  for (let n = 0; n < RATE * 0.13 && start + n < pcm.length; n++) {
-    const s = n / RATE;
-    // Pitch falls from f0 to 45% of it over 90ms, like the in-game oscillator.
-    const k = Math.log(0.45) / 0.09;
-    const phase = (2 * Math.PI * f0 * (Math.exp(k * s) - 1)) / k;
-    pcm[start + n] += 0.5 * Math.sin(phase) * Math.exp(-38 * s);
-  }
+  blip(t, { f0, f1: f0 * 0.45, slide: 0.09, decay: 38, len: 0.13, gain: 0.5 });
 });
+for (const [t, kind] of shots.sfx ?? []) blip(t, SOUNDS[kind]);
+
 const wav = Buffer.alloc(44 + pcm.length * 2);
 wav.write('RIFF', 0); wav.writeUInt32LE(36 + pcm.length * 2, 4); wav.write('WAVEfmt ', 8);
 wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
 wav.writeUInt32LE(RATE, 24); wav.writeUInt32LE(RATE * 2, 28); wav.writeUInt16LE(2, 32);
 wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(pcm.length * 2, 40);
 pcm.forEach((v, i) => wav.writeInt16LE(Math.round(Math.max(-1, Math.min(1, v)) * 32767), 44 + i * 2));
-await writeFile(`${dir}/thuds.wav`, wav);
+await writeFile(`${dir}/sfx.wav`, wav);
 
 const out = `captures/${name}.mp4`;
-const args = ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', `${dir}/%05d.jpg`, '-i', `${dir}/thuds.wav`];
+const args = ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', `${dir}/%05d.jpg`, '-i', `${dir}/sfx.wav`];
 if (values.voice) {
-  // Voice up front, thuds tucked underneath it.
+  // Voice up front, effects tucked underneath it.
   args.push('-i', values.voice, '-filter_complex',
     '[1:a]volume=0.55[t];[2:a]loudnorm=I=-15:TP=-1.5,aresample=48000[v];[t][v]amix=inputs=2:duration=first:normalize=0[a]',
     '-map', '0:v', '-map', '[a]');
