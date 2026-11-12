@@ -34,7 +34,11 @@ const CAMERA_OFFSET = new THREE.Vector3(12, 12, 12);
 const VIEW_SPAN = 9;
 const VIEW_SPAN_PORTRAIT = 7;
 
-export function createGame(container: HTMLElement, features: Feature[]): Game {
+/**
+ * `manual` skips the real-time loop; the caller advances time with step().
+ * Used to render video frame by frame.
+ */
+export function createGame(container: HTMLElement, features: Feature[], manual = false): Game {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -114,7 +118,8 @@ export function createGame(container: HTMLElement, features: Feature[]): Game {
     step(dt);
     requestAnimationFrame(frame);
   };
-  requestAnimationFrame(frame);
+  if (manual) step(0);
+  else requestAnimationFrame(frame);
 
   return { ctx, features, step };
 }

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "capture": "node tools/capture.mjs",
+    "reel": "node tools/reel.mjs",
     "votes": "node tools/collect-comments.mjs"
   },
   "dependencies": {
