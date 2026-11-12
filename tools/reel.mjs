@@ -3,6 +3,7 @@
 //
 //   npm run build && npm run reel -- day-000                 -> captures/day-000.mp4
 //   npm run reel -- day-000 --voice voice.m4a                -> same, with your voice-over mixed in
+//   add --voice-trim 0.9 to cut dead air off the start of the voice, --no-sfx for voice only
 //
 // A shot list (tools/reels/<name>.mjs) exports:
 //   seconds, keys [[from, to, key]], camera(t) -> {zoom}, html(t) -> overlay markup,
@@ -17,7 +18,14 @@ import path from 'node:path';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { voice: { type: 'string' }, day: { type: 'string' } },
+  options: {
+    voice: { type: 'string' },
+    // Seconds to cut from the start of the voice file (dead air before the first word).
+    'voice-trim': { type: 'string', default: '0' },
+    // Leave out the game's thuds and the shot list's effects: voice only.
+    'no-sfx': { type: 'boolean', default: false },
+    day: { type: 'string' },
+  },
 });
 const name = positionals[0];
 if (!name) throw new Error('Usage: npm run reel -- <shot list name, e.g. day-000>');
@@ -126,10 +134,14 @@ await writeFile(`${dir}/sfx.wav`, wav);
 const out = `captures/${name}.mp4`;
 const args = ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', `${dir}/%05d.jpg`, '-i', `${dir}/sfx.wav`];
 if (values.voice) {
-  // Voice up front, effects tucked underneath it.
-  args.push('-i', values.voice, '-filter_complex',
-    '[1:a]volume=0.55[t];[2:a]loudnorm=I=-15:TP=-1.5,aresample=48000[v];[t][v]amix=inputs=2:duration=first:normalize=0[a]',
-    '-map', '0:v', '-map', '[a]');
+  const voice = `[2:a]atrim=start=${Number(values['voice-trim'])},asetpts=PTS-STARTPTS,highpass=f=70,loudnorm=I=-15:TP=-1.5,aresample=48000,apad[v]`;
+  const mix = values['no-sfx']
+    ? `${voice};[v]anull[a]`
+    // Voice up front, effects tucked underneath it.
+    : `[1:a]volume=0.5[t];${voice};[t][v]amix=inputs=2:duration=first:normalize=0[a]`;
+  args.push('-i', values.voice, '-filter_complex', mix, '-map', '0:v', '-map', '[a]');
+} else if (values['no-sfx']) {
+  args.push('-map', '0:v');
 }
 args.push('-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(FPS),
   '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-t', String(shots.seconds), out);
