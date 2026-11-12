@@ -113,7 +113,7 @@ function html(t) {
   if (t < 3.0) {
     const s = t < DROP ? 1 : 1 + 0.12 * Math.exp(-(t - DROP) * 9);
     h += `<div class="big" style="top:13%;font-size:128px;transform:scale(${s})">DAY 0</div>`;
-    h += `<div class="sub" style="top:21.5%;opacity:${pop(t, 1.0) > 0 ? 1 : 0}">letting comments build my game</div>`;
+    h += `<div class="sub" style="top:28%;opacity:${pop(t, 1.0) > 0 ? 1 : 0}">letting comments build my game</div>`;
   }
 
   // GAME
