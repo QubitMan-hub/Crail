@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   (page as any).__errors = errors;
-  await page.goto('/');
+  await page.goto('/?day=0');
   await page.waitForFunction(() => (window as any).__crail?.state.cube);
 });
 
@@ -16,10 +16,11 @@ test.afterEach(async ({ page }) => {
   expect((page as any).__errors).toEqual([]);
 });
 
-test('boots with every feature on and draws the cube', async ({ page }) => {
+test('day 0 still boots and draws the cube', async ({ page }) => {
   await expect(page.locator('#day')).toHaveText('Day 0');
   const meta = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
   expect(meta).toEqual(['000-world', '000-cube']);
+  expect(await page.evaluate(() => (window as any).__crail.state.goths)).toBeUndefined();
   // The centre of the screen must be cube-red, not floor.
   await page.waitForTimeout(300);
   const shot = await page.locator('canvas').screenshot();
@@ -67,5 +68,96 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies']);
+  await page.goto('/?off=001-goth-baddies');
+  await page.waitForFunction(() => (window as any).__crail);
+  await expect(page.locator('#day')).toHaveText('Day 0');
+});
+
+// ---- Day 1: goth baddies -------------------------------------------------
+
+const open = async (page: import('@playwright/test').Page, query = '') => {
+  await page.goto('/' + query);
+  await page.waitForFunction(() => (window as any).__crail?.state.goths);
+};
+const direct = (page: import('@playwright/test').Page, name: string, ...args: unknown[]) =>
+  page.evaluate(([n, a]) => (window as any).__crail.direct(n, ...(a as unknown[])), [name, args] as const);
+/** Hold a key until a condition on the game state (as `s`) becomes true, then let go. */
+const holdUntil = async (page: import('@playwright/test').Page, key: string, condition: string) => {
+  await page.keyboard.down(key);
+  await page.waitForFunction(`(() => { const s = window.__crail.state; return ${condition}; })()`);
+  await page.keyboard.up(key);
+};
+const goth = (page: import('@playwright/test').Page, i = 0) =>
+  page.evaluate((i) => {
+    const n = (window as any).__crail.state.goths.npcs[i];
+    return { x: n.x, z: n.z, mode: n.mode, emote: n.emote?.kind ?? null };
+  }, i);
+
+test('boots with every feature on: day 1, five goths, credits name the winner', async ({ page }) => {
+  await open(page);
+  await expect(page.locator('#day')).toHaveText('Day 1');
+  expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs.length)).toBe(5);
+  await page.locator('#day').click();
+  await expect(page.locator('#credits')).toContainText('@yugi_aman_e');
+  await expect(page.locator('#credits')).toContainText('AWESOME! Add Goth baddies');
+});
+
+test('the cube cannot roll through a goth, and bumping her three times gets it rejected', async ({ page }) => {
+  await open(page, '?seed=3');
+  await direct(page, 'goths.staged', true);
+  await direct(page, 'goths.clear');
+  await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
+  const modes: string[] = [];
+  for (let i = 1; i <= 3; i++) {
+    await holdUntil(page, 'KeyD', `s.cube.bonks >= ${i}`);
+    await page.waitForTimeout(600);
+    modes.push((await goth(page)).mode);
+    expect(await cubeState(page)).toMatchObject({ x: 0, z: 0, rolls: 0 });
+  }
+  expect(modes).toEqual(['stare', 'snub', 'huff']);
+  await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].x >= 5);
+});
+
+test('a goth walking into the cube stops and stares instead of walking through', async ({ page }) => {
+  await open(page, '?seed=3');
+  await direct(page, 'goths.staged', true);
+  await direct(page, 'goths.clear');
+  await direct(page, 'goths.spawn', 2, -3, 0, 0, { steps: 8 });
+  await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].mode === 'stare');
+  expect(await goth(page)).toMatchObject({ x: -1, z: 0, emote: 'dots' });
+});
+
+test('the secret: a goth sits on the cube, it struggles free, she lands on the floor', async ({ page }) => {
+  await open(page, '?seed=3');
+  await direct(page, 'goths.staged', true);
+  await direct(page, 'goths.clear');
+  await direct(page, 'goths.spawn', 4, -2, 0, 0, { idle: 999 });
+  await direct(page, 'goths.do', 0, 'sit');
+  await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].mode === 'sit');
+  expect((await cubeState(page)).pinned).toBe(true);
+  for (let i = 1; i <= 3; i++) {
+    await holdUntil(page, 'KeyS', `s.cube.struggles >= ${i}`);
+    expect(await cubeState(page)).toMatchObject({ x: 0, z: 0 });
+    await page.waitForTimeout(250);
+  }
+  await holdUntil(page, 'KeyS', 's.cube.rolls >= 1');
+  await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].mode === 'plop');
+  const c = await cubeState(page);
+  expect(c).toMatchObject({ x: 0, pinned: false });
+  expect(c.z).toBeGreaterThanOrEqual(1);
+  expect(await goth(page)).toMatchObject({ x: 0, z: 0 });
+});
+
+test('goths wander for a while without errors or overlaps', async ({ page }) => {
+  await open(page, '?seed=11');
+  await page.keyboard.down('KeyD');
+  await page.waitForTimeout(1500);
+  await page.keyboard.up('KeyD');
+  await page.waitForTimeout(2500);
+  const cells = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return [`${s.cube.x},${s.cube.z}`, ...s.goths.npcs.map((n: any) => `${n.x},${n.z}`)];
+  });
+  expect(new Set(cells).size).toBe(cells.length);
 });

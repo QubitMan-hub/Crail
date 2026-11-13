@@ -13,19 +13,20 @@ export class Thud {
     if (AC) this.ac = new AC();
   }
 
-  play(): void {
+  /** `gain` 0..1; `pitch` multiplies the frequency (lower = duller). */
+  play(gain = 1, pitch = 1): void {
     const ac = this.ac;
     if (!ac || !this.enabled || ac.state !== 'running') return;
     const t = ac.currentTime;
     const osc = ac.createOscillator();
-    const gain = ac.createGain();
-    const f = 105 + Math.random() * 25;
+    const vol = ac.createGain();
+    const f = (105 + Math.random() * 25) * pitch;
     osc.type = 'sine';
     osc.frequency.setValueAtTime(f, t);
     osc.frequency.exponentialRampToValueAtTime(f * 0.45, t + 0.09);
-    gain.gain.setValueAtTime(0.35, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-    osc.connect(gain).connect(ac.destination);
+    vol.gain.setValueAtTime(0.35 * gain, t);
+    vol.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc.connect(vol).connect(ac.destination);
     osc.start(t);
     osc.stop(t + 0.13);
   }

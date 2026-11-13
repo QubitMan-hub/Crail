@@ -33,6 +33,7 @@ html, body {
   margin-right: 0.5em; background: var(--red); border-radius: 2px;
 }
 #day {
+  font: inherit; color: inherit; background: none; cursor: pointer; pointer-events: auto;
   font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
   padding: 5px 9px 4px; border: 1.5px solid var(--ink); border-radius: 999px;
 }
@@ -51,3 +52,15 @@ html, body {
   padding: 8px; opacity: 0.55; cursor: pointer;
 }
 #sound:hover, #sound:focus-visible { opacity: 1; }
+#day:hover, #day:focus-visible { background: var(--ink); color: var(--ground); }
+#credits {
+  position: fixed; top: calc(max(20px, env(safe-area-inset-top)) + 40px); left: 22px;
+  width: min(320px, calc(100vw - 44px)); max-height: 50vh; overflow: auto;
+  margin: 0; padding: 6px 14px; list-style: none;
+  background: rgba(255, 253, 248, 0.94); border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(29, 27, 25, 0.14);
+}
+#credits li { padding: 9px 0; font-size: 13px; line-height: 1.35; }
+#credits li + li { border-top: 1px solid rgba(29, 27, 25, 0.1); }
+#credits b { display: block; font-weight: 800; letter-spacing: 0.02em; }
+#credits span { opacity: 0.7; }

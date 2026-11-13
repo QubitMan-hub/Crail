@@ -1,0 +1,21 @@
+{
+  "day": 1,
+  "method": "top-comment",
+  "reel": "Day 0 Reel on @qubitman_ftw",
+  "source": "Screenshot of the comments taken by the creator about 12 hours after posting. The automated snapshot was not run for this round because the Instagram API token is not set up yet.",
+  "final": false,
+  "note": "Recorded before the 24-hour deadline. The leader had 20 likes; the next distinct idea had 3.",
+  "winner": {
+    "username": "yugi_aman_e",
+    "text": "AWESOME! Add Goth baddies",
+    "likes": 20
+  },
+  "decision_note": "Built as asked: goth NPCs that wander the world and react to the cube. Kept blocky and stylised to match the game.",
+  "ranking": [
+    { "rank": 1, "username": "yugi_aman_e", "text": "AWESOME! Add Goth baddies", "likes": 20 },
+    { "rank": 2, "username": "lonokkalani", "text": "Give it legs", "likes": 3 },
+    { "rank": 3, "username": "bendegez0", "text": "Customisable cube", "likes": 2 },
+    { "rank": 4, "username": "dg._.2004", "text": "ur gonna have to add goth baddies😭😭", "likes": 1 },
+    { "rank": 4, "username": "jonafrzz", "text": "AWESOME! Add Goth Baddies", "likes": 1 }
+  ]
+}

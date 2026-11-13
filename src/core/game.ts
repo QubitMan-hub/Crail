@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { EventBus } from './events';
 import { Input } from './input';
+import { Grid } from './grid';
 import type { Feature } from './feature';
 
 /** Everything a feature is allowed to touch. */
@@ -10,10 +11,16 @@ export interface GameContext {
   renderer: THREE.WebGLRenderer;
   events: EventBus;
   input: Input;
+  /** Who stands on which floor cell. Claim a cell before moving into it. */
+  grid: Grid;
+  /** Seed for anything random, so a run can be replayed exactly. */
+  seed: number;
   /** Shared, serialisable game state. Namespaced by feature, e.g. state.cube. */
   state: Record<string, any>;
   /** Point the camera follows. Features move it; the core eases toward it. */
   focus: THREE.Vector3;
+  /** When set, the camera looks here instead of at `focus` (cut-scenes, video shots). */
+  focusOverride: THREE.Vector3 | null;
   /** Run fn every frame with delta seconds (clamped) and elapsed seconds. */
   onUpdate(fn: (dt: number, time: number) => void): void;
   /** World position on the ground plane under a screen point. */
@@ -27,6 +34,8 @@ export interface Game {
   features: Feature[];
   /** Advance the simulation manually (tests and scripted capture). */
   step(dt: number): void;
+  /** Jump the camera to its target instead of gliding there. */
+  snapCamera(): void;
 }
 
 const CAMERA_OFFSET = new THREE.Vector3(12, 12, 12);
@@ -34,11 +43,14 @@ const CAMERA_OFFSET = new THREE.Vector3(12, 12, 12);
 const VIEW_SPAN = 9;
 const VIEW_SPAN_PORTRAIT = 7;
 
-/**
- * `manual` skips the real-time loop; the caller advances time with step().
- * Used to render video frame by frame.
- */
-export function createGame(container: HTMLElement, features: Feature[], manual = false): Game {
+export interface GameOptions {
+  /** Skip the real-time loop; the caller advances time with step(). Used to render video. */
+  manual?: boolean;
+  seed?: number;
+}
+
+export function createGame(container: HTMLElement, features: Feature[], opts: GameOptions = {}): Game {
+  const manual = opts.manual ?? false;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -76,8 +88,11 @@ export function createGame(container: HTMLElement, features: Feature[], manual =
     renderer,
     events: new EventBus(),
     input: new Input(renderer.domElement),
+    grid: new Grid(),
+    seed: opts.seed ?? (Math.random() * 0xffffffff) >>> 0,
     state: {},
     focus,
+    focusOverride: null,
     onUpdate: (fn) => void updaters.push(fn),
     groundPoint(clientX, clientY) {
       const r = renderer.domElement.getBoundingClientRect();
@@ -104,7 +119,7 @@ export function createGame(container: HTMLElement, features: Feature[], manual =
   const step = (dt: number) => {
     time += dt;
     for (const fn of updaters) fn(dt, time);
-    eased.lerp(focus, 1 - Math.exp(-6 * dt));
+    eased.lerp(ctx.focusOverride ?? focus, 1 - Math.exp(-6 * dt));
     bumpY *= Math.exp(-18 * dt);
     placeCamera();
     renderer.render(scene, camera);
@@ -121,5 +136,7 @@ export function createGame(container: HTMLElement, features: Feature[], manual =
   if (manual) step(0);
   else requestAnimationFrame(frame);
 
-  return { ctx, features, step };
+  const snapCamera = () => void eased.copy(ctx.focusOverride ?? focus);
+
+  return { ctx, features, step, snapCamera };
 }
