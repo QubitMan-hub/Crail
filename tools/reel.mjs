@@ -14,6 +14,8 @@
 //   gameStyle(t) -> css              inline style for the game canvas (filters for transitions)
 //   assets {dir}, prepare()          files served to the overlay at /reelasset/<file>
 //   audio [{file, at, filter}]       extra audio clips mixed in at a time
+//   voice [[srcFrom, srcTo, at]]     where each spoken line of the --voice file lands in the video
+//   music {sections, duck}           a quiet plucked tune between [from, to] times, lowered under speech
 //   world(t) -> {cubeY, impactAt}
 import { chromium } from 'playwright';
 import { preview } from 'vite';
@@ -206,8 +208,50 @@ landings.forEach((t, i) => {
 });
 const HEARD = { 'cube:bonk': ['bonk', 0.1], 'cube:struggle': ['bonk', 0.08], 'goth:plop': ['thump', 0] };
 for (const [t, e] of heard) if (HEARD[e]) blip(t + HEARD[e][1], SOUNDS[HEARD[e][0]]);
+/**
+ * "Tiptoe": a small, sneaky plucked tune in A minor, made from sine plucks.
+ * Plays inside each [from, to] section and drops in level inside each duck range.
+ */
+function tiptoe({ sections, duck = [], gain = 1 }) {
+  const BEAT = 0.6;
+  const hz = (semitonesFromA4) => 440 * 2 ** (semitonesFromA4 / 12);
+  // Per bar: a bass note and four plucks (eighth notes on beats 1-2, rests on 3-4 for air).
+  const bars = [
+    [-24, [0, 3, 7, 3]], [-24, [0, 3, 7, 12]], [-28, [-4, 0, 3, 0]], [-29, [-5, -1, 2, -1]],
+  ];
+  const level = (t) => (duck.some(([a, b]) => t >= a - 0.15 && t < b + 0.2) ? 0.42 : 1);
+  const pluck = (at, f, amp, decay, end) => {
+    const start = Math.round(at * RATE);
+    for (let n = 0; n < RATE * 0.9 && start + n < pcm.length; n++) {
+      const tt = n / RATE;
+      if (at + tt > end) break;
+      const fade = Math.min(1, (end - at - tt) / 0.04, n / 96);
+      const wave = Math.sin(2 * Math.PI * f * tt) + 0.35 * Math.sin(4 * Math.PI * f * tt) + 0.12 * Math.sin(6 * Math.PI * f * tt);
+      pcm[start + n] += wave * amp * gain * level(at) * Math.exp(-decay * tt) * fade;
+    }
+  };
+  for (const [from, to] of sections) {
+    for (let beat = 0; from + beat * BEAT < to; beat++) {
+      const [bass, notes] = bars[Math.floor(beat / 4) % bars.length];
+      const at = from + beat * BEAT;
+      const inBar = beat % 4;
+      if (inBar === 0 || inBar === 2) pluck(at, hz(bass), 0.2, 5, to);
+      if (inBar < 2) {
+        pluck(at, hz(notes[inBar * 2]), 0.11, 9, to);
+        pluck(at + BEAT / 2, hz(notes[inBar * 2 + 1]), 0.11, 9, to);
+      } else if (inBar === 3) pluck(at + BEAT / 2, hz(notes[3]), 0.08, 9, to);
+    }
+  }
+}
+if (shots.music) tiptoe(shots.music);
 for (const [t, kind, a, b] of shots.sfx ?? []) {
-  if (kind === 'hiss') hiss(t, a, b);
+  if (kind === 'harp') {
+    // A rising run of plucks: the sound of drifting into a memory.
+    [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24].forEach((semi, i) => {
+      const f = 330 * 2 ** (semi / 12);
+      blip(t + i * 0.075, { f0: f, f1: f * 1.002, slide: 0.05, decay: 6, len: 0.6, gain: 0.11 });
+    });
+  } else if (kind === 'hiss') hiss(t, a, b);
   else if (kind === 'riser') riser(t, a, b);
   else blip(t, SOUNDS[kind]);
 }
@@ -239,11 +283,24 @@ for (const clip of shots.audio ?? []) {
 }
 if (values.voice) {
   args.push('-i', values.voice);
-  chains.push(`[${input}:a]atrim=start=${Number(values['voice-trim'])},asetpts=PTS-STARTPTS,highpass=f=70,loudnorm=I=-15:TP=-1.5,aresample=48000[vo]`);
-  mixed.push('[vo]');
+  // Even out the voice first (quiet words up, loud words down), then set it to a comfortable level.
+  const level = 'highpass=f=80,acompressor=threshold=-28dB:ratio=3.5:attack=6:release=180:makeup=5,loudnorm=I=-17:TP=-2:LRA=7,aresample=48000';
+  const segments = shots.voice;
+  if (!segments) {
+    chains.push(`[${input}:a]atrim=start=${Number(values['voice-trim'])},asetpts=PTS-STARTPTS,${level}[vo]`);
+    mixed.push('[vo]');
+  } else {
+    // Each spoken line is cut out and placed on its own, so the gaps between them are truly silent.
+    chains.push(`[${input}:a]${level},asplit=${segments.length}${segments.map((_, i) => `[vs${i}]`).join('')}`);
+    segments.forEach(([from, to, at], i) => {
+      const len = to - from;
+      chains.push(`[vs${i}]atrim=${from}:${to},asetpts=PTS-STARTPTS,afade=t=in:d=0.04,afade=t=out:st=${(len - 0.06).toFixed(2)}:d=0.06,adelay=${Math.round(at * 1000)}:all=1[vo${i}]`);
+      mixed.push(`[vo${i}]`);
+    });
+  }
 }
 if (mixed.length) {
-  chains.push(`${mixed.join('')}amix=inputs=${mixed.length}:duration=longest:normalize=0,apad[a]`);
+  chains.push(`${mixed.join('')}amix=inputs=${mixed.length}:duration=longest:normalize=0,alimiter=limit=0.7:attack=3:release=60,apad[a]`);
   args.push('-filter_complex', chains.join(';'), '-map', '0:v', '-map', '[a]');
 } else {
   args.push('-map', '0:v');

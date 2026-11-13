@@ -101,20 +101,35 @@ const frozen = (t) => t >= CARD && t < NOW;
 // The classic wobble into a memory.
 const gameStyle = (t) => (t >= 7.35 && t < CARD ? 'filter:url(#wave)' : '');
 
-// Voice-over, as estimated. Retimed to the real recording afterwards.
-const captions = [
-  [0.25, 1.1, 'Day one'], [1.1, 1.75, 'of letting'], [1.75, 2.6, 'Instagram comments'], [2.6, 3.2, 'build my game.'],
-  [3.5, 4.6, 'You guys asked for…'], [4.9, 6.0, 'goth baddies.'],
-  [6.5, 7.5, 'I regret saying this.'],
-  [15.0, 15.5, 'So…'], [15.5, 16.6, 'I actually added them.'],
-  [23.4, 24.0, 'Anyway,'], [24.0, 24.7, 'this is what you guys'], [24.7, 25.3, 'made me do.'],
-  [27.0, 27.8, 'Top comment decides'], [27.8, 28.8, 'what I add for Day 2.'], [29.1, 30.0, 'Please have mercy.'],
+// Voice-over: [from, to] in the recording, and where that line starts in the video.
+const voice = [
+  [1.35, 4.5, 0.2], //    Day 1 of letting Instagram comments build my game.
+  [5.05, 7.2, 3.75], //   You guys asked for goth baddies.
+  [7.95, 9.3, 6.35], //   I regret saying this.
+  [15.55, 17.75, 14.95], // So I have actually added them.
+  [24.35, 26.7, 23.3], //  Anyway this is what you guys made me do.
+  [27.9, 31.35, 26.6], //  Top comment decides what I do for Day 2. Please have mercy.
 ];
+// Captions follow the actual words in the recording.
+const captions = [
+  [0.27, 1.13, 'Day one'], [1.13, 1.63, 'of letting'], [1.63, 2.53, 'Instagram comments'], [2.53, 3.35, 'build my game.'],
+  [3.82, 4.7, 'You guys asked for…'], [4.72, 5.85, 'goth baddies.'],
+  [6.34, 7.6, 'I regret saying this.'],
+  [15.02, 15.6, 'So…'], [15.62, 16.46, 'I have actually'], [16.46, 17.1, 'added them.'],
+  [23.35, 23.93, 'Anyway,'], [23.95, 24.87, 'this is what you guys'], [24.89, 25.55, 'made me do.'],
+  [26.66, 27.66, 'Top comment decides'], [27.66, 28.8, 'what I do for Day 2.'], [29.02, 29.9, 'Please have mercy.'],
+];
+// Music fills the gaps and steps aside for the jokes: none under "I regret saying this",
+// none in the flashback, a held breath for the stare, and dead silence on the last bump.
+const music = {
+  sections: [[0, 6.2], [14.85, 18.85], [20.2, 31.15]],
+  duck: voice.map(([from, to, at]) => [at, at + (to - from)]),
+};
 
 const sfx = [
-  [3.2, 'pop'], [4.9, 'boom'],
-  [SLOW, 'riser', PAUSE, 0.22],
-  [18.95, 'dun'], [28.2, 'pop'], [31.55, 'dun'],
+  [3.6, 'pop'], [4.72, 'boom'],
+  [7.72, 'harp'], [SLOW, 'riser', PAUSE, 0.22],
+  [18.95, 'dun'], [28.3, 'pop'], [31.55, 'dun'],
 ];
 
 // Yesterday's voice, through a tired old TV speaker. Then slowed down to half speed.
@@ -206,10 +221,10 @@ function html(t) {
     h += `<div class="big" style="top:13%;font-size:128px">DAY 1</div>`;
     h += `<div class="sub" style="top:28%;opacity:${t > 0.9 ? 1 : 0}">letting comments build my game</div>`;
   }
-  if (within(t, 3.2, 6.2)) {
+  if (within(t, 3.6, 6.2)) {
     // The real comment, exactly as it appeared.
     // On "goth baddies" it punches in on the words themselves.
-    const s = pop(t, 3.2, 0.24) * (1 + 0.62 * smooth((t - 4.85) / 0.16));
+    const s = pop(t, 3.6, 0.24) * (1 + 0.62 * smooth((t - 4.7) / 0.16));
     h += `<div class="comment" ${scaled(s, `transform:rotate(-2deg) scale(${s.toFixed(3)})`)}>
       <span class="tag">📌 TOP COMMENT</span><img src="/reelasset/comment.png"></div>`;
   }
@@ -220,9 +235,9 @@ function html(t) {
   }
   if (within(t, TV, NOW)) h += flashback(t);
 
-  if (within(t, 28.2, T.run)) {
-    h += `<div class="sub" ${scaled(pop(t, 28.2), 'top:11.5%')}><span class="tag">DAY 2</span></div>`;
-    h += `<div class="big" ${scaled(pop(t, 28.3), 'top:15.5%;font-size:60px')}>TOP COMMENT<br>WINS</div>`;
+  if (within(t, 28.3, T.run)) {
+    h += `<div class="sub" ${scaled(pop(t, 28.3), 'top:11.5%')}><span class="tag">DAY 2</span></div>`;
+    h += `<div class="big" ${scaled(pop(t, 28.4), 'top:15.5%;font-size:60px')}>TOP COMMENT<br>WINS</div>`;
   }
   if (within(t, 31.6, T.black)) {
     h += `<div class="big" ${scaled(pop(t, 31.6), 'top:62%;font-size:44px;line-height:1.08;padding:0 30px;-webkit-text-stroke:9px #f6f1e6;paint-order:stroke fill')}>I think I’ve lost<br>control of my game.</div>`;
@@ -234,4 +249,4 @@ function html(t) {
   return h;
 }
 
-export default { seconds, prepare, assets: { dir: ASSETS }, keys, actions, camera, frozen, gameStyle, html, css, sfx, audio };
+export default { seconds, prepare, assets: { dir: ASSETS }, keys, actions, camera, frozen, gameStyle, html, css, sfx, audio, voice, music };
