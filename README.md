@@ -41,7 +41,10 @@ npm run build      # production build in dist/
 2. Add it to the list in `src/features/index.ts`.
 3. Talk to other features only through `ctx.events` and `ctx.state`, never by
    importing their files. That is what keeps old features from breaking.
-4. Add a test, open a pull request, and merge once CI is green.
+4. Anything that stands on the floor claims its cell in `ctx.grid` before moving
+   into it. That one rule is the whole collision system: the cube, characters and
+   future buildings can never overlap.
+5. Add a test, open a pull request, and merge once CI is green.
 
 ### Time machine and rollback
 
@@ -53,11 +56,17 @@ npm run build      # production build in dist/
 
 ```bash
 npm run build
-npm run capture                              # 1080x1920 gameplay clip in captures/
-npm run capture -- --day 0 --name day-000    # footage of an older day
+npm run reel -- day-001                      # renders the whole Reel, frame by frame, to captures/
+npm run reel -- day-001 --voice voice.aac    # same, with a voice-over mixed in
+node tools/cover.mjs --day 1 --line1 "GOTH BADDIES." --size 64
 IG_TOKEN=... npm run votes -- --list         # your recent posts
 IG_TOKEN=... npm run votes -- --day 1 --reel <reel link>
 ```
+
+Each Reel is a shot list in `tools/reels/`: key presses, camera moves, scripted
+scene set-ups (`cube.teleport`, `goths.spawn`, ...), on-screen text and sound cues.
+The same scripted controls are available in the browser console for testing:
+`__crail.direct('goths.spawn', 0, 2, 0, 2)`.
 
 The vote collector uses Instagram's official API, read-only. The token lives in the
 repository secret `IG_TOKEN` and is never committed. It lasts 60 days; renew it with

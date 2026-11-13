@@ -6,8 +6,15 @@
 //   add --voice-trim 0.9 to cut dead air off the start of the voice, --no-sfx for voice only
 //
 // A shot list (tools/reels/<name>.mjs) exports:
-//   seconds, keys [[from, to, key]], camera(t) -> {zoom}, html(t) -> overlay markup,
-//   css, sfx [[time, 'boom' | 'pop' | 'tick']], and optionally world(t) -> {cubeY, impactAt}.
+//   seconds, keys [[from, to, key]], camera(t) -> {zoom, focus?: [x, z], follow?: gothIndex},
+//   html(t) -> overlay markup, css, sfx [[time, kind]], and optionally:
+//   actions [[time, name, ...args]]  scripted events ('cut' snaps the camera, anything else goes
+//                                    to the game's director, e.g. 'cube.teleport', 'goths.spawn')
+//   frozen(t) -> true                game time stands still (overlay-only moments)
+//   gameStyle(t) -> css              inline style for the game canvas (filters for transitions)
+//   assets {dir}, prepare()          files served to the overlay at /reelasset/<file>
+//   audio [{file, at, filter}]       extra audio clips mixed in at a time
+//   world(t) -> {cubeY, impactAt}
 import { chromium } from 'playwright';
 import { preview } from 'vite';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -30,6 +37,7 @@ const { values, positionals } = parseArgs({
 const name = positionals[0];
 if (!name) throw new Error('Usage: npm run reel -- <shot list name, e.g. day-000>');
 const shots = (await import(pathToFileURL(path.resolve(`tools/reels/${name}.mjs`)).href)).default;
+await shots.prepare?.();
 
 const FPS = 30;
 const W = 1080;
@@ -51,9 +59,17 @@ const OVERLAY_CSS = `
 const server = await preview({ preview: { port: 4175, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
 const landings = [];
+const heard = [];
+const actions = [...(shots.actions ?? [])].sort((a, b) => a[0] - b[0]);
 try {
   const page = await browser.newPage({ viewport: { width: W / 2, height: H / 2 }, deviceScaleFactor: 2 });
   const day = values.day ? `&day=${values.day}` : '';
+  if (shots.assets) {
+    await page.route('**/reelasset/**', (route) => {
+      const file = path.basename(new URL(route.request().url()).pathname);
+      return route.fulfill({ path: path.join(shots.assets.dir, file) });
+    });
+  }
   await page.goto(`http://localhost:4175/?manual${day}`);
   await page.waitForFunction(() => window.__crail?.game);
   await page.addStyleTag({ content: OVERLAY_CSS });
@@ -62,11 +78,17 @@ try {
     window.__landings = 0;
     const { game } = window.__crail;
     game.ctx.events.on('cube:rolled', () => window.__landings++);
-    window.__cube = game.ctx.scene.children.find((o) => o.isMesh && o.castShadow);
+    window.__heard = [];
+    for (const e of ['cube:bonk', 'cube:struggle', 'goth:plop', 'goth:rejected']) {
+      game.ctx.events.on(e, () => window.__heard.push(e));
+    }
+    window.__cube = game.ctx.scene.getObjectByName('cube');
   });
 
   const held = new Set();
   let seen = 0;
+  let nextAction = 0;
+  const due = [];
   for (let f = 0; f < frames; f++) {
     const t = f / FPS;
     const want = new Set(shots.keys.filter(([a, b]) => t >= a && t < b).map(([, , key]) => `Key${key}`));
@@ -75,19 +97,52 @@ try {
 
     const world = shots.world?.(t) ?? {};
     const impact = world.impactAt !== undefined && t >= world.impactAt && t - 1 / FPS < world.impactAt;
-    const count = await page.evaluate(
-      ({ dt, zoom, html, cubeY, impact }) => {
-        const { game } = window.__crail;
-        game.ctx.camera.zoom = zoom;
-        game.ctx.camera.updateProjectionMatrix();
-        if (cubeY !== undefined && !game.ctx.state.cube.moving) window.__cube.position.y = cubeY;
-        if (impact) game.ctx.bump(0.45);
+    while (nextAction < actions.length && actions[nextAction][0] <= t) due.push(actions[nextAction++].slice(1));
+    const { count, heard: now } = await page.evaluate(
+      async ({ dt, cam, html, cubeY, impact, due, gameStyle }) => {
+        const { game, direct } = window.__crail;
+        const { ctx } = game;
+        let cut = false;
+        for (const [name, ...args] of due) {
+          if (name === 'cut') cut = true;
+          else direct(name, ...args);
+        }
+        ctx.camera.zoom = cam.zoom;
+        ctx.camera.updateProjectionMatrix();
+        if (cam.follow !== undefined) {
+          const n = ctx.state.goths?.npcs[cam.follow];
+          if (n) {
+            const k = n.nx === null ? 0 : n.p;
+            const x = n.x + ((n.nx ?? n.x) - n.x) * k;
+            const z = n.z + ((n.nz ?? n.z) - n.z) * k;
+            ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(x, 0, z);
+          }
+        } else if (cam.focus) ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(cam.focus[0], 0, cam.focus[1]);
+        else ctx.focusOverride = null;
+        if (cubeY !== undefined && !ctx.state.cube.moving) window.__cube.position.y = cubeY;
+        if (impact) ctx.bump(0.45);
+        if (cut) {
+          game.step(0);
+          game.snapCamera();
+        }
         game.step(dt);
-        document.getElementById('reel').innerHTML = html;
-        return window.__landings;
+        document.getElementById('game').style.cssText = gameStyle;
+        const layer = document.getElementById('reel');
+        layer.innerHTML = html;
+        await Promise.all([...layer.querySelectorAll('img')].map((i) => i.decode().catch(() => {})));
+        return { count: window.__landings, heard: window.__heard.splice(0) };
       },
-      { dt: 1 / FPS, zoom: shots.camera(t).zoom, html: shots.html(t), cubeY: world.cubeY, impact },
+      {
+        dt: shots.frozen?.(t) ? 0 : 1 / FPS,
+        cam: shots.camera(t),
+        html: shots.html(t),
+        cubeY: world.cubeY,
+        impact,
+        due: due.splice(0),
+        gameStyle: shots.gameStyle?.(t) ?? '',
+      },
     );
+    for (const e of now) heard.push([t, e]);
     for (; seen < count; seen++) landings.push(t);
     await page.screenshot({ path: `${dir}/${String(f).padStart(5, '0')}.jpg`, quality: 95, type: 'jpeg' });
     if (f % 150 === 0) console.log(`frame ${f}/${frames}`);
@@ -116,12 +171,46 @@ const SOUNDS = {
   boom: { f0: 150, f1: 38, slide: 0.22, decay: 9, len: 0.6, gain: 0.8 },
   pop: { f0: 520, f1: 880, slide: 0.05, decay: 45, len: 0.12, gain: 0.22 },
   tick: { f0: 1500, f1: 1400, slide: 0.02, decay: 110, len: 0.05, gain: 0.16 },
+  // Dull knock: the cube bumping into something.
+  bonk: { f0: 95, f1: 55, slide: 0.06, decay: 30, len: 0.16, gain: 0.5 },
+  // A low, flat "...": the sound of being judged.
+  dun: { f0: 174, f1: 92, slide: 0.3, decay: 5, len: 0.6, gain: 0.3 },
+  thump: { f0: 120, f1: 40, slide: 0.12, decay: 14, len: 0.35, gain: 0.7 },
 };
+/** Tape hiss / TV static: filtered noise between two times. */
+function hiss(from, to, gain) {
+  let last = 0;
+  let state = 12345;
+  for (let n = Math.round(from * RATE); n < to * RATE && n < pcm.length; n++) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const white = state / 2147483648 - 1;
+    const hp = white - last; // crude high-pass, so it hisses rather than rumbles
+    last = white;
+    const edge = Math.min(1, (n / RATE - from) / 0.05, (to - n / RATE) / 0.05);
+    pcm[n] += hp * gain * 0.5 * Math.max(0, edge);
+  }
+}
+/** A tone that climbs and swells, then stops dead. */
+function riser(from, to, gain) {
+  let phase = 0;
+  for (let n = Math.round(from * RATE); n < to * RATE && n < pcm.length; n++) {
+    const k = (n / RATE - from) / (to - from);
+    phase += (2 * Math.PI * (70 + 330 * k * k)) / RATE;
+    const tremolo = 0.7 + 0.3 * Math.sin(2 * Math.PI * (4 + 10 * k) * (n / RATE));
+    pcm[n] += Math.sin(phase) * gain * k * tremolo;
+  }
+}
 landings.forEach((t, i) => {
   const f0 = 105 + ((i * 37) % 25);
   blip(t, { f0, f1: f0 * 0.45, slide: 0.09, decay: 38, len: 0.13, gain: 0.5 });
 });
-for (const [t, kind] of shots.sfx ?? []) blip(t, SOUNDS[kind]);
+const HEARD = { 'cube:bonk': ['bonk', 0.1], 'cube:struggle': ['bonk', 0.08], 'goth:plop': ['thump', 0] };
+for (const [t, e] of heard) if (HEARD[e]) blip(t + HEARD[e][1], SOUNDS[HEARD[e][0]]);
+for (const [t, kind, a, b] of shots.sfx ?? []) {
+  if (kind === 'hiss') hiss(t, a, b);
+  else if (kind === 'riser') riser(t, a, b);
+  else blip(t, SOUNDS[kind]);
+}
 
 const wav = Buffer.alloc(44 + pcm.length * 2);
 wav.write('RIFF', 0); wav.writeUInt32LE(36 + pcm.length * 2, 4); wav.write('WAVEfmt ', 8);
@@ -133,14 +222,30 @@ await writeFile(`${dir}/sfx.wav`, wav);
 
 const out = `captures/${name}.mp4`;
 const args = ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', `${dir}/%05d.jpg`, '-i', `${dir}/sfx.wav`];
+// Audio graph: effects (unless --no-sfx), extra clips from the shot list, and the voice-over on top.
+const chains = [];
+const mixed = [];
+let input = 2;
+if (!values['no-sfx']) {
+  chains.push(`[1:a]volume=${values.voice ? 0.5 : 1}[fx]`);
+  mixed.push('[fx]');
+}
+for (const clip of shots.audio ?? []) {
+  args.push('-i', clip.file);
+  const ms = Math.round(clip.at * 1000);
+  chains.push(`[${input}:a]${clip.filter},aresample=48000,adelay=${ms}:all=1[c${input}]`);
+  mixed.push(`[c${input}]`);
+  input++;
+}
 if (values.voice) {
-  const voice = `[2:a]atrim=start=${Number(values['voice-trim'])},asetpts=PTS-STARTPTS,highpass=f=70,loudnorm=I=-15:TP=-1.5,aresample=48000,apad[v]`;
-  const mix = values['no-sfx']
-    ? `${voice};[v]anull[a]`
-    // Voice up front, effects tucked underneath it.
-    : `[1:a]volume=0.5[t];${voice};[t][v]amix=inputs=2:duration=first:normalize=0[a]`;
-  args.push('-i', values.voice, '-filter_complex', mix, '-map', '0:v', '-map', '[a]');
-} else if (values['no-sfx']) {
+  args.push('-i', values.voice);
+  chains.push(`[${input}:a]atrim=start=${Number(values['voice-trim'])},asetpts=PTS-STARTPTS,highpass=f=70,loudnorm=I=-15:TP=-1.5,aresample=48000[vo]`);
+  mixed.push('[vo]');
+}
+if (mixed.length) {
+  chains.push(`${mixed.join('')}amix=inputs=${mixed.length}:duration=longest:normalize=0,apad[a]`);
+  args.push('-filter_complex', chains.join(';'), '-map', '0:v', '-map', '[a]');
+} else {
   args.push('-map', '0:v');
 }
 args.push('-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(FPS),
