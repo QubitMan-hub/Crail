@@ -1,6 +1,6 @@
 import { DIRS, EMOTE_SECONDS, HOP_SECONDS, type Npc, type World } from './brain';
 import { showSymbol } from './emotes';
-import { HIP, type Rig } from './model';
+import { HIP, SCALE, type Rig } from './model';
 
 /** Turns what a goth is doing (brain.ts) into how she looks doing it. */
 
@@ -25,8 +25,8 @@ const REST: Pose = {
   armLx: 0, armLz: 0.05, armRx: 0, armRz: -0.05, legL: 0, legR: 0, lean: 0, y: 0,
 };
 const CROSSED = { armLx: -0.95, armLz: -0.75, armRx: -0.8, armRz: 0.75 };
-const SEAT_Y = 1 - HIP + 0.1;
-const FLOOR_SEAT_Y = 0.1 - HIP;
+const SEAT_Y = 1 - (HIP - 0.1) * SCALE;
+const FLOOR_SEAT_Y = (0.1 - HIP) * SCALE;
 const SEATED_LEGS = -1.45;
 
 export const newMotion = (n: Npc): Motion => ({ yaw: dirYaw(n.dir), yawVel: 0, phase: 0, pose: { ...REST } });
@@ -235,5 +235,5 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
     if (!rig.hang.includes(s)) s.rotation.x = n.nx !== null ? 0.1 + (n.mode === 'huff' ? 0.2 : 0) : 0;
   });
 
-  showSymbol(rig.emote, n.emote?.kind ?? null, n.emote?.t ?? 0, EMOTE_SECONDS);
+  showSymbol(rig.emote, n.emote?.kind ?? null, n.emote?.t ?? 0, EMOTE_SECONDS, 0.62 / SCALE);
 }

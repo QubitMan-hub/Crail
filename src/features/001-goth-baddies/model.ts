@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 /**
- * Blocky goth characters, two cubes tall, built from the same soft-edged matte
+ * Blocky goth characters, a bit under two cubes tall, built from the same soft-edged matte
  * boxes as the cube so they belong in the same world. Local +z is "forward".
  */
 
@@ -57,6 +57,8 @@ export interface Rig {
 }
 
 export const HIP = 0.78;
+/** Overall size. 1 would be exactly two cubes tall; this makes them about 1.7. */
+export const SCALE = 0.85;
 const materials = new Map<string, THREE.MeshStandardMaterial>();
 const mat = (color: string) => {
   let m = materials.get(color);
@@ -270,6 +272,7 @@ function buildFace(head: THREE.Group, v: Variant) {
 
 export function buildGoth(v: Variant, emote: THREE.Sprite): Rig {
   const root = new THREE.Group();
+  root.scale.setScalar(SCALE);
   const body = group(root);
   const torso = group(body, 0, HIP, 0);
   const { sleeve, stride } = buildOutfit(torso, v);
