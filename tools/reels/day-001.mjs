@@ -113,7 +113,7 @@ const captions = [
 
 const sfx = [
   [3.2, 'pop'], [4.9, 'boom'],
-  [TV, 'hiss', PAUSE, 0.1], [SLOW, 'riser', PAUSE, 0.22],
+  [SLOW, 'riser', PAUSE, 0.22],
   [18.95, 'dun'], [28.2, 'pop'], [31.55, 'dun'],
 ];
 
