@@ -1,16 +1,52 @@
-import type { Grid, Occupant } from '../../core/grid';
+import type { Grid, Occupant } from '../core/grid';
 
 /**
- * How a goth thinks. Pure logic on the floor grid: no graphics in here, so every
+ * How a character thinks. Pure logic on the floor grid: no graphics in here, so every
  * behaviour can be tested without a browser.
  *
- * She walks cell to cell in straight lines, stops, turns, and reacts to the cube:
+ * Everyone walks cell to cell in straight lines, stops, turns, and reacts to the cube.
+ * What they do about it depends on their persona.
+ *
+ * Goths (blocked: stare, bonk: reject, sits):
  *   - The Stare:      the cube is in her way. She stops and judges it.
  *   - The Following:  she gets curious, trails the cube, then loses interest.
  *   - The Rejection:  bump her once, she glares. Twice, she turns her back.
  *                     Three times, she storms off and the cube's heart breaks.
  *   - The Seat:       leave the cube still for too long and she sits on it.
+ *
+ * Femboys (blocked: pat, bonk: adopt, greets):
+ *   - The Pat:        the cube is in his way. He pats it on the head.
+ *   - The Fan Club:   they follow the cube a lot, and wave when caught.
+ *   - The Adoption:   bump him once, he giggles. Twice, more pats. Three times,
+ *                     he ties a bow on the cube.
+ *   - The Greeting:   he waves at anyone who is not a femboy. Sometimes they get a bow too.
  */
+
+/** What kind of character this is and how it reacts. */
+export interface Persona {
+  /** Also the occupant kind on the grid. */
+  kind: string;
+  blocked: 'stare' | 'pat';
+  bonk: 'reject' | 'adopt';
+  caught: 'deny' | 'wave';
+  sits: boolean;
+  /** Waves at characters of other kinds when they are in the way. */
+  greets: boolean;
+  followChance: number;
+  twirls: boolean;
+  /** How bouncy the walk is, and how open the eyes are at rest (for animation). */
+  bounce: number;
+  restLids: number;
+}
+
+export const GOTH: Persona = {
+  kind: 'goth', blocked: 'stare', bonk: 'reject', caught: 'deny', sits: true, greets: false,
+  followChance: 0.12, twirls: false, bounce: 1, restLids: 0.3,
+};
+export const FEMBOY: Persona = {
+  kind: 'femboy', blocked: 'pat', bonk: 'adopt', caught: 'wave', sits: false, greets: true,
+  followChance: 0.3, twirls: true, bounce: 1.9, restLids: 0.04,
+};
 
 export const DIRS = [
   [1, 0],
@@ -24,9 +60,10 @@ export type Mode =
   | 'idle' | 'walk' | 'stare'
   | 'follow' | 'lost' | 'caught'
   | 'snub' | 'huff'
-  | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff';
+  | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff'
+  | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl';
 
-export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger';
+export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger' | 'heart' | 'sparkle';
 
 export const WALK_SPEED = 1.25; // cells per second
 export const HUFF_SPEED = 2.6;
@@ -55,12 +92,20 @@ export interface World {
   sitCooldown: number;
   /** True in scripted scenes: nobody starts following or sitting on her own. */
   staged: boolean;
-  emit(event: 'rejected' | 'plop', npc: Npc): void;
+  /** rejected, plop, pat, bow (a bow for the cube), greet (data: {id, gift}). */
+  emit(event: string, npc: Npc, data?: unknown): void;
 }
 
 export interface Npc {
   id: string;
   occ: Occupant;
+  persona: Persona;
+  /** What she is looking at when it is not the cube. */
+  focus: { x: number; z: number } | null;
+  /** Someone just waved at her from this cell; handled when she next stands on a cell. */
+  greeted: { x: number; z: number } | null;
+  /** The next greeting comes with a bow. */
+  giftNext: boolean;
   variant: number;
   /** The cell she stands on. */
   x: number;
@@ -94,11 +139,13 @@ export interface Npc {
   sitRolls: number;
 }
 
-export function createNpc(id: string, variant: number, x: number, z: number, dir: DirIndex, grid: Grid): Npc | null {
-  const occ: Occupant = { kind: 'goth', id };
+export function createNpc(
+  id: string, variant: number, x: number, z: number, dir: DirIndex, grid: Grid, persona: Persona = GOTH,
+): Npc | null {
+  const occ: Occupant = { kind: persona.kind, id };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, variant, x, z, nx: null, nz: null, p: 0, dir, speed: WALK_SPEED,
+    id, occ, persona, focus: null, greeted: null, giftNext: false, variant, x, z, nx: null, nz: null, p: 0, dir, speed: WALK_SPEED,
     mode: 'idle', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
     followCooldown: 4, emote: null, sx: 0, sz: 0, sitDir: 1, sitRolls: 0,
@@ -187,6 +234,7 @@ function pickDir(n: Npc, w: World): DirIndex | null {
 }
 
 function wander(n: Npc, w: World): void {
+  n.focus = null;
   const d = pickDir(n, w);
   if (d === null) return setMode(n, 'idle', 0.6);
   n.speed = WALK_SPEED;
@@ -204,7 +252,7 @@ function freeSide(n: Npc, w: World): DirIndex | null {
 function maybeFollow(n: Npc, w: World): boolean {
   if (w.staged || n.followCooldown > 0 || w.cube.idleFor > 0.6) return false;
   const d = manhattan(n, w.cube);
-  if (d < 3 || d > 6 || w.rand() > 0.12) return false;
+  if (d < 3 || d > 6 || w.rand() > n.persona.followChance) return false;
   startFollow(n, w);
   return true;
 }
@@ -216,7 +264,7 @@ export function startFollow(n: Npc, w: World): void {
 }
 
 function maybeSit(n: Npc, w: World): boolean {
-  if (w.staged || w.sitter || w.sitCooldown > 0) return false;
+  if (!n.persona.sits || w.staged || w.sitter || w.sitCooldown > 0) return false;
   if (w.cube.idleFor < 3.5 || w.cube.pinned) return false;
   const d = manhattan(n, w.cube);
   if (d < 1 || d > 5 || w.rand() > 0.6) return false;
@@ -231,22 +279,49 @@ export function startSit(n: Npc, w: World): void {
   setMode(n, 'toSit');
 }
 
+const faceCube = (n: Npc, w: World) => void (n.dir = dirToward(n, w.cube) ?? n.dir);
+
 /** The cube just bumped into her. Each bump within a few seconds escalates. */
 function react(n: Npc, w: World): void {
   if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff'].includes(n.mode)) return;
   if (n.mode === 'toSit') w.sitter = null;
   n.wait = 0;
+  n.focus = null;
   if (n.mode === 'follow' || n.mode === 'lost') {
+    n.followCooldown = 14;
+    if (n.persona.caught === 'wave') {
+      // Caught following, and delighted about it.
+      faceCube(n, w);
+      setMode(n, 'wave', 1.3);
+      return say(n, 'sparkle');
+    }
     // Caught following. She was never following. Look, a cloud.
     n.dir = dirAway(n, w.cube);
-    n.followCooldown = 14;
     setMode(n, 'caught', 1.6);
     return say(n, 'note');
   }
   n.strikes += 1;
   n.strikeAge = 0;
+  if (n.persona.bonk === 'adopt') {
+    faceCube(n, w);
+    if (n.strikes === 1) {
+      setMode(n, 'giggle', 1.2);
+      return say(n, 'sparkle');
+    }
+    if (n.strikes === 2) {
+      n.resume = 0;
+      setMode(n, 'pat', 1.7);
+      w.emit('pat', n);
+      return say(n, 'heart');
+    }
+    // Third bump: this cube clearly needs a bow.
+    n.strikes = 0;
+    setMode(n, 'gift', 1.6);
+    w.emit('bow', n);
+    return say(n, 'heart');
+  }
   if (n.strikes === 1) {
-    n.dir = dirToward(n, w.cube) ?? n.dir;
+    faceCube(n, w);
     n.stareKind = 'bonked';
     setMode(n, 'stare');
     return say(n, 'dots');
@@ -265,10 +340,25 @@ function react(n: Npc, w: World): void {
   w.emit('rejected', n);
 }
 
+/** Someone waved at her. She looks at them the way she looks at everything. */
+function acknowledge(n: Npc): boolean {
+  const from = n.greeted;
+  n.greeted = null;
+  if (!from || !['idle', 'walk', 'stare', 'lost', 'snub'].includes(n.mode)) return false;
+  n.focus = from;
+  n.dir = dirToward(n, from) ?? n.dir;
+  n.wait = 0;
+  n.stareKind = 'bonked';
+  setMode(n, 'stare');
+  say(n, 'dots');
+  return true;
+}
+
 const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   idle(n, w) {
     if (n.t < n.timer) return;
     if (maybeSit(n, w) || maybeFollow(n, w)) return;
+    if (n.persona.twirls && !w.staged && w.rand() < 0.2) return setMode(n, 'twirl', 0.9);
     wander(n, w);
   },
 
@@ -279,11 +369,27 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     if (r === 'ok') n.steps -= 1;
     else if (r === 'cube') {
       n.resume = n.steps;
+      if (n.persona.blocked === 'pat') {
+        setMode(n, 'pat', 1.7);
+        w.emit('pat', n);
+        return say(n, 'heart');
+      }
       n.stareKind = 'blocked';
       n.clearFor = 0;
       setMode(n, 'stare');
       say(n, 'dots');
-    } else setMode(n, 'idle', 0.4 + w.rand() * 0.5);
+    } else {
+      const other = w.grid.at(n.x + DIRS[n.dir][0], n.z + DIRS[n.dir][1]);
+      if (n.persona.greets && other && other.kind !== n.persona.kind) {
+        // Someone new! Wave. Possibly accessorise them.
+        const gift = n.giftNext || (!w.staged && w.rand() < 0.3);
+        n.giftNext = false;
+        setMode(n, 'wave', 1.5);
+        say(n, 'sparkle');
+        return w.emit('greet', n, { id: other.id, gift });
+      }
+      setMode(n, 'idle', 0.4 + w.rand() * 0.5);
+    }
   },
 
   stare(n, w) {
@@ -417,6 +523,32 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     w.sitCooldown = 20;
     setMode(n, 'idle', 1);
   },
+
+  pat(n, w) {
+    if (n.t < n.timer) return;
+    // Patted. Now go around it.
+    const side = freeSide(n, w);
+    if (side === null) return wander(n, w);
+    setMode(n, 'walk');
+    n.steps = Math.max(n.resume, 2);
+    turn(n, side);
+  },
+
+  wave(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
+  giggle(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
+  gift(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
+  twirl(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
 };
 
 /** Advance one goth by dt seconds. */
@@ -439,9 +571,11 @@ export function tick(n: Npc, w: World, dt: number): void {
   if (n.mode === 'stare') n.clearFor = isFreeAhead(n, w, n.dir) ? n.clearFor + dt : 0;
   if (n.pending) {
     n.pending = false;
+    n.greeted = null;
     react(n, w);
     return;
   }
+  if (n.greeted && acknowledge(n)) return;
   if (n.wait > 0) {
     n.wait -= dt;
     return;

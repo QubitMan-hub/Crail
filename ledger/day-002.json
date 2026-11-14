@@ -1,0 +1,21 @@
+{
+  "day": 2,
+  "method": "top-comment",
+  "reel": "Day 1 Reel on @qubitman_ftw",
+  "source": "Screenshot of the comments taken by the creator about 6 hours after posting. The automated snapshot was not run for this round because the Instagram API token is not set up yet.",
+  "final": false,
+  "note": "Recorded before the 24-hour deadline. The leader had 85 likes, more than the Reel itself (68); the next comment had 9.",
+  "winner": {
+    "username": "angelwingss._",
+    "text": "femboys",
+    "likes": 85
+  },
+  "decision_note": "Built as asked: femboy NPCs with the same proportions as the goths and their own behaviour. They pat the cube, follow it, give it a bow, and wave at the goths.",
+  "ranking": [
+    { "rank": 1, "username": "angelwingss._", "text": "femboys", "likes": 85 },
+    { "rank": 2, "username": "everyone_calls_me_kk_", "text": "Add Jensen along with his affairs", "likes": 9 },
+    { "rank": 3, "username": "yug.artisyy", "text": "Add Ironman with gontlet", "likes": 0 },
+    { "rank": 3, "username": "sirpanca_", "text": "Replace the cube into me", "likes": 0 }
+  ],
+  "next_round": "Day 3 is a top comment plus one creator's pick (see RULES.md)."
+}

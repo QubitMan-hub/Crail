@@ -1,8 +1,8 @@
 import { DIRS, EMOTE_SECONDS, HOP_SECONDS, type Npc, type World } from './brain';
 import { showSymbol } from './emotes';
-import { HIP, SCALE, type Rig } from './model';
+import { HIP, SCALE, type Rig } from './rig';
 
-/** Turns what a goth is doing (brain.ts) into how she looks doing it. */
+/** Turns what a character is doing (brain.ts) into how they look doing it. */
 
 export interface Motion {
   yaw: number;
@@ -18,11 +18,13 @@ interface Pose {
   armLx: number; armLz: number; armRx: number; armRz: number;
   legL: number; legR: number;
   lean: number; y: number;
+  /** Forward bend at the waist, and extra turn on the spot (for twirls). */
+  bend: number;
 }
 
 const REST: Pose = {
   headPitch: 0, headYaw: 0, headRoll: 0, lids: 0.3, brow: 0, mouthW: 1, mouthH: 1,
-  armLx: 0, armLz: 0.05, armRx: 0, armRz: -0.05, legL: 0, legR: 0, lean: 0, y: 0,
+  armLx: 0, armLz: 0.05, armRx: 0, armRz: -0.05, legL: 0, legR: 0, lean: 0, y: 0, bend: 0,
 };
 const CROSSED = { armLx: -0.95, armLz: -0.75, armRx: -0.8, armRz: 0.75 };
 const SEAT_Y = 1 - (HIP - 0.1) * SCALE;
@@ -37,12 +39,18 @@ const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 
 function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: number): Pose {
-  const p: Pose = { ...REST };
+  const p: Pose = { ...REST, lids: n.persona.restLids };
+  const happy = n.persona.restLids < 0.1;
+  if (happy) {
+    p.brow = -0.3;
+    p.mouthW = 1.15;
+  }
   const walking = n.nx !== null;
   const seed = n.id.charCodeAt(n.id.length - 1);
   const lookAtCube = (maxPitch: number) => {
-    const dx = w.cube.x - px;
-    const dz = w.cube.z - pz;
+    const at = n.focus ?? w.cube;
+    const dx = at.x - px;
+    const dz = at.z - pz;
     const dist = Math.hypot(dx, dz);
     p.headYaw = clamp(wrap(Math.atan2(dx, dz) - m.yaw), -1.1, 1.1);
     p.headPitch = clamp(Math.atan2(1.1, Math.max(dist, 0.6)), 0, maxPitch);
@@ -55,7 +63,8 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
     p.legR = -swing * stride;
     p.armLx = -swing * stride * 0.75;
     p.armRx = swing * stride * 0.75;
-    p.y = Math.abs(Math.cos(m.phase)) * 0.035;
+    p.y = Math.abs(Math.cos(m.phase)) * 0.035 * n.persona.bounce;
+    if (happy) p.headRoll = Math.sin(m.phase) * 0.07;
   } else if (n.mode === 'idle' || n.mode === 'walk') {
     // Standing around: slow look left and right, weight on one hip.
     p.headYaw = Math.sin(time * 0.55 + seed) * 0.55;
@@ -154,6 +163,55 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
       p.brow = 0.4;
       p.lids = 0.5;
       break;
+    case 'pat':
+      // Leaning over, one hand going pat, pat, pat.
+      lookAtCube(0.3);
+      p.bend = 0.32;
+      p.armRx = -1.05 + Math.sin(time * 11) * 0.28;
+      p.armRz = 0.2;
+      p.lids = 0.9;
+      p.brow = -0.3;
+      p.mouthW = 1.4;
+      break;
+    case 'wave':
+      lookAtCube(0.15);
+      p.armLx = 0;
+      p.armLz = 2.45 + Math.sin(time * 13) * 0.4;
+      p.headRoll = 0.16;
+      p.lids = 0;
+      p.brow = -0.35;
+      p.mouthW = 1.3;
+      p.mouthH = 1.8;
+      p.y = Math.abs(Math.sin(time * 7)) * 0.05;
+      break;
+    case 'giggle':
+      // Hands to the face, eyes shut, bouncing.
+      lookAtCube(0.25);
+      p.armLx = p.armRx = -2.25;
+      p.armLz = -0.55;
+      p.armRz = 0.55;
+      p.lids = 1;
+      p.brow = -0.3;
+      p.headRoll = Math.sin(time * 9) * 0.12;
+      p.y = Math.abs(Math.sin(time * 12)) * 0.07;
+      break;
+    case 'gift':
+      lookAtCube(0.3);
+      p.bend = 0.22;
+      p.armLx = p.armRx = -1.25;
+      p.armLz = -0.2;
+      p.armRz = 0.2;
+      p.lids = 0.9;
+      p.brow = -0.3;
+      p.mouthW = 1.4;
+      break;
+    case 'twirl':
+      p.armLz = 1.25;
+      p.armRz = -1.25;
+      p.lids = 1;
+      p.brow = -0.3;
+      p.y = Math.sin(Math.PI * Math.min(1, n.t / 0.9)) * 0.12;
+      break;
   }
   return p;
 }
@@ -203,9 +261,14 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
   if (n.mode === 'rise') p.legL = p.legR = SEATED_LEGS * (1 - smooth(n.t / 0.4));
 
   rig.root.position.set(px, py, pz);
-  rig.root.rotation.y = m.yaw;
+  const spin = n.mode === 'twirl' ? smooth(n.t / 0.85) * Math.PI * 2 : 0;
+  rig.root.rotation.y = m.yaw + spin;
   rig.body.position.y = p.y;
   rig.body.rotation.z = p.lean;
+  rig.torso.rotation.x = p.bend;
+  rig.head.position.z = Math.sin(p.bend) * 0.62;
+  rig.head.position.y = 1.4 - (1 - Math.cos(p.bend)) * 0.62;
+  rig.armL.position.z = rig.armR.position.z = Math.sin(p.bend) * 0.58;
   rig.torso.scale.y = 1 + Math.sin(time * 1.6 + n.id.length) * 0.008;
   rig.head.rotation.set(p.headPitch, p.headYaw, p.headRoll);
   rig.armL.rotation.set(p.armLx, 0, p.armLz);

@@ -16,6 +16,10 @@ Each Reel says which kind of round it is.
 - **Top comment.** The top-level comment with the most likes when voting closes wins.
 - **Poll.** A poll offers a few options, and the option with the most votes when it closes wins.
 
+## Creator's pick
+
+On some days the creator also picks **one extra idea** from the comments, on top of the winner. The pick is for ideas that make the game better to actually play, which the like count does not always reward. The Reel before says when a pick is coming, the top comment still wins as usual, and the picked idea is credited to its commenter in exactly the same way.
+
 ## Top-comment rounds
 
 - One idea per comment. Replies do not count as entries.

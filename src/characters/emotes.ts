@@ -7,6 +7,7 @@ export type SymbolKind = EmoteKind | 'heartbreak';
 const INK = '#1d1b19';
 const CREAM = '#f6f1e6';
 const RED = '#f2542d';
+const PINK = '#ee6fa4';
 const cache = new Map<SymbolKind, THREE.Texture>();
 
 function draw(kind: SymbolKind): HTMLCanvasElement {
@@ -52,8 +53,27 @@ function draw(kind: SymbolKind): HTMLCanvasElement {
         g.restore();
       }
     }
+  } else if (kind === 'sparkle') {
+    // Four-point star with a little one beside it.
+    const star = (cx: number, cy: number, r: number) => {
+      g.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4 - Math.PI / 2;
+        const rr = i % 2 ? r * 0.32 : r;
+        g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+      g.closePath();
+    };
+    for (const [cx, cy, r] of [[70, 86, 52], [124, 40, 24]]) {
+      star(cx, cy, r);
+      g.strokeStyle = CREAM;
+      g.lineWidth = 14;
+      g.stroke();
+      g.fillStyle = PINK;
+      g.fill();
+    }
   } else {
-    // Broken heart.
+    // A heart: whole and pink, or red with a crack through it.
     const heart = () => {
       g.beginPath();
       g.moveTo(80, 132);
@@ -67,16 +87,18 @@ function draw(kind: SymbolKind): HTMLCanvasElement {
     g.strokeStyle = CREAM;
     g.lineWidth = 18;
     g.stroke();
-    g.fillStyle = RED;
+    g.fillStyle = kind === 'heart' ? PINK : RED;
     g.fill();
-    g.strokeStyle = CREAM;
-    g.lineWidth = 9;
-    g.beginPath();
-    g.moveTo(80, 44);
-    g.lineTo(66, 70);
-    g.lineTo(92, 88);
-    g.lineTo(78, 128);
-    g.stroke();
+    if (kind === 'heartbreak') {
+      g.strokeStyle = CREAM;
+      g.lineWidth = 9;
+      g.beginPath();
+      g.moveTo(80, 44);
+      g.lineTo(66, 70);
+      g.lineTo(92, 88);
+      g.lineTo(78, 128);
+      g.stroke();
+    }
   }
   return c;
 }

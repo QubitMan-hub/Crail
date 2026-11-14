@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Grid, type Occupant } from '../../src/core/grid';
 import { seededRandom } from '../../src/core/rng';
-import { createNpc, startSit, tick, type CubeView, type DirIndex, type Npc, type World } from '../../src/features/001-goth-baddies/brain';
+import { createNpc, FEMBOY, GOTH, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from '../../src/characters/brain';
 
 const CUBE: Occupant = { kind: 'cube', id: 'cube' };
 
@@ -10,12 +10,16 @@ function setup(seed = 7) {
   const cube: CubeView = { x: 0, z: 0, rolls: 0, moving: false, pinned: false, struggles: 0, idleFor: 0 };
   grid.claim(0, 0, CUBE);
   const events: string[] = [];
+  const greetings: { id: string; gift: boolean }[] = [];
   const world: World = {
     grid, cube, rand: seededRandom(seed), sitter: null, sitCooldown: 0, staged: true,
-    emit: (e) => void events.push(e),
+    emit: (e, _n, data) => {
+      events.push(e);
+      if (e === 'greet') greetings.push(data as { id: string; gift: boolean });
+    },
   };
-  const add = (x: number, z: number, dir: DirIndex, steps = 0): Npc => {
-    const n = createNpc(`g${x}_${z}`, 0, x, z, dir, grid)!;
+  const add = (x: number, z: number, dir: DirIndex, steps = 0, persona: Persona = GOTH): Npc => {
+    const n = createNpc(`${persona.kind}${x}_${z}`, 0, x, z, dir, grid, persona)!;
     if (steps) {
       n.mode = 'walk';
       n.steps = steps;
@@ -35,7 +39,7 @@ function setup(seed = 7) {
     cube.rolls += 1;
     grid.claim(x, z, CUBE);
   };
-  return { grid, cube, world, events, add, run, moveCube };
+  return { grid, cube, world, events, greetings, add, run, moveCube };
 }
 
 describe('grid', () => {
@@ -132,7 +136,16 @@ describe('goth behaviour', () => {
   it('no two things ever share a cell, however long they wander', () => {
     const s = setup(42);
     s.world.staged = false;
-    const npcs = [s.add(3, 1, 0), s.add(-2, 3, 1), s.add(1, -4, 2), s.add(-3, -2, 3), s.add(4, 4, 0), s.add(-4, 1, 1)];
+    const npcs = [
+      s.add(3, 1, 0), s.add(-2, 3, 1), s.add(1, -4, 2), s.add(-3, -2, 3), s.add(4, 4, 0),
+      s.add(-4, 1, 1, 0, FEMBOY), s.add(2, -2, 2, 0, FEMBOY), s.add(-1, 5, 3, 0, FEMBOY), s.add(5, -1, 0, 0, FEMBOY),
+    ];
+    // Whoever gets waved at hears about it, as the game wires it up.
+    s.world.emit = (e, n, data) => {
+      if (e !== 'greet') return;
+      const target = npcs.find((o) => o.id === (data as { id: string }).id);
+      if (target) target.greeted = { x: n.x, z: n.z };
+    };
     const rand = seededRandom(99);
     let frame = 0;
     s.run(npcs, 240, () => {
@@ -157,5 +170,70 @@ describe('goth behaviour', () => {
     });
     // They stay in the neighbourhood rather than drifting off forever.
     for (const n of npcs) expect(Math.abs(n.x - s.cube.x) + Math.abs(n.z - s.cube.z)).toBeLessThan(30);
+  });
+});
+
+describe('femboy behaviour', () => {
+  it('the pat: pats a cube that is in his way, then walks around it', () => {
+    const s = setup();
+    const n = s.add(-3, 0, 0, 8, FEMBOY);
+    s.run([n], 2.2);
+    expect(n.mode).toBe('pat');
+    expect(n.emote?.kind ?? 'heart').toBe('heart');
+    expect(s.events).toContain('pat');
+    s.run([n], 4);
+    expect(n.z).not.toBe(0);
+  });
+
+  it('the adoption: giggle, then pats, then a bow for the cube', () => {
+    const s = setup();
+    const n = s.add(1, 0, 0, 0, FEMBOY);
+    n.timer = 99;
+    const bonk = () => {
+      n.pending = true;
+      s.run([n], 0.4);
+    };
+    bonk();
+    expect(n.mode).toBe('giggle');
+    expect(n.dir).toBe(2); // turned to face the cube
+    bonk();
+    expect(n.mode).toBe('pat');
+    bonk();
+    expect(n.mode).toBe('gift');
+    expect(s.events).toContain('bow');
+    expect(s.events).not.toContain('rejected');
+  });
+
+  it('the greeting: waves at a goth in his way; she stares back', () => {
+    const s = setup();
+    s.moveCube(9, 9);
+    const goth = s.add(1, 0, 3);
+    goth.timer = 99;
+    const boy = s.add(-2, 0, 0, 8, FEMBOY);
+    boy.giftNext = true;
+    s.run([boy, goth], 2.2);
+    expect(boy.mode).toBe('wave');
+    expect(s.greetings).toEqual([{ id: goth.id, gift: true }]);
+    goth.greeted = { x: boy.x, z: boy.z };
+    s.run([boy, goth], 0.2);
+    expect(goth.mode).toBe('stare');
+    expect(goth.dir).toBe(2); // looking at him, not at the cube
+    expect(goth.focus).toEqual({ x: 0, z: 0 });
+  });
+
+  it('does not wave at other femboys, and never sits on the cube', () => {
+    const s = setup();
+    s.world.staged = false;
+    const a = s.add(1, 0, 0, 0, FEMBOY);
+    a.timer = 99;
+    const b = s.add(-2, 0, 0, 8, FEMBOY);
+    // Park the cube out of the way so the second one walks straight into the first.
+    s.moveCube(9, 9);
+    s.cube.idleFor = 60;
+    s.run([b], 3);
+    expect(s.greetings).toEqual([]);
+    s.run([a, b], 20);
+    expect(s.world.sitter).toBeNull();
+    expect(s.cube.pinned).toBe(false);
   });
 });

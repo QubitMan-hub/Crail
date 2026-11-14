@@ -1,10 +1,7 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { box, buildFace, group, HIP, mat, SCALE, type Rig } from '../../characters/rig';
 
-/**
- * Blocky goth characters, a bit under two cubes tall, built from the same soft-edged matte
- * boxes as the cube so they belong in the same world. Local +z is "forward".
- */
+/** The goths: ink black, purple accents, chunky boots, winged eyeliner. */
 
 const INK = '#1d1b19';
 const CHARCOAL = '#2e2a36';
@@ -33,61 +30,6 @@ export const VARIANTS: Variant[] = [
   { name: 'Hex', skin: '#ecd3c4', hair: 'buns', outfit: 'tee', legs: 'thigh', sleeves: 'bare' },
   { name: 'Lilith', skin: '#f1ddd0', hair: 'swept', hat: 'horns', outfit: 'corset', legs: 'sheer', sleeves: 'gloves', extra: 'wings' },
 ];
-
-export interface Rig {
-  root: THREE.Group;
-  body: THREE.Group;
-  torso: THREE.Group;
-  head: THREE.Group;
-  armL: THREE.Group;
-  armR: THREE.Group;
-  legL: THREE.Group;
-  legR: THREE.Group;
-  lids: THREE.Mesh[];
-  brows: THREE.Mesh[];
-  pupils: THREE.Mesh[];
-  mouth: THREE.Mesh;
-  /** Hair that swings when she turns or walks. */
-  sway: THREE.Object3D[];
-  /** Long hair that keeps hanging straight down when the head tips. */
-  hang: THREE.Object3D[];
-  emote: THREE.Sprite;
-  /** Long skirts hide the legs, so they swing less. */
-  stride: number;
-}
-
-export const HIP = 0.78;
-/** Overall size. 1 would be exactly two cubes tall; this makes them about 1.7. */
-export const SCALE = 0.85;
-const materials = new Map<string, THREE.MeshStandardMaterial>();
-const mat = (color: string) => {
-  let m = materials.get(color);
-  if (!m) materials.set(color, (m = new THREE.MeshStandardMaterial({ color, roughness: 0.72 })));
-  return m;
-};
-
-function box(
-  parent: THREE.Object3D, color: string,
-  w: number, h: number, d: number,
-  x = 0, y = 0, z = 0,
-): THREE.Mesh {
-  const thin = Math.min(w, h, d);
-  const geo = thin < 0.03
-    ? new THREE.BoxGeometry(w, h, d)
-    : new RoundedBoxGeometry(w, h, d, 2, Math.min(0.035, thin * 0.42));
-  const m = new THREE.Mesh(geo, mat(color));
-  m.position.set(x, y, z);
-  m.castShadow = true;
-  parent.add(m);
-  return m;
-}
-
-function group(parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Group {
-  const g = new THREE.Group();
-  g.position.set(x, y, z);
-  parent.add(g);
-  return g;
-}
 
 function buildLeg(parent: THREE.Object3D, side: 1 | -1, v: Variant): THREE.Group {
   const leg = group(parent, side * 0.12, HIP, 0);
@@ -252,24 +194,6 @@ function buildHair(head: THREE.Group, v: Variant, sway: THREE.Object3D[], hang: 
   }
 }
 
-function buildFace(head: THREE.Group, v: Variant) {
-  const fz = 0.243;
-  const lids: THREE.Mesh[] = [];
-  const brows: THREE.Mesh[] = [];
-  const pupils: THREE.Mesh[] = [];
-  for (const s of [1, -1]) {
-    box(head, WHITE, 0.125, 0.1, 0.012, s * 0.125, 0.272, fz);
-    pupils.push(box(head, INK, 0.06, 0.085, 0.012, s * 0.125, 0.268, fz + 0.005));
-    box(head, PURPLE, 0.145, 0.03, 0.012, s * 0.125, 0.35, fz); // eyeshadow
-    lids.push(box(head, INK, 0.145, 0.032, 0.02, s * 0.125, 0.323, fz + 0.004));
-    box(head, INK, 0.055, 0.024, 0.014, s * 0.205, 0.336, fz).rotation.z = s * 0.55; // wing
-    brows.push(box(head, INK, 0.13, 0.024, 0.014, s * 0.125, 0.392, fz));
-  }
-  const mouth = box(head, LIPS, 0.09, 0.032, 0.012, 0, 0.125, fz);
-  void v;
-  return { lids, brows, pupils, mouth };
-}
-
 export function buildGoth(v: Variant, emote: THREE.Sprite): Rig {
   const root = new THREE.Group();
   root.scale.setScalar(SCALE);
@@ -286,9 +210,12 @@ export function buildGoth(v: Variant, emote: THREE.Sprite): Rig {
   const sway: THREE.Object3D[] = [];
   const hang: THREE.Object3D[] = [];
   buildHair(head, v, sway, hang);
-  const face = buildFace(head, v);
+  const face = buildFace(head, {
+    white: WHITE, pupil: INK, lid: INK, brow: INK, mouth: LIPS, mouthWidth: 0.09, shadow: PURPLE, wing: true,
+  });
+  const headTop = v.hat === 'brim' ? 0.86 : v.hair === 'buns' ? 0.72 : 0.6;
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return { root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride };
+  return { root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride, headTop };
 }
