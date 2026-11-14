@@ -113,6 +113,8 @@ export const cube: Feature = {
       snapQuat(mesh.quaternion);
     });
 
+    ctx.events.on<[boolean]>('direct:cube.pin', ([on]) => (state.pinned = on));
+
     const begin = (dir: Dir) => {
       startPos.copy(mesh.position);
       startQuat.copy(mesh.quaternion);

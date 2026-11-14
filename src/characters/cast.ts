@@ -106,13 +106,7 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     const m = members.find((mm) => mm.n.id === id);
     if (!m) return;
     m.n.greeted = { x, z };
-    if (gift && opts.bow && !m.rig.head.getObjectByName('bow')) {
-      const bow = buildBow(...opts.bow);
-      bow.name = 'bow';
-      bow.position.set(0.12, m.rig.headTop + 0.06, 0.08);
-      bow.rotation.z = -0.15;
-      m.rig.head.add(bow);
-    }
+    if (gift) giveBow(m);
   });
 
   // Scripted control, for tests and video shots.
@@ -136,6 +130,16 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     else if (what === 'gift') n.giftNext = true;
     else if (!world.sitter) startSit(n, world);
   });
+
+  const giveBow = (m: Member) => {
+    if (!opts.bow || m.rig.head.getObjectByName('bow')) return;
+    const bow = buildBow(...opts.bow);
+    bow.name = 'bow';
+    bow.position.set(0.12, m.rig.headTop + 0.06, 0.08);
+    bow.rotation.z = -0.15;
+    m.rig.head.add(bow);
+  };
+  ctx.events.on<[number]>(`direct:${key}.bow`, ([i]) => members[i] && giveBow(members[i]));
 
   /** Is a floor cell outside what the camera can see (with room for a tall character)? */
   const offscreen = (x: number, z: number) => {

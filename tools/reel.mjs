@@ -6,7 +6,7 @@
 //   add --voice-trim 0.9 to cut dead air off the start of the voice, --no-sfx for voice only
 //
 // A shot list (tools/reels/<name>.mjs) exports:
-//   seconds, keys [[from, to, key]], camera(t) -> {zoom, focus?: [x, z], follow?: gothIndex},
+//   seconds, keys [[from, to, key]], camera(t) -> {zoom, focus?: [x, z], follow?: [cast, index]},
 //   html(t) -> overlay markup, css, sfx [[time, kind]], and optionally:
 //   actions [[time, name, ...args]]  scripted events ('cut' snaps the camera, anything else goes
 //                                    to the game's director, e.g. 'cube.teleport', 'goths.spawn')
@@ -112,7 +112,9 @@ try {
         ctx.camera.zoom = cam.zoom;
         ctx.camera.updateProjectionMatrix();
         if (cam.follow !== undefined) {
-          const n = ctx.state.goths?.npcs[cam.follow];
+          // follow: a goth's index, or [cast, index] such as ['femboys', 0].
+          const [cast, index] = Array.isArray(cam.follow) ? cam.follow : ['goths', cam.follow];
+          const n = ctx.state[cast]?.npcs[index];
           if (n) {
             const k = n.nx === null ? 0 : n.p;
             const x = n.x + ((n.nx ?? n.x) - n.x) * k;
