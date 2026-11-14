@@ -302,7 +302,7 @@ if (values.voice) {
   }
 }
 if (mixed.length) {
-  chains.push(`${mixed.join('')}amix=inputs=${mixed.length}:duration=longest:normalize=0,alimiter=limit=0.7:attack=3:release=60,apad[a]`);
+  chains.push(`${mixed.join('')}amix=inputs=${mixed.length}:duration=longest:normalize=0,alimiter=limit=0.7:attack=3:release=60:level=disabled,apad[a]`);
   args.push('-filter_complex', chains.join(';'), '-map', '0:v', '-map', '[a]');
 } else {
   args.push('-map', '0:v');
