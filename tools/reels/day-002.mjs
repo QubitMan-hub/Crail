@@ -104,19 +104,45 @@ function camera(t) {
 
 const frozen = (t) => t >= T.tv && t < T.reveal;
 
-// Voice-over, as estimated. Retimed to the real recording afterwards.
+// ---- Timing ---------------------------------------------------------------
+// Everything above and below is written in "scene time". The recorded voice-over
+// runs a little longer in places, so the finished video holds certain scenes for
+// longer: after each [sceneTime, extraSeconds] point, everything plays that much later.
+const HOLDS = [[5.2, 0.8], [8.8, 0.6], [15.2, 0.9], [33.0, 1.0]];
+/** Scene time -> video time. */
+const later = (t) => t + (HOLDS.findLast(([at]) => t >= at)?.[1] ?? 0);
+/** Video time -> scene time (holding on the last moment of a scene while it is stretched). */
+function sceneTime(v) {
+  const seg = HOLDS.findLast(([at, extra]) => v >= at + extra);
+  const next = HOLDS[HOLDS.indexOf(seg) + 1] ?? (seg ? null : HOLDS[0]);
+  const t = v - (seg?.[1] ?? 0);
+  return next && t >= next[0] ? next[0] - 0.001 : t;
+}
+
+// Voice-over: [from, to] in the recording, and where that line starts in the video.
+const voice = [
+  [9.35, 12.45, 0.2], //    Day 2 of letting Instagram comments build my game,
+  [12.6, 15.1, 3.4], //     I thought it couldn't get worse than goth baddies.
+  [15.2, 18.25, 6.2], //    Then this comment got more likes than the actual reel itself.
+  [18.58, 20.42, 9.5], //   And the rest of you were no help either.
+  [23.6, 25.02, 14.65], //  But a deal is a deal.
+  [25.98, 27.85, 17.5], //  So... femboys.
+  [32.6, 34.17, 23.7], //   The goths rejected my cube,
+  [34.22, 35.85, 26.0], //  these guys adopted it.
+  [37.35, 42.3, 28.7], //   Tomorrow the top comment still wins but I also pick one idea that actually makes this a game.
+];
+// Captions follow the actual words in the recording (video time).
 const captions = [
-  [0.25, 1.1, 'Day two'], [1.1, 1.7, 'of letting'], [1.7, 2.4, 'Instagram comments'], [2.4, 2.9, 'build my game.'],
-  [3.1, 3.8, 'I thought it couldn’t'], [3.8, 4.4, 'get worse than'], [4.4, 5.1, 'goth baddies.'],
-  [5.7, 6.6, 'Then this got'], [6.6, 7.5, 'more likes'], [7.5, 8.5, 'than the actual reel.'],
-  [8.95, 9.7, 'And the rest of you'], [9.7, 10.4, 'were no help.'],
-  [14.15, 15.15, 'But a deal is a deal.'],
-  [16.7, 17.2, 'So…'], [17.3, 18.1, 'femboys.'],
-  [22.9, 23.6, 'The goths'], [23.6, 24.4, 'rejected my cube.'],
-  [24.9, 25.5, 'These guys'], [25.5, 26.3, 'adopted it.'],
-  [27.9, 28.6, 'Tomorrow,'], [28.6, 29.7, 'top comment still wins.'],
-  [29.9, 30.7, 'But I also pick'], [30.7, 31.4, 'one idea that actually'], [31.4, 32.3, 'makes this a game.'],
-  [32.4, 33.0, 'Please. Cook.'],
+  [0.31, 1.03, 'Day two'], [1.03, 1.51, 'of letting'], [1.51, 2.47, 'Instagram comments'], [2.47, 3.25, 'build my game.'],
+  [3.48, 4.36, 'I thought it couldn’t'], [4.36, 4.96, 'get worse than'], [4.96, 5.7, 'goth baddies.'],
+  [6.26, 7.26, 'Then this comment got'], [7.28, 7.98, 'more likes than'], [8.0, 9.05, 'the actual reel itself.'],
+  [9.58, 10.34, 'And the rest of you'], [10.34, 11.25, 'were no help either.'],
+  [14.73, 16.05, 'But a deal is a deal.'],
+  [17.56, 18.1, 'So…'], [18.12, 19.15, 'femboys.'],
+  [23.75, 24.68, 'The goths rejected'], [24.7, 25.25, 'my cube.'],
+  [26.08, 26.44, 'These guys'], [26.46, 27.45, 'adopted it.'],
+  [28.79, 29.33, 'Tomorrow'], [29.35, 30.83, 'the top comment still wins,'],
+  [30.85, 31.67, 'but I also pick'], [31.69, 32.37, 'one idea that'], [32.39, 33.6, 'actually makes this a game.'],
 ];
 // Real comments, shown as they appeared, each with a short written reply.
 const replies = [
@@ -127,17 +153,17 @@ const replies = [
 ];
 
 const sfx = [
-  [T.winner, 'pop'], [6.6, 'boom'],
+  [T.winner, 'pop'], [6.5, 'boom'],
   ...replies.map(([t]) => [t, 'pop']),
   [T.tv + 0.07, 'boom'],
-  [20.75, 'dun'], [26.6, 'pop'], [29.9, 'pop'], [34.1, 'dun'],
+  [20.75, 'dun'], [26.6, 'pop'], [30.3, 'pop'], [34.1, 'dun'],
 ];
 const music = {
-  sections: [[0, T.tv], [T.reveal + 0.05, 33.75]],
-  duck: [[0.2, 2.9], [3.1, 5.1], [5.7, 8.5], [8.9, 10.4], [14.1, 15.2], [16.7, 18.1], [22.9, 26.3], [27.9, 33.0]],
+  sections: [[0, 16.1], [17.35, 34.75]],
+  duck: voice.map(([from, to, at]) => [at, at + (to - from)]),
 };
 const tape = 'highpass=f=320,lowpass=f=3300,vibrato=f=5.5:d=0.12,volume=0.95';
-const audio = [{ file: OLD_REEL, at: T.tv, filter: `atrim=${SRC_A}:${SRC_B},asetpts=PTS-STARTPTS,${tape}` }];
+const audio = [{ file: OLD_REEL, at: later(T.tv), filter: `atrim=${SRC_A}:${SRC_B},asetpts=PTS-STARTPTS,${tape}` }];
 
 const css = `
   .big { position:absolute; left:0; right:0; text-align:center; font-weight:900; line-height:1; letter-spacing:.01em; }
@@ -213,9 +239,9 @@ function html(t) {
     h += `<div class="sub" style="top:25%;opacity:${t > 0.9 ? 1 : 0}">letting comments build my game</div>`;
   }
   if (within(t, T.winner, T.comments)) {
-    h += comment(t, T.winner, 'femboys', '📌 TOP COMMENT', 5.75);
-    if (t >= 6.6) {
-      h += `<div class="versus" ${scaled(pop(t, 6.6, 0.2))}>
+    h += comment(t, T.winner, 'femboys', '📌 TOP COMMENT', 5.7);
+    if (t >= 6.5) {
+      h += `<div class="versus" ${scaled(pop(t, 6.5, 0.2))}>
         <div>THIS COMMENT<b>85</b></div><div class="gt">&gt;</div>
         <div>THE WHOLE REEL <img src="/reelasset/likes.png"><b>68</b></div></div>`;
     }
@@ -230,20 +256,40 @@ function html(t) {
   }
   if (within(t, T.tv, T.reveal)) h += tv(t);
 
-  if (within(t, 28.3, T.punch)) {
-    h += `<div class="sub" ${scaled(pop(t, 28.3), 'top:10%')}><span class="tag">DAY 3</span></div>`;
-    h += `<div class="big" ${scaled(pop(t, 28.4), 'top:13.5%;font-size:44px;white-space:nowrap')}>TOP COMMENT WINS</div>`;
-    h += `<div class="plus"><span ${scaled(pop(t, 29.9), 'transform-origin:50% 50%')}>+ 1 idea I pick</span></div>`;
-    h += `<div class="sub" style="top:26.5%;font-size:21px;opacity:${t > 30.7 ? 1 : 0}">one that makes this an actual game</div>`;
+  if (within(t, 28.5, T.punch)) {
+    h += `<div class="sub" ${scaled(pop(t, 28.5), 'top:10%')}><span class="tag">DAY 3</span></div>`;
+    h += `<div class="big" ${scaled(pop(t, 28.6), 'top:13.5%;font-size:44px;white-space:nowrap')}>TOP COMMENT WINS</div>`;
+    h += `<div class="plus"><span ${scaled(pop(t, 30.3), 'transform-origin:50% 50%')}>+ 1 idea I pick</span></div>`;
+    h += `<div class="sub" style="top:26.5%;font-size:21px;opacity:${t > 31.3 ? 1 : 0}">one that makes this an actual game</div>`;
   }
   if (within(t, 34.4, T.black)) {
     h += `<div class="big" ${scaled(pop(t, 34.4), 'top:62%;font-size:46px;-webkit-text-stroke:9px #f6f1e6;paint-order:stroke fill')}>she kept the bow.</div>`;
   }
 
-  const c = captions.find(([a, b]) => within(t, a, b));
-  if (c) h += `<div class="cap"><span ${scaled(0.7 + 0.3 * pop(t, c[0], 0.14))}>${esc(c[2])}</span></div>`;
   if (t >= T.black) h += '<div class="black"></div>';
   return h;
 }
 
-export default { seconds, prepare, assets: { dir: ASSETS }, keys, actions, camera, frozen, html, css, sfx, audio, music };
+/** The overlay for a moment of the finished video: the scene's graphics plus the spoken caption. */
+function overlay(v) {
+  let h = html(sceneTime(v));
+  const c = captions.find(([a, b]) => within(v, a, b));
+  if (c) h += `<div class="cap"><span ${scaled(0.7 + 0.3 * pop(v, c[0], 0.14))}>${esc(c[2])}</span></div>`;
+  return h;
+}
+
+export default {
+  seconds: later(seconds),
+  prepare,
+  assets: { dir: ASSETS },
+  keys: keys.map(([a, b, k]) => [later(a), later(a) + (b - a), k]),
+  actions: actions.map(([t, ...rest]) => [later(t), ...rest]),
+  camera: (v) => camera(sceneTime(v)),
+  frozen: (v) => frozen(sceneTime(v)),
+  html: overlay,
+  css,
+  sfx: sfx.map(([t, ...rest]) => [later(t), ...rest]),
+  audio,
+  music,
+  voice,
+};
