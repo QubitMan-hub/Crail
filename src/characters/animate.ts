@@ -273,6 +273,13 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
         p.brow = 0.45;
       }
       break;
+    case 'revere':
+      lookAtCube(0.3);
+      p.bend = 0.6;
+      p.armLx = p.armRx = -2.7;
+      p.lids = 1;
+      p.brow = -0.2;
+      break;
     case 'twirl':
       p.armLz = 1.25;
       p.armRz = -1.25;
@@ -280,6 +287,18 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
       p.brow = -0.3;
       p.y = Math.sin(Math.PI * Math.min(1, n.t / 0.9)) * 0.12;
       break;
+  }
+  if (n.cult && n.mode === 'march' && !walking && w.cube.idleFor > 2 && !w.cube.pinned) {
+    // Worship: arms up, bowing in slow waves around the circle.
+    lookAtCube(0.25);
+    const wave = Math.sin(time * 2.4 + n.slot * 0.8);
+    p.bend = 0.3 + wave * 0.25;
+    p.armLx = p.armRx = -2.75 + wave * 0.35;
+    p.armLz = -0.25;
+    p.armRz = 0.25;
+    p.lids = 1;
+    p.brow = -0.2;
+    p.headYaw *= 0.5;
   }
   return p;
 }

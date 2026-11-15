@@ -138,6 +138,8 @@ export const supremeLeader: Feature = {
 
       // Keep the column together: everyone knows their place, and anyone left far behind is brought back.
       soldiers.members.forEach((m, i) => {
+        // A soldier who has joined the cube's cult no longer answers to him.
+        if (m.n.cult) return;
         m.n.lead = n;
         m.n.slot = i;
         const target = SOLDIER_FULL;

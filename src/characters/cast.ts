@@ -103,7 +103,10 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
   // The cube bumped into a cell: whoever owns it hears about it.
   ctx.events.on<{ tx: number; tz: number }>('cube:bonk', ({ tx, tz }) => {
     const hit = members.find(({ n }) => (n.x === tx && n.z === tz) || (n.nx === tx && n.nz === tz));
-    if (hit) hit.n.pending = true;
+    if (!hit) return;
+    // If the cube is carrying a charm, a bump recruits them instead of annoying them.
+    if (ctx.state.cult?.tryRecruit(hit)) return;
+    hit.n.pending = true;
   });
 
   // Someone of another kind waved at one of ours, and may have brought a bow.

@@ -5,7 +5,7 @@ export interface FeatureCredit {
   username: string;
   /** The winning comment or poll option, quoted as written. */
   text: string;
-  method: 'top-comment' | 'poll' | 'founder';
+  method: 'top-comment' | 'poll' | 'founder' | 'creator-pick';
 }
 
 export interface FeatureMeta {

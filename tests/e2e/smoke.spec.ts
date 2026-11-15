@@ -68,7 +68,7 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult']);
   await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
@@ -108,6 +108,8 @@ test('boots with every feature on: day 3, goths, femboys, a leader, credits name
   await expect(page.locator('#day')).toHaveText('Day 3');
   expect(await page.evaluate(() => (window as any).__crail.state.leader.npcs.length)).toBe(1);
   await expect(page.locator('#credits')).toContainText('@gyarados117');
+  await expect(page.locator('#credits')).toContainText('@megamouse173');
+  await expect(page.locator('#credits')).toContainText('add a small park with rides');
   expect(await page.evaluate(() => (window as any).__crail.state.femboys.npcs.length)).toBe(4);
   expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs.length)).toBe(5);
   await page.locator('#day').click();
@@ -244,4 +246,48 @@ test('the rocket goes up and comes straight back down', async ({ page }) => {
   await direct(page, 'cube.teleport', pad.x, pad.z + 1);
   await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
   expect(await cubeState(page)).toMatchObject({ x: pad.x, z: pad.z + 1 });
+});
+
+// ---- Day 3 picks: the park and the cult --------------------------------------
+
+test('rolling into a ride takes the cube for a ride and earns a charm', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  // Next to the trampoline, then roll into it.
+  await direct(page, 'cube.teleport', 12, 2);
+  await holdUntil(page, 'KeyW', 's.park.riding !== null');
+  expect(await page.evaluate(() => (window as any).__crail.state.park.riding)).toBe('trampoline');
+  expect((await cubeState(page)).carried).toBe(true);
+  await page.waitForFunction(() => (window as any).__crail.state.park.rides === 1);
+  // Back where it started, free to move, one charm richer.
+  expect(await cubeState(page)).toMatchObject({ x: 12, z: 2, carried: false, pinned: false });
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
+  await expect(page.locator('#cult')).toContainText('1');
+});
+
+test('with a charm, bumping someone recruits them and they follow the cube', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
+  await direct(page, 'femboys.spawn', 0, 0, 1, 3, { idle: 999 });
+  await direct(page, 'cult.charms', 1);
+  await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
+  // The goth joined instead of glaring. The charm is spent.
+  await page.waitForFunction(() => (window as any).__crail.state.cult.members.length === 1);
+  expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs[0].cult)).toBe(true);
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(0);
+  await expect(page.locator('#cult')).toContainText('Cult 1');
+  // No charm left: the femboy reacts the way he always did.
+  await holdUntil(page, 'KeyS', 's.cube.bonks >= 2');
+  await page.waitForFunction(() => (window as any).__crail.state.femboys.npcs[0].mode === 'giggle');
+  expect(await page.evaluate(() => (window as any).__crail.state.femboys.npcs[0].cult)).toBe(false);
+  // Roll away: the recruit comes along.
+  await holdUntil(page, 'KeyA', 's.cube.x <= -5');
+  await page.waitForFunction(() => {
+    const s = (window as any).__crail.state;
+    const n = s.goths.npcs[0];
+    return Math.abs(n.x - s.cube.x) + Math.abs(n.z - s.cube.z) <= 3;
+  });
 });

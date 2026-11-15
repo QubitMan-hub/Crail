@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Grid, type Occupant } from '../../src/core/grid';
 import { seededRandom } from '../../src/core/rng';
-import { createNpc, FEMBOY, GOTH, LEADER, SOLDIER, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from '../../src/characters/brain';
+import { createNpc, FEMBOY, GOTH, LEADER, SOLDIER, startSit, tick, type Lead, type CubeView, type DirIndex, type Npc, type Persona, type World } from '../../src/characters/brain';
 
 const CUBE: Occupant = { kind: 'cube', id: 'cube' };
 
@@ -321,5 +321,66 @@ describe('the leader and his soldiers', () => {
     expect(troops[0].mode).toBe('salute');
     s.run(all, 2);
     expect(troops[0].mode).toBe('march');
+  });
+});
+
+describe('the cult of the cube', () => {
+  const recruit = (_s: ReturnType<typeof setup>, lead: Lead, n: Npc, slot: number) => {
+    n.cult = true;
+    n.lead = lead;
+    n.slot = slot;
+    n.speed = 2.4;
+    n.mode = 'march';
+    return n;
+  };
+  const dist = (a: Npc, b: { x: number; z: number }) => Math.abs(a.x - b.x) + Math.abs(a.z - b.z);
+
+  it('the procession: recruits of every kind walk in the cube\'s footsteps', () => {
+    const s = setup();
+    const lead: Lead = { x: 0, z: 0, dir: 0, trail: [] };
+    const crowd = [
+      recruit(s, lead, s.add(-2, 0, 0), 0),
+      recruit(s, lead, s.add(-3, 1, 0, 0, FEMBOY), 1),
+      recruit(s, lead, s.add(-4, 0, 0, 0, SOLDIER), 2),
+      recruit(s, lead, s.add(-3, -1, 0, 0, LEADER), 3),
+    ];
+    // The cube rolls six cells to the right, a little faster than they can walk.
+    let frame = 0;
+    s.run(crowd, 4, () => {
+      if (frame++ % 12 === 0 && s.cube.x < 6) {
+        lead.trail.unshift({ x: lead.x, z: lead.z });
+        s.moveCube(s.cube.x + 1, 0);
+        lead.x = s.cube.x;
+        s.cube.idleFor = 0;
+      }
+      expect(new Set(crowd.map((n) => `${n.x},${n.z}`)).size).toBe(crowd.length);
+    });
+    // Strung out behind it, on the row it rolled along, in the order they joined.
+    crowd.forEach((n, i) => expect([n.x, n.z]).toEqual([5 - i, 0]));
+  });
+
+  it('the circle: when the cube stops they gather round it without boxing it in', () => {
+    const s = setup();
+    const lead: Lead = { x: 0, z: 0, dir: 0, trail: [] };
+    const crowd = [0, 1, 2, 3, 4].map((i) => recruit(s, lead, s.add(-3 - i, 3, 0), i));
+    s.cube.idleFor = 5;
+    s.run(crowd, 8);
+    for (const n of crowd) expect(Math.max(Math.abs(n.x), Math.abs(n.z))).toBe(2);
+    // Every cell next to the cube is still free: it can always roll away.
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) expect(s.grid.isFree(dx, dz)).toBe(true);
+  });
+
+  it('reverence: a member bows when bumped, whatever they were before', () => {
+    const s = setup();
+    const lead: Lead = { x: 0, z: 0, dir: 0, trail: [] };
+    const goth = recruit(s, lead, s.add(2, 0, 2), 0);
+    goth.pending = true;
+    s.run([goth], 0.2);
+    expect(goth.mode).toBe('revere');
+    expect(goth.strikes).toBe(0);
+    expect(s.events).not.toContain('rejected');
+    s.run([goth], 2);
+    expect(goth.mode).toBe('march');
+    expect(dist(goth, s.cube)).toBeGreaterThanOrEqual(1);
   });
 });

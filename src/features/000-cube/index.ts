@@ -21,6 +21,8 @@ export interface CubeState {
   struggles: number;
   /** How many times it has bumped into something. */
   bonks: number;
+  /** Something else (a ride) is moving the cube. It ignores input completely. */
+  carried: boolean;
   /** Seconds since it last moved or tried to. */
   idleFor: number;
 }
@@ -40,7 +42,7 @@ export const cube: Feature = {
   },
   setup(ctx) {
     const me: Occupant = { kind: 'cube', id: 'cube' };
-    const state: CubeState = { x: 0, z: 0, rolls: 0, moving: false, pinned: false, struggles: 0, bonks: 0, idleFor: 0 };
+    const state: CubeState = { x: 0, z: 0, rolls: 0, moving: false, pinned: false, struggles: 0, bonks: 0, carried: false, idleFor: 0 };
     ctx.state.cube = state;
     ctx.grid.claim(0, 0, me);
 
@@ -107,8 +109,10 @@ export const cube: Feature = {
       state.z = z;
       state.moving = false;
       state.pinned = false;
+      state.carried = false;
       state.idleFor = 0;
       ctx.grid.claim(x, z, me);
+      mesh.quaternion.identity();
       mesh.position.set(x, 0.5, z);
       snapQuat(mesh.quaternion);
     });
@@ -171,7 +175,7 @@ export const cube: Feature = {
           if (held) target = null;
           const dir = held ?? (target ? stepToward(state, target) : null);
           if (!dir) target = null;
-          if (!dir || cooldown > 0) {
+          if (!dir || cooldown > 0 || state.carried) {
             state.moving = false;
             state.idleFor += remaining;
             break;
@@ -192,7 +196,9 @@ export const cube: Feature = {
         }
       }
 
-      ctx.focus.set(mesh.position.x, 0, mesh.position.z);
+      // While a ride carries the cube, the camera stays on the spot it left from.
+      if (state.carried) ctx.focus.set(state.x, 0, state.z);
+      else ctx.focus.set(mesh.position.x, 0, mesh.position.z);
 
       const mm = marker.material as THREE.MeshBasicMaterial;
       if (!target) mm.opacity = Math.max(0, mm.opacity - dt * 3);

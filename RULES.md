@@ -18,7 +18,7 @@ Each Reel says which kind of round it is.
 
 ## Creator's pick
 
-On some days the creator also picks **one extra idea** from the comments, on top of the winner. The pick is for ideas that make the game better to actually play, which the like count does not always reward. The Reel before says when a pick is coming, the top comment still wins as usual, and the picked idea is credited to its commenter in exactly the same way.
+On some days the creator also picks **one or more extra ideas** from the comments, on top of the winner. The pick is for ideas that make the game better to actually play, which the like count does not always reward. The Reel before says when a pick is coming, the top comment still wins as usual, and the picked idea is credited to its commenter in exactly the same way.
 
 ## Top-comment rounds
 

@@ -20,6 +20,11 @@ import type { Grid, Occupant } from '../core/grid';
  *   - The Inspection: the cube is in his way. He studies it closely.
  *   - The Alarm:      bump him and he points; every soldier marches over and boxes the cube in.
  *
+ * Cult members (anyone the cube has recruited, whatever they were before):
+ *   - The Procession: they walk in the cube's footsteps, in the order they joined.
+ *   - The Circle:     when the cube stops, they gather round it and worship.
+ *   - Reverence:      bump one and they bow.
+ *
  * Femboys (blocked: pat, bonk: adopt, greets):
  *   - The Pat:        the cube is in his way. He pats it on the head.
  *   - The Fan Club:   they follow the cube a lot, and wave when caught.
@@ -91,7 +96,7 @@ export type Mode =
   | 'snub' | 'huff'
   | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff'
   | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl'
-  | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm';
+  | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm' | 'revere';
 
 export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger' | 'heart' | 'sparkle';
 
@@ -111,6 +116,14 @@ export interface CubeView {
   pinned: boolean;
   struggles: number;
   idleFor: number;
+}
+
+/** Anything a column can follow: where it is, which way it faces, where it has been. */
+export interface Lead {
+  x: number;
+  z: number;
+  dir: DirIndex;
+  trail: { x: number; z: number }[];
 }
 
 export interface World {
@@ -141,8 +154,10 @@ export interface Npc {
   /** The next greeting comes with a bow. */
   giftNext: boolean;
   /** Who this one follows, if it marches in a column, and its place in that column. */
-  lead: Npc | null;
+  lead: Lead | null;
   slot: number;
+  /** Recruited by the cube. Follows it from now on, whatever they were before. */
+  cult: boolean;
   /** The last few cells it stood on, newest first. Followers walk along this. */
   trail: { x: number; z: number }[];
   /** A reaction queued from outside ('fume', 'salute'), played when next free. */
@@ -186,7 +201,7 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, trail: [], order: null,
+    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, trail: [], order: null,
     variant, x, z, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -277,7 +292,7 @@ function pickDir(n: Npc, w: World): DirIndex | null {
 
 function wander(n: Npc, w: World): void {
   n.focus = null;
-  if (!n.persona.wanders) return setMode(n, 'march');
+  if (!n.persona.wanders || n.cult) return setMode(n, 'march');
   const d = pickDir(n, w);
   if (d === null) return setMode(n, 'idle', 0.6);
   n.speed = n.persona.speed;
@@ -330,6 +345,12 @@ function react(n: Npc, w: World): void {
   if (n.mode === 'toSit') w.sitter = null;
   n.wait = 0;
   n.focus = null;
+  if (n.cult) {
+    // The cube touched them. Best day of their life.
+    faceCube(n, w);
+    setMode(n, 'revere', 1.4);
+    return say(n, 'heart');
+  }
   if (n.mode === 'follow' || n.mode === 'lost') {
     n.followCooldown = 14;
     if (n.persona.caught === 'wave') {
@@ -660,10 +681,23 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     if (n.t > n.timer) wander(n, w);
   },
 
+  revere(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
   march(n, w) {
-    if (w.alarm > 0) return setMode(n, 'swarm');
+    if (w.alarm > 0 && !n.cult) return setMode(n, 'swarm');
     const lead = n.lead;
     if (!lead) return;
+    if (n.cult && w.cube.idleFor > 1.2 && !w.cube.pinned) {
+      // The cube has stopped: gather round it, two cells back, so it is never boxed in.
+      const [ox, oz] = RING[n.slot % RING.length];
+      const reach = 2 + Math.floor(n.slot / RING.length);
+      const spot = { x: w.cube.x + ox * reach, z: w.cube.z + oz * reach };
+      if (n.x === spot.x && n.z === spot.z) return void faceCube(n, w);
+      if (!w.grid.isFree(spot.x, spot.z, n.occ) && manhattan(n, spot) <= 1) return void faceCube(n, w);
+      return approach(n, w, spot);
+    }
     // My place is where he stood (slot + 1) steps ago. If he has not walked that far
     // yet, the column simply extends straight out behind him.
     let spot = lead.trail[n.slot];
@@ -745,6 +779,6 @@ export function relocate(n: Npc, w: World, x: number, z: number): boolean {
   n.x = x;
   n.z = z;
   n.trail = [];
-  setMode(n, n.persona.wanders ? 'idle' : 'march', 0.3);
+  setMode(n, n.persona.wanders && !n.cult ? 'idle' : 'march', 0.3);
   return true;
 }
