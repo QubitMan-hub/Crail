@@ -8,8 +8,8 @@ import { box, fuse, group, HIP } from '../../characters/rig';
 
 /**
  * The park. A real place with a gate, paths, a fountain and three rides big enough
- * for the cube and for anyone else who wanders in: a ferris wheel, a carousel and a
- * trampoline. Roll into a ride to get on. Everyone else queues up on their own.
+ * for the cube and for anyone else who wanders in: a ferris wheel, a carousel, a
+ * trampoline and a chair swing. Roll into a ride to get on. Everyone else queues up on their own.
  */
 
 const INK = '#1d1b19';
@@ -30,15 +30,23 @@ const WOOD = '#b98a62';
 const PASTELS = [PINK, BLUE, SUN, LAV];
 
 /** The lawn: top-left cell and size. The gate is on the west side, facing where the game starts. */
-export const PARK = { x: 9, z: -7, w: 15, d: 13, gate: { x: 9, z: 0 } };
-const WHEEL = { x: 19, z: -6, hub: 4.35, radius: 3.4, seats: 8, speed: 0.7 };
-const CAROUSEL = { x: 13, z: -4, radius: 1.75, seats: 8, speed: 0.95, seconds: 8 };
-const TRAMPOLINE = { x: 13, z: 3, top: 0.44, seconds: 5.5 };
+export const PARK = { x: 9, z: -13, w: 28, d: 26, gate: { x: 9, z: 0 } };
+/** The middle of the park: a plaza with a fountain. One ride sits in each quarter around it. */
+const PLAZA = { x: 22, z: 0 };
+const WHEEL = { x: 29, z: -9, hub: 4.35, radius: 3.4, seats: 8, speed: 0.7 };
+const CAROUSEL = { x: 16, z: -7, radius: 1.75, seats: 8, speed: 0.95, seconds: 8 };
+const TRAMPOLINE = { x: 15, z: 7, top: 0.44, seconds: 5.5 };
+/** Chair swing: seats hang from a spinning crown and fly outward. */
+const SWING = { x: 29, z: 7, crown: 4.45, anchor: 2.2, chain: 2.15, tilt: 0.33, seats: 8, speed: 1.25, seconds: 8 };
+const SWING_REACH = SWING.anchor + Math.sin(SWING.tilt) * SWING.chain;
+const SWING_SEAT_Y = SWING.crown - Math.cos(SWING.tilt) * SWING.chain + 0.05;
 const TRAMPOLINE_SPOTS = [[0, 0], [0.75, 0.7], [-0.75, 0.7], [0.75, -0.7], [-0.75, -0.7]];
 
-type RideKind = 'wheel' | 'carousel' | 'trampoline';
-const KINDS: RideKind[] = ['wheel', 'carousel', 'trampoline'];
-const CAPACITY: Record<RideKind, number> = { wheel: WHEEL.seats, carousel: CAROUSEL.seats, trampoline: TRAMPOLINE_SPOTS.length };
+type RideKind = 'wheel' | 'carousel' | 'trampoline' | 'swing';
+const KINDS: RideKind[] = ['wheel', 'carousel', 'trampoline', 'swing'];
+const CAPACITY: Record<RideKind, number> = {
+  wheel: WHEEL.seats, carousel: CAROUSEL.seats, trampoline: TRAMPOLINE_SPOTS.length, swing: SWING.seats,
+};
 const HOP = 0.45;
 
 interface Rider {
@@ -272,6 +280,46 @@ function buildCarousel(p: THREE.Object3D) {
   return { turn, mounts };
 }
 
+function buildSwing(p: THREE.Object3D) {
+  const base = group(p, SWING.x, 0, SWING.z);
+  const still = group(base);
+  box(still, RED, 2.4, 0.2, 2.4, 0, 0.1, 0);
+  box(still, CREAM, 1.7, 0.2, 1.7, 0, 0.3, 0);
+  for (let i = 0; i < 6; i++) box(still, i % 2 ? CREAM : BLUE, 0.6, 0.68, 0.6, 0, 0.74 + i * 0.68, 0); // striped tower
+  fuse(still);
+
+  // The crown turns, and everything hanging from it turns with it.
+  const spin = group(base);
+  const crown = group(spin);
+  box(crown, BLUE, 4.0, 0.2, 4.0, 0, SWING.crown + 0.1, 0);
+  box(crown, CREAM, 3.0, 0.26, 3.0, 0, SWING.crown + 0.33, 0);
+  box(crown, BLUE, 1.9, 0.26, 1.9, 0, SWING.crown + 0.59, 0);
+  box(crown, SUN, 0.4, 0.44, 0.4, 0, SWING.crown + 0.94, 0);
+  for (let i = 0; i < 8; i++) {
+    const at = -1.75 + i * 0.5;
+    const color = i % 2 ? CREAM : SUN;
+    for (const s of [1, -1]) {
+      box(crown, color, 0.4, 0.22, 0.08, at, SWING.crown - 0.08, s * 2.0);
+      box(crown, color, 0.08, 0.22, 0.4, s * 2.0, SWING.crown - 0.08, at);
+    }
+  }
+  fuse(crown);
+  for (let i = 0; i < SWING.seats; i++) {
+    const a = (i / SWING.seats) * Math.PI * 2;
+    const hanger = group(spin, Math.sin(a) * SWING.anchor, SWING.crown, Math.cos(a) * SWING.anchor);
+    hanger.rotation.y = a;
+    // Chains lean outward the way they do when the ride is at speed.
+    const lean = group(hanger);
+    lean.rotation.x = -SWING.tilt;
+    for (const s of [1, -1]) box(lean, STEEL, 0.035, SWING.chain, 0.035, s * 0.42, -SWING.chain / 2, 0);
+    const color = PASTELS[i % PASTELS.length];
+    box(lean, color, 1.0, 0.1, 0.78, 0, -SWING.chain, 0);
+    box(lean, color, 1.0, 0.46, 0.08, 0, -SWING.chain + 0.26, -0.36); // back rest, toward the tower
+    fuse(lean);
+  }
+  return { spin };
+}
+
 function buildTrampoline(p: THREE.Object3D) {
   const t = group(p, TRAMPOLINE.x, 0, TRAMPOLINE.z);
   const frame = group(t);
@@ -318,11 +366,18 @@ export const park: Feature = {
       root.add(m);
     };
     wash('#b4cf92', 0.55, PARK.x, PARK.z, PARK.w, PARK.d, 0.004);
-    // Paths: in from the gate, a plaza round the fountain, and a spur to each ride.
-    wash('#f6efe0', 0.8, 9, -1, 8, 3, 0.006);
-    wash('#f6efe0', 0.8, 16, -5, 3, 9, 0.006);
-    wash('#f6efe0', 0.8, 16, -5, 7, 1, 0.007);
-    wash('#f6efe0', 0.8, 11, 1, 5, 1, 0.007);
+    // Paths: a broad walk in from the gate, a cross walk, a plaza in the middle,
+    // and a spur out to each ride. [x, z, width, depth]
+    const paths: [number, number, number, number][] = [
+      [9, -1, 27, 3], // gate to the far side
+      [21, -11, 3, 22], // top to bottom
+      [19, -3, 7, 7], // the plaza
+      [19, -7, 2, 1], // to the carousel
+      [24, -8, 9, 1], // to the wheel
+      [17, 7, 4, 1], // to the trampoline
+      [24, 7, 3, 1], // to the swing
+    ];
+    paths.forEach(([x, z, w, d], i) => wash('#f6efe0', 0.8, x, z, w, d, 0.006 + i * 0.0004));
 
     const scenery = new THREE.Group();
     root.add(scenery);
@@ -332,22 +387,25 @@ export const park: Feature = {
       fn(scenery, x, z);
       solid.push([x, z]);
     };
-    put(fountain, 17, 0);
-    put(ticketBooth, 10, -2);
-    put(balloonCart, 10, 2);
-    put(bench, 19, 2);
-    put(bench, 21, 2);
-    for (const [x, z] of [[15, 1], [19, -2], [19, 1], [22, -1]] as const) {
+    put(fountain, PLAZA.x, PLAZA.z);
+    put(ticketBooth, 11, -2);
+    put(balloonCart, 11, 2);
+    // Benches round the plaza and one at the far end of the walk.
+    for (const [x, z] of [[19, -4], [25, -4], [19, 4], [25, 4], [34, -2]] as const) put(bench, x, z);
+    // Lamps at the plaza corners and along the main walk.
+    const lamps = [[20, -2], [24, -2], [24, 2], [20, 2], [15, -2], [15, 2], [30, -2], [30, 2]] as const;
+    for (const [x, z] of lamps) {
       lamp(scenery, x, z, bulbs);
       solid.push([x, z]);
     }
-    put((p, x, z) => roundTree(p, x, z, 1.1), 23, -3);
-    put((p, x, z) => pine(p, x, z, 1.15), 22, 4);
-    put(roundTree, 17, 5);
-    put(pine, 10, 5);
-    put((p, x, z) => pine(p, x, z, 0.9), 23, 1);
-    put((p, x, z) => roundTree(p, x, z, 0.85), 16, -7);
-    put(pine, 23, -7);
+    // Trees keep to the edges, so the middle stays open.
+    const trees: [number, number, 'round' | 'pine', number][] = [
+      [11, -12, 'pine', 1.1], [15, -12, 'round', 1], [23, -12, 'pine', 0.9], [35, -12, 'round', 1.15],
+      [35, -4, 'pine', 1], [35, 3, 'round', 0.95], [35, 11, 'pine', 1.2], [27, 12, 'round', 1],
+      [20, 12, 'pine', 0.95], [12, 11, 'round', 1.1], [10, 6, 'pine', 1], [10, -7, 'round', 0.9],
+      [24, -6, 'round', 0.8], [20, 6, 'pine', 0.8],
+    ];
+    for (const [x, z, kind, scale] of trees) put((p, tx, tz) => (kind === 'pine' ? pine : roundTree)(p, tx, tz, scale), x, z);
     // A picket fence along the front, either side of the gate.
     for (let z = PARK.z; z <= PARK.z + PARK.d - 1; z++) {
       if (Math.abs(z - PARK.gate.z) <= 1) continue;
@@ -355,15 +413,22 @@ export const park: Feature = {
     }
     solid.push([PARK.gate.x, PARK.gate.z - 1], [PARK.gate.x, PARK.gate.z + 1]);
     const signBoard = gate(scenery);
-    bunting(scenery, new THREE.Vector3(15, 2.1, 1), new THREE.Vector3(19, 2.1, 1));
-    bunting(scenery, new THREE.Vector3(19, 2.1, 1), new THREE.Vector3(19, 2.1, -2));
-    bunting(scenery, new THREE.Vector3(19, 2.1, -2), new THREE.Vector3(22, 2.1, -1));
+    // Bunting strung round the plaza.
+    for (let i = 0; i < 4; i++) {
+      const [ax, az] = lamps[i];
+      const [bx, bz] = lamps[(i + 1) % 4];
+      bunting(scenery, new THREE.Vector3(ax, 2.1, az), new THREE.Vector3(bx, 2.1, bz));
+    }
     // Flowers, scattered on the grass between cells so nobody treads on them.
-    for (let i = 0; i < 46; i++) {
+    const onPath = (x: number, z: number) => paths.some(([px, pz, w, d]) => x > px - 0.6 && x < px + w - 0.4 && z > pz - 0.6 && z < pz + d - 0.4);
+    const underRide = (x: number, z: number) =>
+      [[CAROUSEL, 2.7], [TRAMPOLINE, 1.7], [SWING, 2.7], [WHEEL, 2.7]].some(
+        ([r, half]) => Math.abs(x - (r as { x: number }).x) < (half as number) && Math.abs(z - (r as { z: number }).z) < (half as number),
+      );
+    for (let i = 0; i < 150; i++) {
       const fx = PARK.x + 1 + Math.floor(rand() * (PARK.w - 2)) + 0.5;
       const fz = PARK.z + Math.floor(rand() * (PARK.d - 1)) + 0.5;
-      const onPath = (fz > -1.6 && fz < 1.6 && fx < 17) || (fx > 15.4 && fx < 18.6 && fz > -5.6 && fz < 3.6);
-      if (onPath) continue;
+      if (onPath(fx, fz) || underRide(fx, fz)) continue;
       box(scenery, [PINK, SUN, LAV, CREAM, RED][i % 5], 0.13, 0.1, 0.13, fx, 0.05, fz).castShadow = false;
     }
     fuse(scenery);
@@ -373,13 +438,15 @@ export const park: Feature = {
     const { wheel, cars } = buildWheel(root);
     const { turn, mounts } = buildCarousel(root);
     const { mat, mark } = buildTrampoline(root);
+    const { spin } = buildSwing(root);
     addLandmark(ctx, 'Park', PARK.gate.x + 3, PARK.gate.z);
 
     // ---- Everything solid claims its cells ---------------------------------------
-    const cellsOf: Record<RideKind, [number, number][]> = { wheel: [], carousel: [], trampoline: [] };
+    const cellsOf: Record<RideKind, [number, number][]> = { wheel: [], carousel: [], trampoline: [], swing: [] };
     for (let dx = -2; dx <= 2; dx++) cellsOf.wheel.push([WHEEL.x + dx, WHEEL.z]);
     for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) cellsOf.carousel.push([CAROUSEL.x + dx, CAROUSEL.z + dz]);
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) cellsOf.trampoline.push([TRAMPOLINE.x + dx, TRAMPOLINE.z + dz]);
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) cellsOf.swing.push([SWING.x + dx, SWING.z + dz]);
     for (const kind of KINDS) {
       const who: Occupant = { kind: 'ride', id: kind };
       for (const [x, z] of cellsOf[kind]) ctx.grid.claim(x, z, who);
@@ -403,6 +470,7 @@ export const park: Feature = {
       wheel: boardingCells('wheel').filter(([, z]) => z > WHEEL.z), // from the front only
       carousel: boardingCells('carousel'),
       trampoline: boardingCells('trampoline'),
+      swing: boardingCells('swing'),
     };
     const nextTo = (kind: RideKind, x: number, z: number) => boarding[kind].some(([bx, bz]) => bx === x && bz === z);
 
@@ -415,6 +483,7 @@ export const park: Feature = {
     const lastRode = new Map<Member, number>();
     let wheelAngle = 0;
     let turnAngle = 0;
+    let swingAngle = 0;
     let clock = 0;
 
     const freeSeat = (kind: RideKind): number => {
@@ -481,6 +550,11 @@ export const park: Feature = {
         seatAt.set(CAROUSEL.x + Math.sin(a) * CAROUSEL.radius, mounts[r.seat].position.y + 0.26, CAROUSEL.z + Math.cos(a) * CAROUSEL.radius);
         return a + Math.PI / 2;
       }
+      if (r.kind === 'swing') {
+        const a = swingAngle + (r.seat / SWING.seats) * Math.PI * 2;
+        seatAt.set(SWING.x + Math.sin(a) * SWING_REACH, SWING_SEAT_Y, SWING.z + Math.cos(a) * SWING_REACH);
+        return a; // facing outward
+      }
       // Trampoline: everyone bounces to their own beat, a little higher each time.
       const [ox, oz] = TRAMPOLINE_SPOTS[r.seat];
       const beat = 0.92 + r.seat * 0.07;
@@ -492,7 +566,7 @@ export const park: Feature = {
     };
     const finished = (r: Rider): boolean => {
       if (r.kind === 'wheel') return wheelAngle - r.startAngle >= Math.PI * 2;
-      return r.t >= (r.kind === 'carousel' ? CAROUSEL.seconds : TRAMPOLINE.seconds);
+      return r.t >= { carousel: CAROUSEL.seconds, trampoline: TRAMPOLINE.seconds, swing: SWING.seconds }[r.kind];
     };
 
     let sinceInvite = 0;
@@ -501,6 +575,8 @@ export const park: Feature = {
       clock += dt;
       wheelAngle += dt * WHEEL.speed;
       turnAngle += dt * CAROUSEL.speed;
+      swingAngle += dt * SWING.speed;
+      spin.rotation.y = swingAngle;
       wheel.rotation.z = wheelAngle;
       for (const car of cars) car.rotation.z = -wheelAngle; // cars hang level
       turn.rotation.y = turnAngle;
@@ -528,7 +604,7 @@ export const park: Feature = {
               r.from.z + (seatAt.z - r.from.z) * on,
             );
             const bounce = r.kind === 'trampoline' ? Math.max(0, r.t - HOP) / 0.92 : 0;
-            cubeMesh.rotation.set(bounce >= 1 && on === 1 ? (bounce % 1) * Math.PI * 2 : 0, r.kind === 'carousel' ? yaw * on : 0, 0);
+            cubeMesh.rotation.set(bounce >= 1 && on === 1 ? (bounce % 1) * Math.PI * 2 : 0, r.kind === 'carousel' || r.kind === 'swing' ? yaw * on : 0, 0);
           }
         } else {
           const n = r.who.n;
@@ -591,7 +667,7 @@ export const park: Feature = {
           const idle = crowd.filter(
             (m) =>
               !m.world.staged && !m.n.cult && m.n.persona.wanders && ['idle', 'walk'].includes(m.n.mode) &&
-              Math.abs(m.n.x - 16) + Math.abs(m.n.z + 1) < 26 && clock - (lastRode.get(m) ?? -99) > 20,
+              Math.abs(m.n.x - PLAZA.x) + Math.abs(m.n.z - PLAZA.z) < 38 && clock - (lastRode.get(m) ?? -99) > 20,
           );
           const m = idle[Math.floor(rand() * idle.length)];
           const kind = KINDS[Math.floor(rand() * KINDS.length)];

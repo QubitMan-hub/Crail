@@ -2,7 +2,7 @@
 //   0-3      HOOK    where Day 2 left off: she kept the bow
 //   3-6.5    COMBO   red card: three comments, one weekend
 //   6.5-14.5 ONE     top comment: the leader, his soldiers, and the rocket
-//   14.5-24.5 TWO    pick: the park. Everyone rides. Rides earn charms.
+//   14.5-24.5 TWO    pick: the park. Four rides, everyone rides, rides earn charms.
 //   24.5-34  THREE   pick: the cult. Charms recruit. They follow, then they worship.
 //   34-38.3  OUT     she still has the bow
 //
@@ -46,17 +46,19 @@ const actions = [
   [10.7, 'leader.site'], [T.rocket, 'cut'], [11.3, 'leader.launch'],
   // Two: the park, already busy.
   ...clearAll(T.two),
-  [T.two, 'goths.spawn', 0, 12, -1, 3, { idle: 99 }], [T.two, 'goths.spawn', 2, 14, -1, 3, { idle: 99 }],
-  [T.two, 'goths.spawn', 1, 18, -5, 3, { idle: 99 }],
-  [T.two, 'femboys.spawn', 0, 16, -3, 2, { idle: 99 }], [T.two, 'femboys.spawn', 1, 16, -5, 2, { idle: 99 }],
-  [T.two, 'femboys.spawn', 2, 12, 1, 1, { idle: 99 }], [T.two, 'femboys.spawn', 3, 14, 1, 1, { idle: 99 }],
-  [T.two, 'leader.spawn', 0, 13, -1, 3, { idle: 99 }],
+  [T.two, 'goths.spawn', 0, 15, -4, 3, { idle: 99 }], [T.two, 'goths.spawn', 2, 17, -4, 3, { idle: 99 }],
+  [T.two, 'goths.spawn', 1, 28, -8, 3, { idle: 99 }], [T.two, 'goths.spawn', 3, 28, 4, 1, { idle: 99 }],
+  [T.two, 'femboys.spawn', 0, 19, -6, 2, { idle: 99 }], [T.two, 'femboys.spawn', 1, 19, -8, 2, { idle: 99 }],
+  [T.two, 'femboys.spawn', 2, 14, 5, 1, { idle: 99 }], [T.two, 'femboys.spawn', 3, 16, 5, 1, { idle: 99 }],
+  [T.two, 'femboys.spawn', 0, 30, 4, 1, { idle: 99 }],
+  [T.two, 'leader.spawn', 0, 29, 4, 1, { idle: 99 }],
   [T.two, 'park.board', 'goths', 0, 'carousel'], [T.two, 'park.board', 'goths', 1, 'carousel'],
-  [T.two, 'park.board', 'goths', 2, 'wheel'],
+  [T.two, 'park.board', 'goths', 2, 'wheel'], [T.two, 'park.board', 'goths', 3, 'swing'],
   [T.two, 'park.board', 'femboys', 0, 'carousel'], [T.two, 'park.board', 'femboys', 1, 'carousel'],
   [T.two, 'park.board', 'femboys', 2, 'trampoline'], [T.two, 'park.board', 'femboys', 3, 'trampoline'],
-  [T.two, 'park.board', 'leader', 0, 'carousel'],
-  [T.two, 'cube.teleport', 20, -5], [T.two, 'cut'], [15.0, 'park.ride', 'wheel'],
+  [T.two, 'park.board', 'femboys', 4, 'swing'],
+  [T.two, 'park.board', 'leader', 0, 'swing'],
+  [T.two, 'cube.teleport', 30, -8], [T.two, 'cut'], [15.0, 'park.ride', 'wheel'],
   [T.carousel, 'cut'], [T.wheel, 'cut'],
   // Three: three people about to have a change of career.
   ...clearAll(T.three),
@@ -70,7 +72,7 @@ const actions = [
 const zoom = [
   [0, 1.35], [T.combo, 1.55],
   [T.one, 1.25], [T.rocket - 0.01, 1.45], [T.rocket, 1.0], [T.two - 0.01, 0.95],
-  [T.two, 0.44], [T.carousel - 0.01, 0.5], [T.carousel, 1.05], [T.wheel - 0.01, 1.15],
+  [T.two, 0.29], [T.carousel - 0.01, 0.34], [T.carousel, 0.8], [T.wheel - 0.01, 0.9],
   [T.wheel, 0.82], [T.three - 0.01, 0.9],
   [T.three, 1.45], [T.walk - 0.01, 1.35], [T.walk, 0.9], [31.5, 0.9], [T.out - 0.01, 1.12],
   [T.out, 2.1], [seconds, 2.3],
@@ -80,9 +82,9 @@ function camera(t) {
   if (t < T.one) cam.focus = [0.7, -0.8];
   else if (t < T.rocket) cam.follow = ['leader', 0];
   else if (t < T.two) cam.at = 'rocket';
-  else if (t < T.carousel) cam.focus = [16, -1.5];
-  else if (t < T.wheel) cam.focus = [13.6, -3.4];
-  else if (t < T.three) cam.focus = [19.5, -6.5];
+  else if (t < T.carousel) cam.focus = [22, -0.5];
+  else if (t < T.wheel) cam.focus = [29.4, 6];
+  else if (t < T.three) cam.focus = [29.5, -9.5];
   else if (t < T.walk) cam.focus = [C.x, C.z];
   else if (t < T.out) cam.focus = [keyframes([[T.walk, C.x + 0.3], [30, C.x + 0.3], [31.4, C.x + 2.8], [T.out, C.x + 3.0]], t), C.z];
   else cam.follow = ['goths', 0];
