@@ -436,6 +436,8 @@ function acknowledge(n: Npc): boolean {
 }
 
 const RING = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -1]];
+/** Where worshippers stand, as (forward, sideways) from the cube: behind it, then the four diagonals. */
+const GATHER = [[-1, 0], [-1, 1], [-1, -1], [1, 1], [1, -1]];
 
 /** One step toward a cell: the direct way if it is free, otherwise round whatever is in the way. */
 function approach(n: Npc, w: World, to: { x: number; z: number }): void {
@@ -718,10 +720,16 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     const lead = n.lead;
     if (!lead) return;
     if (n.cult && w.cube.idleFor > 1.2 && !w.cube.pinned) {
-      // The cube has stopped: gather round it, two cells back, so it is never boxed in.
-      const [ox, oz] = RING[n.slot % RING.length];
-      const reach = 2 + Math.floor(n.slot / RING.length);
-      const spot = { x: w.cube.x + ox * reach, z: w.cube.z + oz * reach };
+      // The cube has stopped: gather round it, two cells back. They stand behind it and
+      // on the diagonals, never straight ahead or to the side, so it can always roll off.
+      const [back, across] = GATHER[n.slot % GATHER.length];
+      const reach = 2 + Math.floor(n.slot / GATHER.length);
+      const f = DIRS[lead.dir];
+      const r = DIRS[(lead.dir + 1) % 4];
+      const spot = {
+        x: w.cube.x + (f[0] * back + r[0] * across) * reach,
+        z: w.cube.z + (f[1] * back + r[1] * across) * reach,
+      };
       if (n.x === spot.x && n.z === spot.z) return void faceCube(n, w);
       if (!w.grid.isFree(spot.x, spot.z, n.occ) && manhattan(n, spot) <= 1) return void faceCube(n, w);
       return approach(n, w, spot);

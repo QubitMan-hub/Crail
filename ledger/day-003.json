@@ -1,0 +1,18 @@
+{
+  "day": 3,
+  "method": "top-comment plus creator's picks",
+  "reel": "Day 2 Reel on @qubitman_ftw",
+  "source": "Screenshots of the comments taken by the creator a few hours after posting. The automated snapshot was not run for this round because the Instagram API token is not set up yet.",
+  "final": false,
+  "note": "Recorded before the 24-hour deadline. The leader had 53 likes at the time of the screenshot.",
+  "winner": {
+    "username": "gyarados117",
+    "text": "Kim Jong-un builds a military",
+    "likes": 53
+  },
+  "creator_picks": [
+    { "username": "dg._.2004", "text": "add a small park with rides", "likes": 6 },
+    { "username": "megamouse173", "text": "Make a cult plz", "likes": 4 }
+  ],
+  "decision_note": "All three were built. The winner is a blocky parody leader who builds soldiers and a rocket. The two picks were joined into one loop: riding the park's rides earns charms, and a charm recruits any character into the Cult of the Cube."
+}

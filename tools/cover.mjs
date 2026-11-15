@@ -29,7 +29,7 @@ try {
   await page.waitForFunction(() => window.__crail?.game);
   await page.addStyleTag({
     content: `
-    .hud, #sound { display: none !important; }
+    .hud, #sound, .landmark { display: none !important; }
     #cover { position: fixed; inset: 0; color: #1d1b19; text-align: center;
              font-family: 'Inter Display', 'Inter', system-ui, sans-serif; }
     #cover .day { position: absolute; left: 0; right: 0; top: 13.5%; }
@@ -54,7 +54,7 @@ try {
     { day: Number(values.day), l1: esc(values.line1), l2: esc(values.line2), zoom: Number(values.zoom), stage: JSON.parse(values.stage), seconds: Number(values.seconds) },
   );
   const out = `captures/day-${String(values.day).padStart(3, '0')}-cover.png`;
-  await page.screenshot({ path: out });
+  await page.screenshot({ path: out, timeout: 240_000 });
   console.log(`Saved ${out}`);
 } finally {
   await browser.close();

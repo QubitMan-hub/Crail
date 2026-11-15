@@ -22,7 +22,7 @@ const FLAME = '#ffb23e';
 export const SHRINE = { x: -8, z: -1 };
 const MAX_CHARMS = 5;
 const SHRINE_REFILL = 25;
-const FOLLOW_SPEED = 2.4;
+const FOLLOW_SPEED = 3.1;
 
 const ROBE = '#3b3b42';
 const ROBE_LIGHT = '#4b4b54';
@@ -128,7 +128,7 @@ export const cubeCult: Feature = {
         n.wait = 0;
         n.mode = 'revere';
         n.t = 0;
-        n.timer = 1.5;
+        n.timer = 1.1;
         n.emote = { kind: 'heart', t: 0 };
         robe(m);
         members.push(n);
@@ -149,6 +149,7 @@ export const cubeCult: Feature = {
       }
     };
     ctx.events.on('park:rode', () => gain());
+    ctx.events.on<[DirIndex]>('direct:cult.face', ([d]) => (lead.dir = d));
     ctx.events.on<[number]>('direct:cult.charms', ([n]) => {
       state.charms = n;
       refresh(false);
@@ -220,6 +221,13 @@ export const cubeCult: Feature = {
           members.splice(i, 1);
           refresh(false);
         }
+      }
+      // If the cube was put somewhere without rolling there (a ride, a scripted scene),
+      // its old trail no longer leads to it. Start a fresh one.
+      if (!cube.moving && (lead.x !== cube.x || lead.z !== cube.z)) {
+        lead.x = cube.x;
+        lead.z = cube.z;
+        lead.trail = [];
       }
       members.forEach((n, i) => {
         n.slot = i;
