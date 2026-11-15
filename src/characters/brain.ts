@@ -96,7 +96,8 @@ export type Mode =
   | 'snub' | 'huff'
   | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff'
   | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl'
-  | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm' | 'revere';
+  | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm' | 'revere'
+  | 'visit' | 'riding';
 
 export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger' | 'heart' | 'sparkle';
 
@@ -158,6 +159,10 @@ export interface Npc {
   slot: number;
   /** Recruited by the cube. Follows it from now on, whatever they were before. */
   cult: boolean;
+  /** Somewhere they have decided to walk to (a ride, say). */
+  goal: { x: number; z: number } | null;
+  /** Set while a ride is carrying them: where they are drawn, and how they sit. */
+  carry: { x: number; y: number; z: number; yaw: number; pose: 'sit' | 'bounce' } | null;
   /** The last few cells it stood on, newest first. Followers walk along this. */
   trail: { x: number; z: number }[];
   /** A reaction queued from outside ('fume', 'salute'), played when next free. */
@@ -201,7 +206,7 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, trail: [], order: null,
+    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, goal: null, carry: null, trail: [], order: null,
     variant, x, z, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -341,7 +346,7 @@ const faceCube = (n: Npc, w: World) => void (n.dir = dirToward(n, w.cube) ?? n.d
 
 /** The cube just bumped into her. Each bump within a few seconds escalates. */
 function react(n: Npc, w: World): void {
-  if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff'].includes(n.mode)) return;
+  if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding'].includes(n.mode)) return;
   if (n.mode === 'toSit') w.sitter = null;
   n.wait = 0;
   n.focus = null;
@@ -456,6 +461,7 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     if (maybeSit(n, w) || maybeFollow(n, w)) return;
     if (n.persona.builds && w.wantBuild) {
       w.wantBuild = false;
+      n.resume = 0;
       return setMode(n, 'build', 2.2);
     }
     if (n.persona.twirls && !w.staged && w.rand() < 0.2) return setMode(n, 'twirl', 0.9);
@@ -467,6 +473,7 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     if (maybeSit(n, w) || maybeFollow(n, w)) return;
     if (n.persona.builds && w.wantBuild) {
       w.wantBuild = false;
+      n.resume = n.steps; // carry on walking afterwards
       return setMode(n, 'build', 2.2);
     }
     const r = step(n, w, n.dir);
@@ -661,7 +668,10 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   build(n, w) {
     if (n.t < n.timer) return;
     w.emit('built', n);
-    wander(n, w);
+    if (n.resume <= 0) return wander(n, w);
+    setMode(n, 'walk');
+    n.steps = n.resume;
+    n.resume = 0;
   },
 
   inspect(n, w) {
@@ -684,6 +694,24 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   revere(n, w) {
     if (n.t > n.timer) wander(n, w);
   },
+
+  /** Walking somewhere on purpose. Gives up if it takes too long or the spot is taken. */
+  visit(n, w) {
+    const goal = n.goal;
+    if (!goal || n.t > 30) {
+      n.goal = null;
+      return wander(n, w);
+    }
+    const there = manhattan(n, goal);
+    if (there === 0 || (there === 1 && !w.grid.isFree(goal.x, goal.z, n.occ))) {
+      n.goal = null;
+      return setMode(n, 'idle', 3);
+    }
+    approach(n, w, goal);
+  },
+
+  /** On a ride. The ride decides when it is over. */
+  riding() {},
 
   march(n, w) {
     if (w.alarm > 0 && !n.cult) return setMode(n, 'swarm');

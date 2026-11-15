@@ -255,13 +255,13 @@ test('rolling into a ride takes the cube for a ride and earns a charm', async ({
   await open(page, '?seed=3');
   await clearStage(page);
   // Next to the trampoline, then roll into it.
-  await direct(page, 'cube.teleport', 12, 2);
+  await direct(page, 'cube.teleport', 13, 5);
   await holdUntil(page, 'KeyW', 's.park.riding !== null');
   expect(await page.evaluate(() => (window as any).__crail.state.park.riding)).toBe('trampoline');
   expect((await cubeState(page)).carried).toBe(true);
   await page.waitForFunction(() => (window as any).__crail.state.park.rides === 1);
   // Back where it started, free to move, one charm richer.
-  expect(await cubeState(page)).toMatchObject({ x: 12, z: 2, carried: false, pinned: false });
+  expect(await cubeState(page)).toMatchObject({ x: 13, z: 5, carried: false, pinned: false });
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
   await expect(page.locator('#cult')).toContainText('1');
 });
@@ -290,4 +290,30 @@ test('with a charm, bumping someone recruits them and they follow the cube', asy
     const n = s.goths.npcs[0];
     return Math.abs(n.x - s.cube.x) + Math.abs(n.z - s.cube.z) <= 3;
   });
+});
+
+test('other characters get on the rides too, and get off again', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, 13, -1, 3, { idle: 999 });
+  await direct(page, 'femboys.spawn', 0, 13, 1, 1, { idle: 999 });
+  await direct(page, 'park.board', 'goths', 0, 'carousel');
+  await direct(page, 'park.board', 'femboys', 0, 'trampoline');
+  expect(await page.evaluate(() => (window as any).__crail.state.park.riders)).toBe(2);
+  const riding = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return [s.goths.npcs[0], s.femboys.npcs[0]].map((n: any) => ({ mode: n.mode, carried: n.carry !== null }));
+  });
+  expect(riding).toEqual([{ mode: 'riding', carried: true }, { mode: 'riding', carried: true }]);
+  // Their cells stay theirs while they are up there: the cube cannot take the goth's spot.
+  await direct(page, 'cube.teleport', 13, 0);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
+  expect(await cubeState(page)).toMatchObject({ x: 13, z: 0 });
+  await page.waitForFunction(() => (window as any).__crail.state.park.npcRides === 2);
+  const after = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return [s.goths.npcs[0], s.femboys.npcs[0]].map((n: any) => ({ x: n.x, z: n.z, carried: n.carry !== null }));
+  });
+  expect(after).toEqual([{ x: 13, z: -1, carried: false }, { x: 13, z: 1, carried: false }]);
 });

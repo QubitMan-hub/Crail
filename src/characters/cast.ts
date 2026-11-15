@@ -16,6 +16,13 @@ export interface Member {
   n: Npc;
   rig: Rig;
   motion: Motion;
+  /** The world this character belongs to (for its `staged` flag and random numbers). */
+  world: World;
+}
+
+/** Every character in the game, of every kind. Features that care about "anyone" use this. */
+export function everyone(ctx: GameContext): Member[] {
+  return (ctx.state.everyone ??= []);
 }
 
 export interface CastOptions<V> {
@@ -72,8 +79,9 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     if (!n) return null;
     const rig = opts.build(opts.variants[n.variant], makeSymbolSprite());
     ctx.scene.add(rig.root);
-    const m = { n, rig, motion: newMotion(n) };
+    const m: Member = { n, rig, motion: newMotion(n), world };
     members.push(m);
+    everyone(ctx).push(m);
     npcs.push(n);
     return m;
   };
@@ -82,6 +90,8 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     for (const m of members) {
       ctx.grid.releaseAll(m.n.occ);
       ctx.scene.remove(m.rig.root);
+      const all = everyone(ctx);
+      all.splice(all.indexOf(m), 1);
     }
     members.length = 0;
     npcs.length = 0;

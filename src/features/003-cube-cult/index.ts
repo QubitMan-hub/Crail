@@ -4,11 +4,11 @@ import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
 import type { DirIndex, Lead, Npc } from '../../characters/brain';
 import type { Member } from '../../characters/cast';
-import { box, group, mat } from '../../characters/rig';
+import { box, fuse, group, HIP, mat } from '../../characters/rig';
 
 /**
  * The Cult of the Cube. Earn a charm (ride a ride, or visit the shrine), then bump
- * into anyone: they put on a red hood and follow the cube from then on. Stop moving
+ * into anyone: they put on the robe and follow the cube from then on. Stop moving
  * and they gather in a circle and worship. This is the first thing in the game that
  * is a game: there is something to collect, and something to do with it.
  */
@@ -24,19 +24,68 @@ const MAX_CHARMS = 5;
 const SHRINE_REFILL = 25;
 const FOLLOW_SPEED = 2.4;
 
-/** A red hood with the cube's dot on the brow. Fits over whatever they were wearing. */
-function buildHood(headTop: number): THREE.Group {
-  const hood = new THREE.Group();
-  const lift = Math.max(0, headTop - 0.6);
-  box(hood, RED, 0.64, 0.24 + lift, 0.62, 0, 0.5 + lift / 2, -0.02);
-  box(hood, RED, 0.64, 0.5, 0.1, 0, 0.3, -0.3);
-  for (const s of [1, -1]) box(hood, RED, 0.08, 0.44, 0.5, s * 0.3, 0.34, -0.08);
-  box(hood, RED, 0.3, 0.3, 0.3, 0, 0.72 + lift, -0.16).rotation.x = -0.5; // the point
-  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.055, 20), mat(INK));
-  dot.position.set(0, 0.52 + lift / 2, 0.292);
-  hood.add(dot);
-  hood.name = 'hood';
-  return hood;
+const ROBE = '#3b3b42';
+const ROBE_LIGHT = '#4b4b54';
+const VOID = '#0c0c0f';
+const ROPE = '#8d7c5d';
+
+/**
+ * The uniform: a floor-length charcoal robe, a caped collar, wide sleeves and a deep
+ * hood with nothing visible inside it. Whoever they were, they look like this now.
+ * The only colour is a small red cube on a cord, and any bow they refuse to give up.
+ */
+function robe(m: Member): void {
+  const { rig, n } = m;
+  const wide = n.persona.kind === 'leader' ? 1.22 : 1;
+  const bow = rig.head.getObjectByName('bow');
+  for (const part of [rig.torso, rig.head, rig.armL, rig.armR, rig.legL, rig.legR]) {
+    for (const child of part.children) child.visible = false;
+  }
+  rig.stride = 0; // nothing under there to see moving
+
+  // Above the waist the robe bends with them; the skirt hangs straight from the hips.
+  const top = group(rig.torso);
+  box(top, ROBE, 0.58 * wide, 0.62, 0.4, 0, 0.3, 0);
+  // Caped collar: two tiers over the shoulders, the lower one a shade lighter.
+  box(top, ROBE_LIGHT, 0.94 * wide, 0.08, 0.66, 0, 0.41, 0);
+  box(top, ROBE, 0.84 * wide, 0.2, 0.56, 0, 0.55, 0);
+  // The cube, on a cord.
+  box(top, ROPE, 0.03, 0.2, 0.02, 0, 0.36, 0.29);
+  box(top, RED, 0.1, 0.1, 0.1, 0, 0.25, 0.3);
+  fuse(top);
+  const skirt = group(rig.body, 0, HIP, 0);
+  box(skirt, ROBE, 0.6 * wide, 0.3, 0.42, 0, -0.08, 0);
+  box(skirt, ROBE, 0.66 * wide, 0.42, 0.48, 0, -0.4, 0); // flares toward the floor
+  box(skirt, ROBE_LIGHT, 0.7 * wide, 0.1, 0.52, 0, -0.71, 0);
+  box(skirt, ROPE, 0.62 * wide, 0.05, 0.44, 0, 0.05, 0);
+  box(skirt, ROPE, 0.05, 0.3, 0.05, 0.14 * wide, -0.1, 0.23);
+  fuse(skirt);
+
+  for (const arm of [rig.armL, rig.armR]) {
+    const sleeve = group(arm);
+    box(sleeve, ROBE, 0.2, 0.5, 0.24, 0, -0.2, 0);
+    box(sleeve, ROBE, 0.27, 0.16, 0.32, 0, -0.5, 0); // bell cuff
+    box(sleeve, VOID, 0.2, 0.02, 0.25, 0, -0.585, 0);
+    fuse(sleeve);
+  }
+
+  const hood = group(rig.head);
+  box(hood, VOID, 0.5, 0.52, 0.5, 0, 0.3, 0); // where a face would be
+  box(hood, ROBE, 0.72, 0.16, 0.76, 0, 0.63, 0.02);
+  box(hood, ROBE, 0.72, 0.7, 0.12, 0, 0.32, -0.32);
+  for (const side of [1, -1]) box(hood, ROBE, 0.11, 0.7, 0.66, side * 0.305, 0.32, 0.03);
+  box(hood, ROBE_LIGHT, 0.72, 0.09, 0.1, 0, 0.57, 0.37); // the brim droops forward
+  box(hood, ROBE, 0.7, 0.14, 0.62, 0, 0.0, 0.0);
+  // The point: three shrinking blocks, leaning back.
+  box(hood, ROBE, 0.5, 0.2, 0.5, 0, 0.78, -0.08);
+  box(hood, ROBE, 0.32, 0.2, 0.32, 0, 0.94, -0.2);
+  box(hood, ROBE, 0.17, 0.18, 0.17, 0, 1.08, -0.34);
+  fuse(hood);
+  if (bow) {
+    // The bow stays. It goes on top of the hood.
+    bow.visible = true;
+    bow.position.set(0.16, 0.76, 0.2);
+  }
 }
 
 export const cubeCult: Feature = {
@@ -70,7 +119,7 @@ export const cubeCult: Feature = {
       tryRecruit(m: Member): boolean {
         const n = m.n;
         if (state.charms <= 0 || n.cult) return false;
-        if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff'].includes(n.mode)) return false;
+        if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding'].includes(n.mode)) return false;
         state.charms -= 1;
         n.cult = true;
         n.lead = lead;
@@ -81,7 +130,7 @@ export const cubeCult: Feature = {
         n.t = 0;
         n.timer = 1.5;
         n.emote = { kind: 'heart', t: 0 };
-        m.rig.head.add(buildHood(m.rig.headTop));
+        robe(m);
         members.push(n);
         ctx.bump(0.1);
         ctx.events.emit('cult:joined', { id: n.id });

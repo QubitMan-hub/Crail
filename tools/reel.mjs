@@ -50,7 +50,7 @@ await rm(dir, { recursive: true, force: true });
 await mkdir(dir, { recursive: true });
 
 const OVERLAY_CSS = `
-  .hud, #sound { display: none !important; }
+  .hud, #sound, .landmark { display: none !important; }
   /* Shot lists draw into this layer. Keep clear of Instagram's own buttons:
      nothing important in the top 11% or the bottom 22%. */
   #reel { position: fixed; inset: 0; overflow: hidden; pointer-events: none; color: #1d1b19;
@@ -81,7 +81,7 @@ try {
     const { game } = window.__crail;
     game.ctx.events.on('cube:rolled', () => window.__landings++);
     window.__heard = [];
-    for (const e of ['cube:bonk', 'cube:struggle', 'goth:plop', 'goth:rejected']) {
+    for (const e of ['cube:bonk', 'cube:struggle', 'goth:plop', 'goth:rejected', 'leader:dud', 'cult:joined', 'park:rode']) {
       game.ctx.events.on(e, () => window.__heard.push(e));
     }
     window.__cube = game.ctx.scene.getObjectByName('cube');
@@ -121,6 +121,10 @@ try {
             const z = n.z + ((n.nz ?? n.z) - n.z) * k;
             ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(x, 0, z);
           }
+        } else if (cam.at) {
+          // at: the name of something in the game state with an x and z, e.g. 'rocket'.
+          const o = ctx.state[cam.at];
+          ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(o.x, 0, o.z);
         } else if (cam.focus) ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(cam.focus[0], 0, cam.focus[1]);
         else ctx.focusOverride = null;
         if (cubeY !== undefined && !ctx.state.cube.moving) window.__cube.position.y = cubeY;
@@ -208,7 +212,10 @@ landings.forEach((t, i) => {
   const f0 = 105 + ((i * 37) % 25);
   blip(t, { f0, f1: f0 * 0.45, slide: 0.09, decay: 38, len: 0.13, gain: 0.5 });
 });
-const HEARD = { 'cube:bonk': ['bonk', 0.1], 'cube:struggle': ['bonk', 0.08], 'goth:plop': ['thump', 0] };
+const HEARD = {
+  'cube:bonk': ['bonk', 0.1], 'cube:struggle': ['bonk', 0.08], 'goth:plop': ['thump', 0],
+  'leader:dud': ['thump', 0], 'cult:joined': ['pop', 0], 'park:rode': ['pop', 0],
+};
 for (const [t, e] of heard) if (HEARD[e]) blip(t + HEARD[e][1], SOUNDS[HEARD[e][0]]);
 /**
  * "Tiptoe": a small, sneaky plucked tune in A minor, made from sine plucks.

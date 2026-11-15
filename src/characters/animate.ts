@@ -40,6 +40,20 @@ const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 
 function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: number): Pose {
   const p: Pose = { ...REST, lids: n.persona.restLids };
+  if (n.carry) {
+    // On a ride: arms in the air, whatever their usual temperament.
+    const wave = Math.sin(time * 9 + n.id.length);
+    p.armLx = p.armRx = -2.7 + wave * 0.25;
+    p.armLz = -0.35;
+    p.armRz = 0.35;
+    p.lids = 0.05;
+    p.brow = -0.3;
+    p.mouthW = 1.2;
+    p.mouthH = 2;
+    if (n.carry.pose === 'sit') p.legL = p.legR = SEATED_LEGS;
+    else p.legL = p.legR = -0.35 + wave * 0.2;
+    return p;
+  }
   const happy = n.persona.restLids < 0.1;
   if (happy) {
     p.brow = -0.3;
@@ -333,9 +347,15 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
     py = FLOOR_SEAT_Y * (1 - smooth(n.t / 0.4));
   }
 
+  if (n.carry) {
+    px = n.carry.x;
+    py = n.carry.y;
+    pz = n.carry.z;
+  }
+
   // Turning takes a moment; hair lags behind.
   const before = m.yaw;
-  m.yaw += wrap(dirYaw(n.dir) - m.yaw) * (1 - Math.exp(-11 * dt));
+  m.yaw += wrap((n.carry ? n.carry.yaw : dirYaw(n.dir)) - m.yaw) * (1 - Math.exp(-11 * dt));
   m.yawVel += ((dt > 0 ? wrap(m.yaw - before) / dt : 0) - m.yawVel) * (1 - Math.exp(-8 * dt));
   if (n.nx !== null) m.phase += n.speed * dt * Math.PI * 1.5;
   else m.phase = 0;

@@ -106,6 +106,12 @@ export function buildBow(color: string, knot: string): THREE.Group {
 
 const baked = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72 });
 
+/** Fuse everything still under `parent` into a single mesh (for scenery and costumes). */
+export function fuse<T extends THREE.Object3D>(parent: T): T {
+  mergeUnder(parent, new Set());
+  return parent;
+}
+
 /** Merge every still mesh under `parent` into one, keeping colours. Stops at anything in `live`. */
 function mergeUnder(parent: THREE.Object3D, live: Set<THREE.Object3D>): void {
   const parts: THREE.BufferGeometry[] = [];
