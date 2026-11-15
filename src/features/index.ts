@@ -3,9 +3,10 @@ import { world } from './000-world';
 import { cube } from './000-cube';
 import { gothBaddies } from './001-goth-baddies';
 import { femboys } from './002-femboys';
+import { supremeLeader } from './003-supreme-leader';
 
 /**
  * Every feature in the game, oldest first.
  * Adding a community feature = one new folder + one new line here.
  */
-export const allFeatures: Feature[] = [world, cube, gothBaddies, femboys];
+export const allFeatures: Feature[] = [world, cube, gothBaddies, femboys, supremeLeader];

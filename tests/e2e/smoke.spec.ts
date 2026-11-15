@@ -68,8 +68,8 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys']);
-  await page.goto('/?off=002-femboys');
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader']);
+  await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
   await page.goto('/?day=1');
@@ -92,7 +92,7 @@ const holdUntil = async (page: import('@playwright/test').Page, key: string, con
   await page.keyboard.up(key);
 };
 const clearStage = async (page: import('@playwright/test').Page) => {
-  for (const cast of ['goths', 'femboys']) {
+  for (const cast of ['goths', 'femboys', 'soldiers', 'leader']) {
     await direct(page, `${cast}.staged`, true);
     await direct(page, `${cast}.clear`);
   }
@@ -103,9 +103,11 @@ const goth = (page: import('@playwright/test').Page, i = 0) =>
     return { x: n.x, z: n.z, mode: n.mode, emote: n.emote?.kind ?? null };
   }, i);
 
-test('boots with every feature on: day 2, five goths, four femboys, credits name the winners', async ({ page }) => {
+test('boots with every feature on: day 3, goths, femboys, a leader, credits name the winners', async ({ page }) => {
   await open(page);
-  await expect(page.locator('#day')).toHaveText('Day 2');
+  await expect(page.locator('#day')).toHaveText('Day 3');
+  expect(await page.evaluate(() => (window as any).__crail.state.leader.npcs.length)).toBe(1);
+  await expect(page.locator('#credits')).toContainText('@gyarados117');
   expect(await page.evaluate(() => (window as any).__crail.state.femboys.npcs.length)).toBe(4);
   expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs.length)).toBe(5);
   await page.locator('#day').click();
@@ -165,7 +167,7 @@ test('goths wander for a while without errors or overlaps', async ({ page }) => 
   await page.waitForTimeout(2500);
   const cells = await page.evaluate(() => {
     const s = (window as any).__crail.state;
-    return [`${s.cube.x},${s.cube.z}`, ...[...s.goths.npcs, ...s.femboys.npcs].map((n: any) => `${n.x},${n.z}`)];
+    return [`${s.cube.x},${s.cube.z}`, ...[...s.goths.npcs, ...s.femboys.npcs, ...s.leader.npcs, ...s.soldiers.npcs].map((n: any) => `${n.x},${n.z}`)];
   });
   expect(new Set(cells).size).toBe(cells.length);
 });
@@ -200,4 +202,46 @@ test('a femboy waves at a goth and leaves her with a bow', async ({ page }) => {
   await page.waitForFunction(() => (window as any).__crail.state.femboys.npcs[0].mode === 'wave');
   await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].mode === 'stare');
   expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs[0].focus)).toEqual({ x: 0, z: 0 });
+});
+
+// ---- Day 3: the leader builds a military ------------------------------------
+
+test('the leader builds soldiers, and an alarm sends them to box the cube in', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 3, 0, 2, { idle: 0.2 });
+  await direct(page, 'leader.build');
+  await page.waitForFunction(() => (window as any).__crail.state.soldiers.npcs.length === 1);
+  await direct(page, 'leader.build');
+  await page.waitForFunction(() => (window as any).__crail.state.soldiers.npcs.length === 2);
+  // Sound the alarm with the cube well away from the column.
+  const at = await page.evaluate(() => {
+    const n = (window as any).__crail.state.leader.npcs[0];
+    return { x: n.x, z: n.z };
+  });
+  await direct(page, 'cube.teleport', at.x + 4, at.z + 3);
+  await direct(page, 'leader.alarm');
+  await page.waitForFunction(() => {
+    const s = (window as any).__crail.state;
+    return s.soldiers.npcs.every((n: any) => Math.abs(n.x - s.cube.x) + Math.abs(n.z - s.cube.z) === 1);
+  });
+});
+
+test('the rocket goes up and comes straight back down', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 3, 0, 2, { idle: 999 });
+  await direct(page, 'leader.site');
+  expect(await page.evaluate(() => (window as any).__crail.state.rocket.built)).toBe(true);
+  await direct(page, 'leader.launch');
+  await page.waitForFunction(() => (window as any).__crail.state.leader.npcs[0].mode === 'fume');
+  // The pad is solid: the cube cannot roll onto it.
+  const pad = await page.evaluate(() => {
+    const r = (window as any).__crail.state.rocket;
+    return { x: r.x, z: r.z };
+  });
+  await direct(page, 'cube.teleport', pad.x, pad.z + 1);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
+  expect(await cubeState(page)).toMatchObject({ x: pad.x, z: pad.z + 1 });
 });

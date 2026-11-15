@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, buildFace, group, HIP, SCALE, type Rig } from '../../characters/rig';
+import { bake, box, buildFace, group, HIP, SCALE, type Rig } from '../../characters/rig';
 
 /** The femboys: pastel hoodies, pleated skirts, striped thigh-highs, big sneakers. */
 
@@ -167,5 +167,5 @@ export function buildFemboy(v: Variant, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return { root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang: [], emote, stride: 1, headTop };
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang: [], emote, stride: 1, headTop });
 }

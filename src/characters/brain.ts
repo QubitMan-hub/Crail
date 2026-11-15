@@ -14,6 +14,12 @@ import type { Grid, Occupant } from '../core/grid';
  *                     Three times, she storms off and the cube's heart breaks.
  *   - The Seat:       leave the cube still for too long and she sits on it.
  *
+ * The leader (blocked: inspect, bonk: summon, builds) and his soldiers (follow in a chain):
+ *   - The Build:      every so often he stops and hammers a new soldier into existence.
+ *   - The Column:     each soldier walks in his footsteps, one cell further back than the last.
+ *   - The Inspection: the cube is in his way. He studies it closely.
+ *   - The Alarm:      bump him and he points; every soldier marches over and boxes the cube in.
+ *
  * Femboys (blocked: pat, bonk: adopt, greets):
  *   - The Pat:        the cube is in his way. He pats it on the head.
  *   - The Fan Club:   they follow the cube a lot, and wave when caught.
@@ -26,8 +32,8 @@ import type { Grid, Occupant } from '../core/grid';
 export interface Persona {
   /** Also the occupant kind on the grid. */
   kind: string;
-  blocked: 'stare' | 'pat';
-  bonk: 'reject' | 'adopt';
+  blocked: 'stare' | 'pat' | 'inspect';
+  bonk: 'reject' | 'adopt' | 'summon' | 'salute';
   caught: 'deny' | 'wave';
   sits: boolean;
   /** Waves at characters of other kinds when they are in the way. */
@@ -37,15 +43,38 @@ export interface Persona {
   /** How bouncy the walk is, and how open the eyes are at rest (for animation). */
   bounce: number;
   restLids: number;
+  /** Cells per second, and how far the legs swing. */
+  speed: number;
+  stride: number;
+  /** Turns on the spot instantly instead of taking a beat. */
+  snappy: boolean;
+  /** Chooses its own way around. If false it only ever follows its `lead`. */
+  wanders: boolean;
+  /** Stops now and then to build something (the world says when). */
+  builds: boolean;
+  /** How it stands when it has nothing to do. */
+  rest: 'plain' | 'handsBehind' | 'attention';
 }
 
 export const GOTH: Persona = {
   kind: 'goth', blocked: 'stare', bonk: 'reject', caught: 'deny', sits: true, greets: false,
   followChance: 0.12, twirls: false, bounce: 1, restLids: 0.3,
+  speed: 1.25, stride: 1, snappy: false, wanders: true, builds: false, rest: 'plain',
 };
 export const FEMBOY: Persona = {
   kind: 'femboy', blocked: 'pat', bonk: 'adopt', caught: 'wave', sits: false, greets: true,
   followChance: 0.3, twirls: true, bounce: 1.9, restLids: 0.04,
+  speed: 1.25, stride: 1, snappy: false, wanders: true, builds: false, rest: 'plain',
+};
+export const LEADER: Persona = {
+  kind: 'leader', blocked: 'inspect', bonk: 'summon', caught: 'deny', sits: false, greets: false,
+  followChance: 0, twirls: false, bounce: 0.6, restLids: 0.4,
+  speed: 0.95, stride: 0.8, snappy: false, wanders: true, builds: true, rest: 'handsBehind',
+};
+export const SOLDIER: Persona = {
+  kind: 'soldier', blocked: 'stare', bonk: 'salute', caught: 'deny', sits: false, greets: false,
+  followChance: 0, twirls: false, bounce: 0.5, restLids: 0.2,
+  speed: 1.7, stride: 1.9, snappy: true, wanders: false, builds: false, rest: 'attention',
 };
 
 export const DIRS = [
@@ -61,7 +90,8 @@ export type Mode =
   | 'follow' | 'lost' | 'caught'
   | 'snub' | 'huff'
   | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff'
-  | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl';
+  | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl'
+  | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm';
 
 export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger' | 'heart' | 'sparkle';
 
@@ -92,6 +122,10 @@ export interface World {
   sitCooldown: number;
   /** True in scripted scenes: nobody starts following or sitting on her own. */
   staged: boolean;
+  /** Seconds left of an alarm: followers leave the column and box the cube in. */
+  alarm: number;
+  /** Set when it is time for a builder to build something. */
+  wantBuild: boolean;
   /** rejected, plop, pat, bow (a bow for the cube), greet (data: {id, gift}). */
   emit(event: string, npc: Npc, data?: unknown): void;
 }
@@ -106,6 +140,13 @@ export interface Npc {
   greeted: { x: number; z: number } | null;
   /** The next greeting comes with a bow. */
   giftNext: boolean;
+  /** Who this one follows, if it marches in a column, and its place in that column. */
+  lead: Npc | null;
+  slot: number;
+  /** The last few cells it stood on, newest first. Followers walk along this. */
+  trail: { x: number; z: number }[];
+  /** A reaction queued from outside ('fume', 'salute'), played when next free. */
+  order: 'fume' | 'salute' | null;
   variant: number;
   /** The cell she stands on. */
   x: number;
@@ -145,8 +186,9 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, persona, focus: null, greeted: null, giftNext: false, variant, x, z, nx: null, nz: null, p: 0, dir, speed: WALK_SPEED,
-    mode: 'idle', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
+    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, trail: [], order: null,
+    variant, x, z, nx: null, nz: null, p: 0, dir, speed: persona.speed,
+    mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
     followCooldown: 4, emote: null, sx: 0, sz: 0, sitDir: 1, sitRolls: 0,
   };
@@ -168,7 +210,7 @@ function say(n: Npc, kind: EmoteKind): void {
 function turn(n: Npc, d: DirIndex): boolean {
   if (n.dir === d) return false;
   n.dir = d;
-  n.wait = TURN_WAIT;
+  n.wait = n.persona.snappy ? 0.05 : TURN_WAIT;
   return true;
 }
 
@@ -235,9 +277,10 @@ function pickDir(n: Npc, w: World): DirIndex | null {
 
 function wander(n: Npc, w: World): void {
   n.focus = null;
+  if (!n.persona.wanders) return setMode(n, 'march');
   const d = pickDir(n, w);
   if (d === null) return setMode(n, 'idle', 0.6);
-  n.speed = WALK_SPEED;
+  n.speed = n.persona.speed;
   setMode(n, 'walk');
   n.steps = 3 + Math.floor(w.rand() * 6);
   turn(n, d);
@@ -258,7 +301,7 @@ function maybeFollow(n: Npc, w: World): boolean {
 }
 
 export function startFollow(n: Npc, w: World): void {
-  n.speed = WALK_SPEED;
+  n.speed = n.persona.speed;
   setMode(n, 'follow', 4.5 + w.rand() * 2.5);
   say(n, 'q');
 }
@@ -275,7 +318,7 @@ function maybeSit(n: Npc, w: World): boolean {
 export function startSit(n: Npc, w: World): void {
   w.sitter = n.id;
   n.sitRolls = w.cube.rolls;
-  n.speed = WALK_SPEED;
+  n.speed = n.persona.speed;
   setMode(n, 'toSit');
 }
 
@@ -299,6 +342,18 @@ function react(n: Npc, w: World): void {
     n.dir = dirAway(n, w.cube);
     setMode(n, 'caught', 1.6);
     return say(n, 'note');
+  }
+  if (n.persona.bonk === 'summon') {
+    // He points. That is all he has to do.
+    faceCube(n, w);
+    setMode(n, 'order', 1.6);
+    w.emit('alarm', n);
+    return say(n, 'anger');
+  }
+  if (n.persona.bonk === 'salute') {
+    faceCube(n, w);
+    setMode(n, 'salute', 1.0);
+    return say(n, 'bang');
   }
   n.strikes += 1;
   n.strikeAge = 0;
@@ -354,10 +409,34 @@ function acknowledge(n: Npc): boolean {
   return true;
 }
 
+const RING = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -1]];
+
+/** One step toward a cell: the direct way if it is free, otherwise round whatever is in the way. */
+function approach(n: Npc, w: World, to: { x: number; z: number }): void {
+  const dx = to.x - n.x;
+  const dz = to.z - n.z;
+  const alongX: DirIndex = dx > 0 ? 0 : 2;
+  const alongZ: DirIndex = dz > 0 ? 1 : 3;
+  const side = (d: DirIndex): DirIndex[] => [((d + 1) % 4) as DirIndex, ((d + 3) % 4) as DirIndex];
+  let ways: DirIndex[];
+  if (dx === 0) ways = [alongZ, ...side(alongZ)];
+  else if (dz === 0) ways = [alongX, ...side(alongX)];
+  else ways = Math.abs(dx) >= Math.abs(dz) ? [alongX, alongZ] : [alongZ, alongX];
+  // Keep going straight when that still gets closer: columns look better without zig-zags.
+  if (ways.includes(n.dir) && dx !== 0 && dz !== 0) ways = [n.dir, ...ways.filter((d) => d !== n.dir)];
+  const d = ways.find((way) => isFreeAhead(n, w, way));
+  if (d === undefined || turn(n, d)) return;
+  step(n, w, d);
+}
+
 const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   idle(n, w) {
     if (n.t < n.timer) return;
     if (maybeSit(n, w) || maybeFollow(n, w)) return;
+    if (n.persona.builds && w.wantBuild) {
+      w.wantBuild = false;
+      return setMode(n, 'build', 2.2);
+    }
     if (n.persona.twirls && !w.staged && w.rand() < 0.2) return setMode(n, 'twirl', 0.9);
     wander(n, w);
   },
@@ -365,6 +444,10 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   walk(n, w) {
     if (n.steps <= 0) return setMode(n, 'idle', 0.7 + w.rand() * 1.6);
     if (maybeSit(n, w) || maybeFollow(n, w)) return;
+    if (n.persona.builds && w.wantBuild) {
+      w.wantBuild = false;
+      return setMode(n, 'build', 2.2);
+    }
     const r = step(n, w, n.dir);
     if (r === 'ok') n.steps -= 1;
     else if (r === 'cube') {
@@ -373,6 +456,10 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
         setMode(n, 'pat', 1.7);
         w.emit('pat', n);
         return say(n, 'heart');
+      }
+      if (n.persona.blocked === 'inspect') {
+        setMode(n, 'inspect', 2.2);
+        return say(n, 'q');
       }
       n.stareKind = 'blocked';
       n.clearFor = 0;
@@ -445,7 +532,7 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
 
   huff(n, w) {
     if (n.steps <= 0) {
-      n.speed = WALK_SPEED;
+      n.speed = n.persona.speed;
       return setMode(n, 'idle', 1.2);
     }
     if (step(n, w, n.dir) === 'ok') return void (n.steps -= 1);
@@ -549,6 +636,63 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   twirl(n, w) {
     if (n.t > n.timer) wander(n, w);
   },
+
+  build(n, w) {
+    if (n.t < n.timer) return;
+    w.emit('built', n);
+    wander(n, w);
+  },
+
+  inspect(n, w) {
+    // Same as a pat, minus the affection: look it over, then go around.
+    MODES.pat(n, w);
+  },
+
+  order(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
+  fume(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
+  salute(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
+  march(n, w) {
+    if (w.alarm > 0) return setMode(n, 'swarm');
+    const lead = n.lead;
+    if (!lead) return;
+    // My place is where he stood (slot + 1) steps ago. If he has not walked that far
+    // yet, the column simply extends straight out behind him.
+    let spot = lead.trail[n.slot];
+    if (!spot) {
+      const end = lead.trail.at(-1) ?? lead;
+      const extra = n.slot - lead.trail.length + 1;
+      spot = { x: end.x - DIRS[lead.dir][0] * extra, z: end.z - DIRS[lead.dir][1] * extra };
+    }
+    if (n.x === spot.x && n.z === spot.z) {
+      // In place: face whoever is in front.
+      const ahead = n.slot === 0 ? lead : (lead.trail[n.slot - 1] ?? lead);
+      return void (n.dir = dirToward(n, ahead) ?? lead.dir);
+    }
+    if (!w.grid.isFree(spot.x, spot.z, n.occ) && manhattan(n, spot) <= 1) return; // someone is on it: wait
+    approach(n, w, spot);
+  },
+
+  swarm(n, w) {
+    if (w.alarm <= 0) return setMode(n, 'march');
+    // Everyone has their own spot around the cube: four sides first, then the corners.
+    const [ox, oz] = RING[n.slot % RING.length];
+    const spot = { x: w.cube.x + ox, z: w.cube.z + oz };
+    if (n.x === spot.x && n.z === spot.z) return void faceCube(n, w);
+    const taken = !w.grid.isFree(spot.x, spot.z, n.occ);
+    const close = Math.max(Math.abs(n.x - w.cube.x), Math.abs(n.z - w.cube.z)) <= 1;
+    // Someone else is standing on it: get as near as possible and glare from there.
+    if (taken && (close || manhattan(n, spot) === 1)) return void faceCube(n, w);
+    approach(n, w, spot);
+  },
 };
 
 /** Advance one goth by dt seconds. */
@@ -563,6 +707,8 @@ export function tick(n: Npc, w: World, dt: number): void {
     n.p += n.speed * dt;
     if (n.p < 1) return;
     w.grid.release(n.x, n.z, n.occ);
+    n.trail.unshift({ x: n.x, z: n.z });
+    if (n.trail.length > 10) n.trail.length = 10;
     n.x = n.nx;
     n.z = n.nz;
     n.nx = n.nz = null;
@@ -576,6 +722,14 @@ export function tick(n: Npc, w: World, dt: number): void {
     return;
   }
   if (n.greeted && acknowledge(n)) return;
+  if (n.order && ['idle', 'walk', 'march'].includes(n.mode)) {
+    const what = n.order;
+    n.order = null;
+    n.wait = 0;
+    setMode(n, what, what === 'fume' ? 1.8 : 1.1);
+    if (what === 'fume') say(n, 'anger');
+    return;
+  }
   if (n.wait > 0) {
     n.wait -= dt;
     return;
@@ -585,11 +739,12 @@ export function tick(n: Npc, w: World, dt: number): void {
 
 /** Move her somewhere else entirely (used to keep the world populated as the cube travels). */
 export function relocate(n: Npc, w: World, x: number, z: number): boolean {
-  if (n.nx !== null || !['idle', 'walk'].includes(n.mode)) return false;
+  if (n.nx !== null || !['idle', 'walk', 'march'].includes(n.mode)) return false;
   if (!w.grid.claim(x, z, n.occ)) return false;
   w.grid.release(n.x, n.z, n.occ);
   n.x = x;
   n.z = z;
-  setMode(n, 'idle', 0.3);
+  n.trail = [];
+  setMode(n, n.persona.wanders ? 'idle' : 'march', 0.3);
   return true;
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, buildFace, group, HIP, mat, SCALE, type Rig } from '../../characters/rig';
+import { bake, box, buildFace, group, HIP, mat, SCALE, type Rig } from '../../characters/rig';
 
 /** The goths: ink black, purple accents, chunky boots, winged eyeliner. */
 
@@ -217,5 +217,5 @@ export function buildGoth(v: Variant, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return { root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride, headTop };
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride, headTop });
 }

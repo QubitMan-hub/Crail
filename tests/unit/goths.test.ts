@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Grid, type Occupant } from '../../src/core/grid';
 import { seededRandom } from '../../src/core/rng';
-import { createNpc, FEMBOY, GOTH, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from '../../src/characters/brain';
+import { createNpc, FEMBOY, GOTH, LEADER, SOLDIER, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from '../../src/characters/brain';
 
 const CUBE: Occupant = { kind: 'cube', id: 'cube' };
 
@@ -12,7 +12,7 @@ function setup(seed = 7) {
   const events: string[] = [];
   const greetings: { id: string; gift: boolean }[] = [];
   const world: World = {
-    grid, cube, rand: seededRandom(seed), sitter: null, sitCooldown: 0, staged: true,
+    grid, cube, rand: seededRandom(seed), sitter: null, sitCooldown: 0, staged: true, alarm: 0, wantBuild: false,
     emit: (e, _n, data) => {
       events.push(e);
       if (e === 'greet') greetings.push(data as { id: string; gift: boolean });
@@ -235,5 +235,91 @@ describe('femboy behaviour', () => {
     s.run([a, b], 20);
     expect(s.world.sitter).toBeNull();
     expect(s.cube.pinned).toBe(false);
+  });
+});
+
+describe('the leader and his soldiers', () => {
+  const army = (s: ReturnType<typeof setup>, size: number) => {
+    const boss = s.add(-2, 4, 0, 0, LEADER);
+    boss.timer = 99;
+    const troops = Array.from({ length: size }, (_, i) => s.add(-3 - i, 4, 0, 0, SOLDIER));
+    troops.forEach((t, i) => {
+      t.lead = boss;
+      t.slot = i;
+    });
+    return { boss, troops, all: [boss, ...troops] };
+  };
+  const dist = (a: Npc, b: { x: number; z: number }) => Math.abs(a.x - b.x) + Math.abs(a.z - b.z);
+
+  it('the column: soldiers walk in his footsteps, in order, and never overlap', () => {
+    const s = setup();
+    const { boss, troops, all } = army(s, 4);
+    boss.mode = 'walk';
+    boss.steps = 7;
+    s.run(all, 7.2, () => {
+      const cells = new Set(all.map((n) => `${n.x},${n.z}`));
+      expect(cells.size).toBe(all.length);
+      // Once he arrives, keep him there so the column can close up behind him.
+      if (boss.mode === 'idle') boss.timer = 99;
+    });
+    s.run(all, 4, () => boss.mode === 'idle' && (boss.timer = 99));
+    expect(boss.x).toBe(5);
+    troops.forEach((t, i) => expect(dist(t, i === 0 ? boss : troops[i - 1])).toBe(1));
+    // Fallen in: all facing the way he faces.
+    for (const t of troops) expect(t.dir).toBe(boss.dir);
+  });
+
+  it('the build: when it is time, he stops and builds', () => {
+    const s = setup();
+    const { boss } = army(s, 0);
+    boss.timer = 0.2;
+    s.world.wantBuild = true;
+    s.run([boss], 1);
+    expect(boss.mode).toBe('build');
+    expect(s.world.wantBuild).toBe(false);
+    s.run([boss], 2);
+    expect(s.events).toContain('built');
+  });
+
+  it('the inspection: studies a cube that is in his way, then goes around', () => {
+    const s = setup();
+    const boss = s.add(-3, 0, 0, 8, LEADER);
+    s.run([boss], 3.6);
+    expect(boss.mode).toBe('inspect');
+    s.run([boss], 6);
+    expect(boss.z).not.toBe(0);
+  });
+
+  it('the alarm: bump him and every soldier boxes the cube in, then they fall back in', () => {
+    const s = setup();
+    const { boss, troops, all } = army(s, 4);
+    boss.pending = true;
+    s.run(all, 0.2);
+    expect(boss.mode).toBe('order');
+    expect(s.events).toContain('alarm');
+    s.world.alarm = 30; // the game sets this when it hears 'alarm'
+    s.run(all, 9);
+    for (const t of troops) expect(dist(t, s.cube)).toBe(1);
+    // Boxed in on all four sides: the cube has nowhere to go.
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) expect(s.grid.isFree(dx, dz)).toBe(false);
+    s.world.alarm = 0;
+    boss.mode = 'idle';
+    boss.t = 0;
+    boss.timer = 99;
+    s.run(all, 10);
+    expect(troops.every((t) => t.mode === 'march')).toBe(true);
+    // Back with him, and the cube is free again.
+    for (const t of troops) expect(dist(t, boss)).toBeLessThanOrEqual(5);
+    expect(new Set(all.map((n) => `${n.x},${n.z}`)).size).toBe(all.length);
+  });
+
+  it('a bumped soldier salutes and stays in the column', () => {
+    const s = setup();
+    const { troops, all } = army(s, 2);
+    troops[0].pending = true;
+    s.run(all, 0.2);
+    expect(troops[0].mode).toBe('salute');
+    s.run(all, 2);
+    expect(troops[0].mode).toBe('march');
   });
 });

@@ -58,18 +58,31 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
 
   if (walking) {
     const swing = Math.sin(m.phase);
-    const stride = n.mode === 'huff' ? 0.8 : 0.55;
+    const stride = (n.mode === 'huff' ? 0.8 : 0.55) * n.persona.stride;
     p.legL = swing * stride;
     p.legR = -swing * stride;
-    p.armLx = -swing * stride * 0.75;
-    p.armRx = swing * stride * 0.75;
+    const armSwing = Math.min(stride, 0.7) * 0.75;
+    p.armLx = -swing * armSwing;
+    p.armRx = swing * armSwing;
     p.y = Math.abs(Math.cos(m.phase)) * 0.035 * n.persona.bounce;
     if (happy) p.headRoll = Math.sin(m.phase) * 0.07;
+  } else if (n.persona.rest === 'attention') {
+    // Eyes front. Arms straight. Do not blink first.
+    p.armLz = p.armRz = 0;
+    p.brow = 0.2;
   } else if (n.mode === 'idle' || n.mode === 'walk') {
     // Standing around: slow look left and right, weight on one hip.
     p.headYaw = Math.sin(time * 0.55 + seed) * 0.55;
     p.headRoll = Math.sin(time * 0.4 + seed * 2) * 0.05;
     p.lean = Math.sin(time * 0.3 + seed) * 0.03;
+  }
+  if (n.persona.rest === 'handsBehind' && (n.mode === 'idle' || n.mode === 'walk')) {
+    // Hands clasped behind the back, chin up, surveying.
+    p.armLx = p.armRx = 0.42;
+    p.armLz = -0.3;
+    p.armRz = 0.3;
+    p.headPitch = -0.12;
+    p.brow = 0.12;
   }
 
   switch (n.mode) {
@@ -204,6 +217,61 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
       p.lids = 0.9;
       p.brow = -0.3;
       p.mouthW = 1.4;
+      break;
+    case 'build':
+      // Hammering something together on the floor.
+      p.bend = 0.3;
+      p.armRx = -1.3 + Math.sin(time * 16) * 0.55;
+      p.armLx = -0.7;
+      p.lids = 0.5;
+      p.brow = 0.2;
+      p.headPitch = 0.25;
+      break;
+    case 'inspect':
+      // Hands up to the eyes like binoculars, leaning in.
+      lookAtCube(0.3);
+      p.bend = 0.24;
+      p.armLx = p.armRx = -2.2;
+      p.armLz = -0.5;
+      p.armRz = 0.5;
+      p.lids = 0.1;
+      p.brow = 0.25;
+      break;
+    case 'order':
+      lookAtCube(0.2);
+      p.armRx = -1.5;
+      p.armRz = 0.1;
+      p.armLx = 0.3;
+      p.lids = 0.5;
+      p.brow = 0.5;
+      p.mouthH = 1.8;
+      break;
+    case 'fume':
+      // Stamping on the spot, fists down.
+      p.armLz = 0.5;
+      p.armRz = -0.5;
+      p.lids = 0.6;
+      p.brow = 0.55;
+      p.headPitch = -0.15;
+      p.mouthW = 1.2;
+      p.mouthH = 1.6;
+      p.y = Math.abs(Math.sin(time * 15)) * 0.08;
+      p.legL = Math.max(0, Math.sin(time * 15)) * -0.5;
+      break;
+    case 'salute':
+      p.armRx = -2.55;
+      p.armRz = 0.95;
+      p.armLz = 0;
+      p.lids = 0.15;
+      p.brow = 0.2;
+      break;
+    case 'swarm':
+      if (!walking) {
+        lookAtCube(0.36);
+        p.armLz = p.armRz = 0;
+        p.lids = 0.45;
+        p.brow = 0.45;
+      }
       break;
     case 'twirl':
       p.armLz = 1.25;

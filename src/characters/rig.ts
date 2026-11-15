@@ -103,3 +103,65 @@ export function buildBow(color: string, knot: string): THREE.Group {
   box(bow, knot, 0.08, 0.09, 0.09, 0, 0, 0);
   return bow;
 }
+
+const baked = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72 });
+
+/** Merge every still mesh under `parent` into one, keeping colours. Stops at anything in `live`. */
+function mergeUnder(parent: THREE.Object3D, live: Set<THREE.Object3D>): void {
+  const parts: THREE.BufferGeometry[] = [];
+  const done: THREE.Mesh[] = [];
+  const walk = (node: THREE.Object3D, toParent: THREE.Matrix4) => {
+    for (const child of node.children) {
+      if (live.has(child) || (child as THREE.Sprite).isSprite) continue;
+      child.updateMatrix();
+      const m = toParent.clone().multiply(child.matrix);
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) {
+        const src = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+        src.applyMatrix4(m);
+        const c = (mesh.material as THREE.MeshStandardMaterial).color;
+        const n = src.attributes.position.count;
+        const colors = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) colors.set([c.r, c.g, c.b], i * 3);
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', src.attributes.position);
+        g.setAttribute('normal', src.attributes.normal);
+        g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        parts.push(g);
+        done.push(mesh);
+      } else walk(child, m);
+    }
+  };
+  walk(parent, new THREE.Matrix4());
+  if (parts.length < 2) return;
+  let total = 0;
+  for (const g of parts) total += g.attributes.position.count;
+  const merged = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'color'] as const) {
+    const out = new Float32Array(total * 3);
+    let at = 0;
+    for (const g of parts) {
+      out.set(g.attributes[name].array as Float32Array, at);
+      at += g.attributes[name].count * 3;
+    }
+    merged.setAttribute(name, new THREE.BufferAttribute(out, 3));
+  }
+  for (const mesh of done) mesh.removeFromParent();
+  const one = new THREE.Mesh(merged, baked);
+  one.castShadow = true;
+  parent.add(one);
+}
+
+/**
+ * A character is built from dozens of little boxes. Drawing each one separately is
+ * slow, so once it is built, everything that never moves on its own is fused into one
+ * mesh per limb. Only the parts that animate (eyelids, brows, swinging hair) stay loose.
+ */
+export function bake(rig: Rig): Rig {
+  const face = [...rig.lids, ...rig.brows, ...rig.pupils, rig.mouth];
+  for (const f of face) f.castShadow = false;
+  const live = new Set<THREE.Object3D>([...face, ...rig.sway, ...rig.hang, rig.emote]);
+  for (const part of [rig.torso, rig.head, rig.armL, rig.armR, rig.legL, rig.legR]) mergeUnder(part, live);
+  for (const s of new Set([...rig.sway, ...rig.hang])) mergeUnder(s, live);
+  return rig;
+}

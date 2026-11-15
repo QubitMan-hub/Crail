@@ -35,6 +35,9 @@ export interface CastOptions<V> {
 export interface Cast {
   members: Member[];
   world: World;
+  spawn(variant: number, x: number, z: number, dir: DirIndex): Member | null;
+  /** Is a floor cell outside what the camera can see? */
+  offscreen(x: number, z: number): boolean;
 }
 
 export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
@@ -52,6 +55,8 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     sitter: null,
     sitCooldown: 10,
     staged: false,
+    alarm: 0,
+    wantBuild: false,
     emit(event, npc, data) {
       if (event === 'plop') ctx.bump(0.12);
       if (event === 'greet') ctx.events.emit('npc:greet', { ...(data as object), x: npc.x, z: npc.z });
@@ -154,6 +159,7 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
 
   ctx.onUpdate((dt, time) => {
     world.sitCooldown -= dt;
+    world.alarm = Math.max(0, world.alarm - dt);
     for (const m of members) {
       tick(m.n, world, dt);
 
@@ -171,5 +177,5 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     }
   });
 
-  return { members, world };
+  return { members, world, spawn, offscreen };
 }
