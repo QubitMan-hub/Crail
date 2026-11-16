@@ -309,8 +309,7 @@ const voice = [
   [16.23, 17.56, 14.32], // My first pick was a park,
   [17.91, 19.85, 15.77], // four rides, zero inspections.
   [20.32, 22.11, 17.92], // Every ride gives you a charm.
-  [22.76, 23.0, 20.0], //   My
-  [23.27, 24.88, 20.22], // second pick was a cult.  (a stumbled "first" is cut out)
+  [23.5, 24.88, 20.25], //  Second pick was a cult.  (a stumbled "My first" before it is left out)
   [25.2, 28.86, 22.02], //  Rides give you charms and charms can buy followers.
   [29.31, 30.42, 25.87], // So, Disneyland.
   [31.07, 32.26, 27.17], // Now they follow you.
@@ -334,7 +333,7 @@ const spoken = [
   [11.5, 12.42, 'He can also build'], [12.42, 13.18, 'a gold statue'], [13.18, 13.9, 'of himself.'],
   [14.35, 14.91, 'My first pick'], [14.91, 15.62, 'was a park.'], [15.8, 16.38, 'Four rides.'], [16.74, 17.68, 'Zero inspections.'],
   [17.95, 18.5, 'Every ride'], [18.5, 19.68, 'gives you a charm.'],
-  [20.0, 20.95, 'My second pick'], [20.95, 21.82, 'was a cult.'],
+  [20.25, 20.75, 'Second pick'], [20.75, 21.63, 'was a cult.'],
   [22.05, 23.58, 'Rides give you charms'], [23.58, 24.5, 'and charms'], [24.5, 25.65, 'can buy followers.'],
   [25.9, 26.95, 'So… Disneyland.'],
   [27.2, 28.33, 'Now they follow you.'], [28.75, 29.4, 'Stop moving,'], [29.6, 30.1, 'they worship.'],
