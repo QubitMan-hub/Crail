@@ -7,7 +7,7 @@
 //   44.6-61.2 WAR     he noticed: conscription, an aimed rocket, and the tank
 //   56.4-61.0 OUT     she still has the bow
 //
-// That is the long timeline. The Reel that ships is a 45-second cut of it: see CUTS at the bottom.
+// That is the long timeline. The Reel that ships is a 45-second cut of it: see KEEP at the bottom.
 //
 // Needs files that are not in the repository:
 //   captures/day-003-assets/{top,park,cult}.png   screenshots of the three real comments
@@ -50,7 +50,7 @@ const actions = [
   [11.6, 'leader.statue'], [T.statue, 'cut'],
   [13.2, 'leader.site'], [13.3, 'leader.build'], [T.rocket, 'cut'], [13.7, 'leader.launch', 'tip'],
   // The cube gets on the wheel early, so it comes back round on cue.
-  [9.6, 'cube.teleport', 30, -8], [9.65, 'park.ride', 'wheel'],
+  [10.37, 'cube.teleport', 30, -8], [10.42, 'park.ride', 'wheel'],
   // Two: the park, already busy.
   ...clearAll(T.two),
   [T.two, 'goths.spawn', 0, 15, -4, 3, { idle: 99 }], [T.two, 'goths.spawn', 2, 17, -4, 3, { idle: 99 }],
@@ -77,15 +77,15 @@ const actions = [
   [T.three, 'leader.spawn', 0, C.x - 1, C.z, 0, { idle: 99 }],
   [T.three, 'cut'], [T.immune, 'cut'],
   // The temple: five members, already recruited, about to be ordained.
-  ...clearAll(T.temple),
-  [T.temple, 'cube.teleport', DOOR.x, DOOR.z], [T.temple, 'cult.charms', 0], [T.temple, 'cult.face', 3],
-  [T.temple, 'goths.spawn', 1, DOOR.x, DOOR.z + 2, 3, { idle: 99 }], [T.temple, 'goths.bow', 0],
-  [T.temple, 'femboys.spawn', 0, DOOR.x + 1, DOOR.z + 1, 3, { idle: 99 }],
-  [T.temple, 'femboys.spawn', 1, DOOR.x - 1, DOOR.z + 1, 3, { idle: 99 }],
-  [T.temple, 'goths.spawn', 2, DOOR.x + 2, DOOR.z + 2, 3, { idle: 99 }],
-  [T.temple, 'femboys.spawn', 2, DOOR.x - 2, DOOR.z + 2, 3, { idle: 99 }],
-  [T.temple, 'cult.recruit', 'goths', 0], [T.temple, 'cult.recruit', 'femboys', 0], [T.temple, 'cult.recruit', 'femboys', 1],
-  [T.temple, 'cult.recruit', 'goths', 1], [T.temple, 'cult.recruit', 'femboys', 2],
+  ...clearAll(T.walk),
+  [T.walk, 'cube.teleport', DOOR.x, DOOR.z], [T.walk, 'cult.charms', 0], [T.walk, 'cult.face', 3],
+  [T.walk, 'goths.spawn', 1, DOOR.x, DOOR.z + 2, 3, { idle: 99 }], [T.walk, 'goths.bow', 0],
+  [T.walk, 'femboys.spawn', 0, DOOR.x + 1, DOOR.z + 1, 3, { idle: 99 }],
+  [T.walk, 'femboys.spawn', 1, DOOR.x - 1, DOOR.z + 1, 3, { idle: 99 }],
+  [T.walk, 'goths.spawn', 2, DOOR.x + 2, DOOR.z + 2, 3, { idle: 99 }],
+  [T.walk, 'femboys.spawn', 2, DOOR.x - 2, DOOR.z + 2, 3, { idle: 99 }],
+  [T.walk, 'cult.recruit', 'goths', 0], [T.walk, 'cult.recruit', 'femboys', 0], [T.walk, 'cult.recruit', 'femboys', 1],
+  [T.walk, 'cult.recruit', 'goths', 1], [T.walk, 'cult.recruit', 'femboys', 2],
   [T.temple, 'cut'], [T.walk, 'cut'],
   // War: he drafts a passer-by, then aims the rocket at the cube and its three followers.
   ...clearAll(T.war),
@@ -96,7 +96,7 @@ const actions = [
   [T.war, 'cult.recruit', 'goths', 0], [T.war, 'cult.recruit', 'femboys', 0], [T.war, 'cult.recruit', 'femboys', 1],
   [T.war, 'leader.spawn', 0, HIM.x, HIM.z, 1, { idle: 99 }], [T.war, 'leader.site'], [T.war, 'leader.tank'],
   [T.war, 'femboys.spawn', 3, HIM.x, HIM.z + 2, 3, { idle: 99 }],
-  [T.war, 'cut'], [45.3, 'leader.conscript'], [45.6, 'leader.launch', 'strike'],
+  [T.war, 'cut'], [45.3, 'leader.conscript'], [44.62, 'leader.launch', 'strike'],
   [T.pad, 'cut'], [T.strike, 'cut'],
   [T.tank + 0.1, 'leader.shell'],
   // Out: her again, with the bow.
@@ -139,7 +139,9 @@ function camera(t) {
 
 const frozen = (t) => t >= T.combo && t < T.one - 0.2;
 
-// Voice-over, as estimated. Retimed to the real recording afterwards.
+// The lines as first scripted, on the long timeline. The Reel shows `spoken` (at the bottom) instead:
+// the words as actually recorded.
+// eslint-disable-next-line no-unused-vars
 const captions = [
   [0.2, 1.0, 'Day three'], [1.0, 1.6, 'of letting'], [1.6, 2.3, 'Instagram comments'], [2.3, 2.9, 'build this game.'],
   [3.2, 4.0, 'You chose'], [4.0, 5.0, 'a dictator.'],
@@ -180,7 +182,7 @@ const sfx = [
   [T.combo, 'boom'], [6.2, 'pop'], [6.8, 'pop'], [7.4, 'pop'],
   [T.one, 'pop'], [11.6, 'pop'], [13.7, 'tick'], [14.5, 'tick'], [15.3, 'tick'],
   [T.two, 'pop'], [T.three, 'pop'], [36.5, 'boom'],
-  [T.war, 'pop'], [45.6, 'tick'], [46.4, 'tick'], [47.2, 'tick'], [51.9, 'boom'], [55.6, 'boom'], [60.1, 'dun'],
+  [T.war, 'pop'], [44.62, 'tick'], [45.42, 'tick'], [46.22, 'tick'], [51.9, 'boom'], [55.6, 'boom'], [60.1, 'dun'],
 ];
 const music = {
   sections: [[0, T.combo], [T.one, 59.3]],
@@ -228,7 +230,7 @@ function chapter(t, at, until, file, tag) {
     <span class="tag">${tag}</span><img src="/reelasset/${file}.png"></div>`;
 }
 
-function html(t) {
+function html(t, now) {
   let h = '';
   if (t < T.combo) {
     // On screen from the very first frame: the whole premise in six words.
@@ -260,35 +262,102 @@ function html(t) {
     h += `<div class="big" ${scaled(pop(t, 59.2), 'top:13%;font-size:46px')}>she still has the bow.</div>`;
   }
 
-  const c = captions.find(([a, b]) => within(t, a, b));
+  const c = spoken.find(([a, b]) => within(now, a, b));
   const onRed = within(t, T.combo, T.one);
-  if (c) h += `<div class="cap${onRed ? ' onred' : ''}" ${onRed ? 'style="top:80%"' : ''}><span ${scaled(0.7 + 0.3 * pop(t, c[0], 0.14))}>${esc(c[2])}</span></div>`;
+  if (c) h += `<div class="cap${onRed ? ' onred' : ''}" ${onRed ? 'style="top:80%"' : ''}><span ${scaled(0.7 + 0.3 * pop(now, c[0], 0.14))}>${esc(c[2])}</span></div>`;
   if (t >= T.black) h += '<div class="black"></div>';
   return h;
 }
 
-// The 45-second cut. Everything above is written on the long timeline; these stretches of it are
-// left out: the rocket falling over (the war has a better rocket), the swing, the leader shrugging
-// off a sermon, the ordination, and the tail of the worship scene.
-const CUTS = [[13.6, 19.4], [22.4, 25.0], [33.4, 35.6], [35.6, 39.6], [43.2, 44.6]];
-/** Long-timeline time -> time in the cut. */
-const neu = (t) => t - CUTS.reduce((gone, [a, b]) => gone + Math.min(b - a, Math.max(0, t - a)), 0);
-/** Time in the cut -> long-timeline time. */
-const old = (n) => CUTS.reduce((t, [a, b]) => (t >= a ? t + (b - a) : t), n);
-const gone = (t) => CUTS.some(([a, b]) => t > a && t < b);
+// The 45-second cut, fitted to the recorded voice-over. Everything above is written on the long
+// timeline. Each row here is a stretch of it that is kept, and how long it runs in the Reel:
+// [from, to, seconds]. What falls between rows is left out (the rocket falling over, the swing,
+// the leader shrugging off a sermon, the ordination, a second of waiting for the rocket to land).
+// The game itself always runs at normal speed; only the script and the overlay are stretched.
+const KEEP = [
+  [0, 5.2, 4.9], [5.2, 8.4, 2.9], [8.4, 11.4, 3.5], [11.4, 13.6, 2.9], [19.4, 22.4, 3.5], [25.0, 28.0, 2.2],
+  [28.0, 33.4, 5.9], [39.6, 44.6, 4.6], [44.6, 50.9, 6.3], [51.9, 56.4, 4.5], [56.4, 61.0, 3.8],
+];
+const STARTS = KEEP.map((_, i) => KEEP.slice(0, i).reduce((sum, [, , d]) => sum + d, 0));
+const TOTAL = KEEP.reduce((sum, [, , d]) => sum + d, 0);
+const gone = (t) => !KEEP.some(([a, b], i) => t >= a && (t < b || (i === KEEP.length - 1 && t <= b)));
+/** Long-timeline time -> time in the Reel. Anything left out lands at the start of what follows. */
+const neu = (t) => {
+  for (const [i, [a, b, d]] of KEEP.entries()) {
+    if (t < a) return STARTS[i];
+    if (t < b) return STARTS[i] + ((t - a) / (b - a)) * d;
+  }
+  return TOTAL;
+};
+/** Time in the Reel -> long-timeline time. */
+const old = (n) => {
+  const i = Math.max(0, STARTS.findLastIndex((at) => n >= at));
+  const [a, b, d] = KEEP[i];
+  return a + Math.min(1, (n - STARTS[i]) / d) * (b - a);
+};
 const kept = (list) => list.filter(([t]) => !gone(t)).map(([t, ...rest]) => [neu(t), ...rest]);
 const spans = (list) => list.map(([a, b, ...rest]) => [neu(a), neu(b), ...rest]).filter(([a, b]) => b - a > 0.05);
 
+// Voice-over: [from, to] in the recording, and where that line starts in the Reel.
+const voice = [
+  [0.72, 3.48, 0.13], //    Day three of letting Instagram comments build my game.
+  [4.05, 5.29, 3.37], //    You chose a dictator.
+  [5.79, 8.2, 5.07], //     It was a free weekend so you get three features.
+  [8.75, 10.2, 7.92], //    He can build soldiers,
+  [10.56, 12.14, 9.57], //  one at a time, by hand.
+  [12.77, 15.23, 11.47], // He can also build a gold statue of himself.
+  [16.23, 17.56, 14.32], // My first pick was a park,
+  [17.91, 19.85, 15.77], // four rides, zero inspections.
+  [20.32, 22.11, 17.92], // Every ride gives you a charm.
+  [22.76, 23.0, 20.0], //   My
+  [23.27, 24.88, 20.22], // second pick was a cult.  (a stumbled "first" is cut out)
+  [25.2, 28.86, 22.02], //  Rides give you charms and charms can buy followers.
+  [29.31, 30.42, 25.87], // So, Disneyland.
+  [31.07, 32.26, 27.17], // Now they follow you.
+  [32.59, 33.95, 28.72], // Stop moving, they worship.
+  [35.01, 36.06, 30.47], // Then he noticed,
+  [36.37, 37.83, 31.62], // he drafts your people now.
+  [38.43, 39.87, 33.17], // He also has a rocket.
+  [40.18, 41.13, 34.92], // It's aimed at you.
+  [41.71, 42.95, 36.92], // That costs you a charm.
+  [43.45, 44.9, 38.27], //  The tank also can shoot.
+  [45.75, 46.26, 40.52], // Missed.
+  [46.57, 48.46, 41.27], // Day four, top comment still wins.
+  [49.04, 50.64, 43.27], // Please just say add a tree.
+];
+// Captions follow the actual words in the recording (Reel time).
+const spoken = [
+  [0.15, 0.65, 'Day three'], [0.65, 1.15, 'of letting'], [1.15, 2.09, 'Instagram comments'], [2.09, 2.87, 'build my game.'],
+  [3.4, 3.8, 'You chose'], [3.8, 4.58, 'a dictator.'],
+  [5.1, 5.92, 'It was a free weekend.'], [5.92, 6.56, 'So you get'], [6.56, 7.45, 'three features.'],
+  [7.95, 9.34, 'He can build soldiers.'], [9.6, 10.33, 'One at a time.'], [10.49, 11.12, 'By hand.'],
+  [11.5, 12.42, 'He can also build'], [12.42, 13.18, 'a gold statue'], [13.18, 13.9, 'of himself.'],
+  [14.35, 14.91, 'My first pick'], [14.91, 15.62, 'was a park.'], [15.8, 16.38, 'Four rides.'], [16.74, 17.68, 'Zero inspections.'],
+  [17.95, 18.5, 'Every ride'], [18.5, 19.68, 'gives you a charm.'],
+  [20.0, 20.95, 'My second pick'], [20.95, 21.82, 'was a cult.'],
+  [22.05, 23.58, 'Rides give you charms'], [23.58, 24.5, 'and charms'], [24.5, 25.65, 'can buy followers.'],
+  [25.9, 26.95, 'So… Disneyland.'],
+  [27.2, 28.33, 'Now they follow you.'], [28.75, 29.4, 'Stop moving,'], [29.6, 30.1, 'they worship.'],
+  [30.5, 31.49, 'Then he noticed.'], [31.65, 33.05, 'He drafts your people now.'],
+  [33.2, 34.58, 'He also has a rocket.'],
+  [34.95, 35.36, 'It’s aimed'], [35.36, 35.9, 'at you.'],
+  [36.95, 38.13, 'That costs you a charm.'],
+  [38.3, 39.69, 'The tank also can shoot.'], [40.55, 41.05, 'Missed.'],
+  [41.3, 41.95, 'Day four.'], [42.0, 43.13, 'Top comment still wins.'],
+  [43.3, 43.62, 'Please.'], [43.62, 44.7, 'Just say “add a tree”.'],
+];
+
 export default {
-  seconds: neu(seconds),
+  seconds: TOTAL,
   prepare,
   assets: { dir: ASSETS },
   keys: spans(keys.filter(([a]) => !gone(a))),
   actions: kept(actions),
   camera: (t) => camera(old(t)),
   frozen: (t) => frozen(old(t)),
-  html: (t) => html(old(t)),
+  html: (t) => html(old(t), t),
   css,
   sfx: kept(sfx),
-  music: { sections: spans(music.sections), duck: spans(music.duck) },
+  music: { sections: spans(music.sections), duck: voice.map(([from, to, at]) => [at, at + (to - from)]) },
+  voice,
 };
