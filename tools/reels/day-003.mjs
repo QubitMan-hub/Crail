@@ -99,6 +99,10 @@ const actions = [
   [T.war, 'cut'], [45.3, 'leader.conscript'], [45.6, 'leader.launch', 'strike'],
   [T.pad, 'cut'], [T.strike, 'cut'],
   [T.tank + 0.1, 'leader.shell'],
+  // The map, opened somewhere with things on it: between the temple and the park, with neighbours.
+  [T.map, 'cube.teleport', 1, -5],
+  [T.map, 'goths.spawn', 1, -6, 4, 3, { idle: 99 }], [T.map, 'goths.spawn', 2, -8, 6, 1, { idle: 99 }], [T.map, 'goths.spawn', 3, -4, 7, 3, { idle: 99 }],
+  [T.map, 'femboys.spawn', 2, 3, -11, 3, { idle: 99 }], [T.map, 'femboys.spawn', 0, 5, -9, 1, { idle: 99 }], [T.map, 'femboys.spawn', 1, 2, -13, 3, { idle: 99 }],
   [T.map, 'cut'],
   // Bailing off the trampoline.
   [T.bail, 'cube.teleport', 15, 9], [T.bail + 0.05, 'park.ride', 'trampoline'], [T.bail, 'cut'],
@@ -136,7 +140,7 @@ function camera(t) {
   else if (t < T.pad) cam.focus = [HIM.x, HIM.z + 1];
   else if (t < T.strike) cam.at = 'rocket';
   else if (t < T.bail) return cam; // on the cube, wherever it gets thrown
-  else if (t < T.out) cam.focus = [15, 7.6];
+  else if (t < T.out) cam.focus = [17.2, 5.4];
   else cam.follow = ['goths', 0];
   return cam;
 }
