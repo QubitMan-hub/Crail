@@ -7,6 +7,8 @@
 //   44.6-61.2 WAR     he noticed: conscription, an aimed rocket, and the tank
 //   56.4-61.0 OUT     she still has the bow
 //
+// That is the long timeline. The Reel that ships is a 45-second cut of it: see CUTS at the bottom.
+//
 // Needs files that are not in the repository:
 //   captures/day-003-assets/{top,park,cult}.png   screenshots of the three real comments
 import { existsSync } from 'node:fs';
@@ -48,7 +50,7 @@ const actions = [
   [11.6, 'leader.statue'], [T.statue, 'cut'],
   [13.2, 'leader.site'], [13.3, 'leader.build'], [T.rocket, 'cut'], [13.7, 'leader.launch', 'tip'],
   // The cube gets on the wheel early, so it comes back round on cue.
-  [18.0, 'cube.teleport', 30, -8], [18.05, 'park.ride', 'wheel'],
+  [9.6, 'cube.teleport', 30, -8], [9.65, 'park.ride', 'wheel'],
   // Two: the park, already busy.
   ...clearAll(T.two),
   [T.two, 'goths.spawn', 0, 15, -4, 3, { idle: 99 }], [T.two, 'goths.spawn', 2, 17, -4, 3, { idle: 99 }],
@@ -153,7 +155,7 @@ const captions = [
   [35.8, 36.7, 'There’s a temple.'], [36.9, 37.9, 'Members get promoted.'], [38.1, 39.4, 'The boss gets a stick.'],
   [39.9, 40.9, 'Now they follow me.'], [41.6, 42.3, 'I stop,'], [42.3, 43.1, 'they worship.'], [43.3, 43.9, 'I have a halo.'], [43.9, 44.5, 'This is fine.'],
   [44.8, 45.7, 'Then he noticed.'], [45.9, 47.1, 'He drafts my people now.'],
-  [47.5, 48.7, 'And the rocket?'], [49.2, 50.0, 'It’s aimed.'], [50.1, 50.9, 'At me.'], [52.4, 53.3, 'That cost me a charm.'],
+  [47.5, 48.7, 'He also has a rocket.'], [49.2, 50.0, 'It’s aimed.'], [50.1, 50.9, 'At me.'], [52.4, 53.3, 'That cost me a charm.'],
   [53.6, 54.6, 'The tank shoots too.'], [55.8, 56.3, 'Missed.'],
   [56.7, 57.4, 'Day four.'], [57.4, 58.3, 'Top comment wins.'], [58.6, 59.3, 'Please.'], [59.3, 60.4, 'Just say “add a tree”.'],
 ];
@@ -265,4 +267,28 @@ function html(t) {
   return h;
 }
 
-export default { seconds, prepare, assets: { dir: ASSETS }, keys, actions, camera, frozen, html, css, sfx, music };
+// The 45-second cut. Everything above is written on the long timeline; these stretches of it are
+// left out: the rocket falling over (the war has a better rocket), the swing, the leader shrugging
+// off a sermon, the ordination, and the tail of the worship scene.
+const CUTS = [[13.6, 19.4], [22.4, 25.0], [33.4, 35.6], [35.6, 39.6], [43.2, 44.6]];
+/** Long-timeline time -> time in the cut. */
+const neu = (t) => t - CUTS.reduce((gone, [a, b]) => gone + Math.min(b - a, Math.max(0, t - a)), 0);
+/** Time in the cut -> long-timeline time. */
+const old = (n) => CUTS.reduce((t, [a, b]) => (t >= a ? t + (b - a) : t), n);
+const gone = (t) => CUTS.some(([a, b]) => t > a && t < b);
+const kept = (list) => list.filter(([t]) => !gone(t)).map(([t, ...rest]) => [neu(t), ...rest]);
+const spans = (list) => list.map(([a, b, ...rest]) => [neu(a), neu(b), ...rest]).filter(([a, b]) => b - a > 0.05);
+
+export default {
+  seconds: neu(seconds),
+  prepare,
+  assets: { dir: ASSETS },
+  keys: spans(keys.filter(([a]) => !gone(a))),
+  actions: kept(actions),
+  camera: (t) => camera(old(t)),
+  frozen: (t) => frozen(old(t)),
+  html: (t) => html(old(t)),
+  css,
+  sfx: kept(sfx),
+  music: { sections: spans(music.sections), duck: spans(music.duck) },
+};
