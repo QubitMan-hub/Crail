@@ -299,6 +299,14 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
         p.brow = 0.45;
       }
       break;
+    case 'listen':
+      // Head on one side, weighing it up.
+      lookAtCube(0.34);
+      p.headRoll = 0.2 + Math.sin(time * 2.2) * 0.06;
+      p.lids = 0.12;
+      p.brow = -0.2;
+      p.armLx = p.armRx = -0.25;
+      break;
     case 'revere':
       lookAtCube(0.3);
       p.bend = 0.6;

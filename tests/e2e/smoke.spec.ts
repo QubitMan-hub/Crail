@@ -266,30 +266,51 @@ test('rolling into a ride takes the cube for a ride and earns a charm', async ({
   await expect(page.locator('#cult')).toContainText('1');
 });
 
-test('with a charm, bumping someone recruits them and they follow the cube', async ({ page }) => {
-  test.setTimeout(90_000);
+test('preaching: stand still beside someone with a charm and they join; bumping recruits nobody', async ({ page }) => {
+  test.setTimeout(120_000);
   await open(page, '?seed=3');
   await clearStage(page);
-  await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
   await direct(page, 'femboys.spawn', 0, 0, 1, 3, { idle: 999 });
-  await direct(page, 'cult.charms', 2); // a goth costs two
-  await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
-  // The goth joined instead of glaring. The charm is spent.
+  // Bumping, even with a charm in hand, only gets the old reaction.
+  await direct(page, 'cult.charms', 1);
+  await holdUntil(page, 'KeyS', 's.cube.bonks >= 1');
+  await page.waitForFunction(() => (window as any).__crail.state.femboys.npcs[0].mode === 'giggle');
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.members.length)).toBe(0);
+  // Standing still does it. The sermon shows its progress, then he joins and the charm is spent.
+  await page.waitForFunction(() => (window as any).__crail.state.cult.preaching !== null);
   await page.waitForFunction(() => (window as any).__crail.state.cult.members.length === 1);
-  expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs[0].cult)).toBe(true);
+  expect(await page.evaluate(() => (window as any).__crail.state.femboys.npcs[0].cult)).toBe(true);
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(0);
   await expect(page.locator('#cult')).toContainText('Cult 1');
-  // No charm left: the femboy reacts the way he always did.
-  await holdUntil(page, 'KeyS', 's.cube.bonks >= 2');
-  await page.waitForFunction(() => (window as any).__crail.state.femboys.npcs[0].mode === 'giggle');
-  expect(await page.evaluate(() => (window as any).__crail.state.femboys.npcs[0].cult)).toBe(false);
+  // A goth costs two. With one charm no sermon starts, and the game says why.
+  await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
+  await direct(page, 'cult.charms', 1);
+  await expect(page.locator('#hint')).toContainText('Goths cost', { timeout: 15_000 });
+  expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs[0].cult)).toBe(false);
   // Roll away: the recruit comes along.
   await holdUntil(page, 'KeyA', 's.cube.x <= -5');
   await page.waitForFunction(() => {
     const s = (window as any).__crail.state;
-    const n = s.goths.npcs[0];
+    const n = s.femboys.npcs[0];
     return Math.abs(n.x - s.cube.x) + Math.abs(n.z - s.cube.z) <= 3;
   });
+});
+
+test('preaching: moving away before the ring fills costs nothing', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
+  await direct(page, 'cult.charms', 2);
+  await page.waitForFunction(() => ((window as any).__crail.state.cult.preaching?.progress ?? 0) > 0.15);
+  await holdUntil(page, 'KeyA', 's.cube.x <= -3');
+  await page.waitForFunction(() => (window as any).__crail.state.cult.preaching === null);
+  await page.waitForTimeout(1500);
+  const after = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return { charms: s.cult.charms, members: s.cult.members.length, goth: s.goths.npcs[0].cult };
+  });
+  expect(after).toEqual({ charms: 2, members: 0, goth: false });
 });
 
 test('other characters get on the rides too, and get off again', async ({ page }) => {
@@ -328,12 +349,11 @@ test('recruiting has a price: a goth costs two charms, and the same ride will no
   await clearStage(page);
   await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
   await direct(page, 'cult.charms', 1);
-  await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
-  await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].mode === 'stare');
-  // One charm is not enough: she is not recruited, the charm is kept, and the game says why.
+  // One charm is not enough: no sermon starts, the charm is kept, and the game says why.
+  await expect(page.locator('#hint')).toContainText('Goths cost');
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.preaching)).toBeNull();
   expect(await page.evaluate(() => (window as any).__crail.state.cult.members.length)).toBe(0);
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
-  await expect(page.locator('#hint')).toContainText('Goths cost');
 
   await direct(page, 'cult.charms', 0);
   await direct(page, 'cube.teleport', 15, 9);
@@ -352,15 +372,16 @@ test('the leader cannot be recruited, however many charms the cube has', async (
   await direct(page, 'leader.spawn', 0, 1, 0, 2, { idle: 999 });
   await direct(page, 'leader.soldier');
   await direct(page, 'cult.charms', 6);
+  // Standing beside him with a full purse gets nowhere, and the game says so.
+  await expect(page.locator('#hint')).toContainText('answers to no one');
+  // Bumping him gets what it always got: he points, and the alarm goes up.
   await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
-  // He reacts the way he always does: he points, and the alarm goes up.
   await page.waitForFunction(() => (window as any).__crail.state.leader.npcs[0].mode === 'order');
   const after = await page.evaluate(() => {
     const s = (window as any).__crail.state;
     return { charms: s.cult.charms, members: s.cult.members.length, leader: s.leader.npcs[0].cult, soldier: s.soldiers.npcs[0].cult };
   });
-  expect(after).toEqual({ charms: 6, members: 0, leader: false, soldier: false });
-  await expect(page.locator('#hint')).toContainText('answers to no one');
+  expect(after).toMatchObject({ members: 0, leader: false });
 });
 
 test('one statue only, with a flag and guards who leave their posts when the cube meddles', async ({ page }) => {

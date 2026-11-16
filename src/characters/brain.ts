@@ -97,7 +97,7 @@ export type Mode =
   | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff'
   | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl'
   | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm' | 'revere'
-  | 'visit' | 'riding';
+  | 'visit' | 'riding' | 'listen';
 
 export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger' | 'heart' | 'sparkle';
 
@@ -746,6 +746,12 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
 
   /** On a ride. The ride decides when it is over. */
   riding() {},
+
+  /** Being preached to. Stands and listens for as long as the sermon lasts, then moves on. */
+  listen(n, w) {
+    faceCube(n, w);
+    if (n.t > n.timer) wander(n, w);
+  },
 
   march(n, w) {
     if (n.post && !n.cult) {

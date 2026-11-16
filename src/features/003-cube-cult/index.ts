@@ -3,14 +3,15 @@ import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
 import { tip } from '../../core/tip';
-import type { DirIndex, Lead, Npc } from '../../characters/brain';
+import { DIRS, type DirIndex, type Lead, type Npc } from '../../characters/brain';
 import { everyone, type Member } from '../../characters/cast';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
 import { box, fuse, group, HIP, mat } from '../../characters/rig';
 
 /**
- * The Cult of the Cube. Earn a charm (ride a ride, or visit the shrine), then bump
- * into anyone but the leader: they put on the robe and follow the cube from then on.
+ * The Cult of the Cube. Earn a charm (ride a ride, or visit the shrine), then stop
+ * beside anyone but the leader and stay still: the cube preaches, a ring fills, and
+ * they put on the robe and follow the cube from then on. Bumping people recruits nobody.
  * Stop moving and they gather and worship. Take them to the temple to be ordained:
  * priests make the shrine give more, and the high priest recruits on his own.
  */
@@ -35,6 +36,11 @@ type Rank = 'acolyte' | 'priest' | 'high';
 /** How often the high priest goes out and brings someone back, in seconds. */
 const PREACH_EVERY = 45;
 const GOLD = '#d6b24a';
+/** How long the cube must hold still beside someone to win them over, per charm they cost. */
+const PREACH_SECONDS = 1.6;
+const PREACH_SETTLE = 0.35;
+/** What they may be doing when a sermon starts. Not on a ride, not mid-gag, not already listening. */
+const WILL_LISTEN = ['idle', 'walk', 'march', 'stare', 'lost', 'snub', 'wave', 'giggle', 'pat', 'inspect', 'salute', 'visit'];
 /** [members needed, name, what the player is told]. */
 const RANKS: [number, string, string][] = [
   [1, 'Following', 'You have a follower. Stand still and see what they do.'],
@@ -206,6 +212,11 @@ export const cubeCult: Feature = {
       lead.z = z;
     });
 
+    // A bump counts as facing that way too, even though the cube did not move.
+    ctx.events.on<{ x: number; z: number; tx: number; tz: number }>('cube:bonk', ({ x, z, tx, tz }) => {
+      lead.dir = (tx > x ? 0 : tx < x ? 2 : tz > z ? 1 : 3) as DirIndex;
+    });
+
     const members: Npc[] = [];
     let clock = 0;
 
@@ -231,22 +242,13 @@ export const cubeCult: Feature = {
       charms: 0,
       members,
       rank: '',
-      /** Called when the cube bumps someone. True if that bump recruited them. */
+      /** Who the cube is preaching to right now, and how far through the sermon it is (0..1). */
+      preaching: null as { id: string; progress: number } | null,
+      /** Recruit someone on the spot, if the cube can pay. True if it worked. */
       tryRecruit(m: Member): boolean {
         const n = m.n;
-        if (state.charms <= 0 || n.cult) return false;
-        if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding'].includes(n.mode)) return false;
-        if (n.persona.kind === 'leader') {
-          // He cannot be recruited. He reacts the way he reacts to everything: by pointing.
-          tip('He answers to no one. Least of all a cube.');
-          return false;
-        }
-        const cost = COST[n.persona.kind] ?? 1;
-        if (state.charms < cost) {
-          // Not enough. They react the way they always did, and you learn the price.
-          tip(`${NAMES[n.persona.kind] ?? 'They'} cost ✦${cost}. You have ✦${state.charms}.`);
-          return false;
-        }
+        const cost = COST[n.persona.kind];
+        if (n.cult || cost === undefined || state.charms < cost || n.mode === 'riding') return false;
         state.charms -= cost;
         enlist(m);
         ctx.bump(0.1);
@@ -261,7 +263,7 @@ export const cubeCult: Feature = {
       state.charms = Math.min(MAX_CHARMS, state.charms + n);
       if (state.charms > before) {
         refresh(true);
-        if (members.length === 0) tip('Bump into someone to recruit them. Goths cost ✦2.');
+        if (members.length === 0) tip('Stop next to someone and stay still to preach. Goths cost ✦2.');
       }
     };
 
@@ -283,6 +285,13 @@ export const cubeCult: Feature = {
     }
 
     ctx.events.on<[DirIndex]>('direct:cult.face', ([d]) => (lead.dir = d));
+    ctx.events.on<[string, number]>('direct:cult.recruit', ([cast, index]) => {
+      const m = everyone(ctx).find((e) => e.n === ctx.state[cast]?.npcs[index]);
+      if (m && !m.n.cult) {
+        enlist(m);
+        refresh(false);
+      }
+    });
     ctx.events.on<[number]>('direct:cult.charms', ([n]) => {
       state.charms = n;
       refresh(false);
@@ -340,6 +349,76 @@ export const cubeCult: Feature = {
     ctx.scene.add(aura);
     const cubeMesh = ctx.scene.getObjectByName('cube');
     const at = new THREE.Vector3();
+
+    // ---- Preaching: how the cube actually recruits ----------------------------------
+    // A faint ring appears under whoever is listening, and fills as the sermon goes on.
+    const ringOutline = new THREE.Mesh(
+      new THREE.RingGeometry(0.4, 0.46, 40),
+      new THREE.MeshBasicMaterial({ color: INK, transparent: true, opacity: 0, depthWrite: false }),
+    );
+    const ringFill = new THREE.Mesh(
+      new THREE.CircleGeometry(0.4, 40),
+      new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0, depthWrite: false }),
+    );
+    for (const r of [ringOutline, ringFill]) {
+      r.rotation.x = -Math.PI / 2;
+      ctx.scene.add(r);
+    }
+    let sermon: { m: Member; t: number; need: number } | null = null;
+    let lastNag = -99;
+    const endSermon = (convert: boolean) => {
+      if (!sermon) return;
+      const { m } = sermon;
+      sermon = null;
+      state.preaching = null;
+      if (convert) return void state.tryRecruit(m);
+      if (m.n.mode === 'listen') m.n.timer = 0; // they shrug and move on
+    };
+    const preach = (dt: number) => {
+      const still = !cube.moving && !cube.pinned && !cube.carried && cube.idleFor > PREACH_SETTLE;
+      const beside = (n: Npc) => n.nx === null && Math.abs(n.x - cube.x) + Math.abs(n.z - cube.z) === 1;
+      if (sermon && (!still || !beside(sermon.m.n) || sermon.m.n.cult || state.charms < (COST[sermon.m.n.persona.kind] ?? 99))) {
+        endSermon(false);
+      }
+      if (!sermon && still && state.charms > 0) {
+        const near = everyone(ctx).filter((e) => !e.n.cult && beside(e.n) && WILL_LISTEN.includes(e.n.mode));
+        // With several people in reach: whoever the cube is facing, otherwise the cheapest.
+        const price = (e: Member) => COST[e.n.persona.kind] ?? 99;
+        const facing = (e: Member) => e.n.x === cube.x + DIRS[lead.dir][0] && e.n.z === cube.z + DIRS[lead.dir][1];
+        const pick = near
+          .filter((e) => price(e) <= state.charms)
+          .sort((p, q) => Number(facing(q)) - Number(facing(p)) || price(p) - price(q))[0];
+        if (pick) {
+          const need = COST[pick.n.persona.kind] * PREACH_SECONDS;
+          sermon = { m: pick, t: 0, need };
+          Object.assign(pick.n, { mode: 'listen', t: 0, timer: need + 1, wait: 0, focus: null, goal: null });
+          pick.n.emote = { kind: 'q', t: 0 };
+        } else if (near.length && clock - lastNag > 8) {
+          // Someone is there, but not someone the cube can win over right now. Say why.
+          lastNag = clock;
+          const who = near[0].n.persona.kind;
+          const cost = COST[who];
+          tip(cost === undefined ? 'He answers to no one. Least of all a cube.' : `${NAMES[who]} cost ✦${cost}. You have ✦${state.charms}.`);
+        }
+      }
+      const glow = ringFill.material as THREE.MeshBasicMaterial;
+      const line = ringOutline.material as THREE.MeshBasicMaterial;
+      if (!sermon) {
+        glow.opacity = 0;
+        line.opacity = 0;
+        return;
+      }
+      sermon.t += dt;
+      const progress = Math.min(1, sermon.t / sermon.need);
+      state.preaching = { id: sermon.m.n.id, progress };
+      const { x, z } = sermon.m.n;
+      ringOutline.position.set(x, 0.014, z);
+      ringFill.position.set(x, 0.013, z);
+      ringFill.scale.setScalar(Math.max(0.001, progress));
+      line.opacity = 0.35;
+      glow.opacity = 0.55;
+      if (progress >= 1) endSermon(true);
+    };
 
     // ---- The counter in the corner ---------------------------------------------
     const hud = document.createElement('div');
@@ -434,6 +513,8 @@ export const cubeCult: Feature = {
         n.slot = i;
         n.lead = lead;
       });
+
+      preach(dt);
 
       if (!ready && (refill += dt) > SHRINE_REFILL) ready = true;
       idol.position.y = 1.1 + Math.sin(time * 2) * 0.05;
