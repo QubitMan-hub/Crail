@@ -42,10 +42,15 @@ const SWING_REACH = SWING.anchor + Math.sin(SWING.tilt) * SWING.chain;
 const SWING_SEAT_Y = SWING.crown - Math.cos(SWING.tilt) * SWING.chain + 0.05;
 const TRAMPOLINE_SPOTS = [[0, 0], [0.75, 0.7], [-0.75, 0.7], [0.75, -0.7], [-0.75, -0.7]];
 
-type RideKind = 'wheel' | 'carousel' | 'trampoline' | 'swing';
-const KINDS: RideKind[] = ['wheel', 'carousel', 'trampoline', 'swing'];
+/** Benches count as the gentlest ride in the park: you sit, and nothing happens. */
+const BENCHES: [number, number][] = [[19, -4], [25, -4], [19, 4], [25, 4], [34, -2]];
+const BENCH_SECONDS = 7;
+
+type RideKind = 'wheel' | 'carousel' | 'trampoline' | 'swing' | 'bench';
+const KINDS: RideKind[] = ['wheel', 'carousel', 'trampoline', 'swing', 'bench'];
 const CAPACITY: Record<RideKind, number> = {
   wheel: WHEEL.seats, carousel: CAROUSEL.seats, trampoline: TRAMPOLINE_SPOTS.length, swing: SWING.seats,
+  bench: BENCHES.length * 2,
 };
 const HOP = 0.45;
 
@@ -62,97 +67,105 @@ interface Rider {
 }
 
 // ---- Scenery ------------------------------------------------------------------
+// Everything here is sized against the characters, who stand about 1.7 units tall:
+// tree canopies start above head height, lamps are well overhead, a bench seat is
+// at knee height, and the ticket booth is something a person could stand inside.
 
 function roundTree(p: THREE.Object3D, x: number, z: number, s = 1): void {
   const t = group(p, x, 0, z);
   t.scale.setScalar(s);
-  box(t, TRUNK, 0.24, 0.8, 0.24, 0, 0.4, 0);
-  box(t, LEAF, 1.05, 0.75, 1.05, 0, 1.1, 0);
-  box(t, LEAF_DARK, 0.78, 0.55, 0.78, 0.06, 1.7, -0.04);
-  box(t, LEAF, 0.44, 0.38, 0.44, 0, 2.12, 0.03);
+  box(t, TRUNK, 0.28, 2.0, 0.28, 0, 1.0, 0);
+  box(t, LEAF, 1.5, 0.95, 1.5, 0, 2.4, 0);
+  box(t, LEAF_DARK, 1.12, 0.7, 1.12, 0.08, 3.15, -0.05);
+  box(t, LEAF, 0.64, 0.5, 0.64, 0, 3.7, 0.04);
 }
 
 function pine(p: THREE.Object3D, x: number, z: number, s = 1): void {
   const t = group(p, x, 0, z);
   t.scale.setScalar(s);
-  box(t, TRUNK, 0.2, 0.6, 0.2, 0, 0.3, 0);
-  [1.0, 0.78, 0.56, 0.34].forEach((w, i) => box(t, i % 2 ? LEAF_DARK : PINE, w, 0.46, w, 0, 0.75 + i * 0.42, 0));
+  box(t, TRUNK, 0.24, 1.7, 0.24, 0, 0.85, 0);
+  [1.5, 1.2, 0.9, 0.6, 0.32].forEach((w, i) => box(t, i % 2 ? LEAF_DARK : PINE, w, 0.52, w, 0, 2.0 + i * 0.47, 0));
 }
 
+const LAMP_TOP = 2.85;
 function lamp(p: THREE.Object3D, x: number, z: number, bulbs: THREE.Mesh[]): void {
   const l = group(p, x, 0, z);
-  box(l, INK, 0.2, 0.12, 0.2, 0, 0.06, 0);
-  box(l, INK, 0.08, 2.0, 0.08, 0, 1.05, 0);
-  box(l, INK, 0.3, 0.06, 0.3, 0, 2.08, 0);
+  box(l, INK, 0.24, 0.14, 0.24, 0, 0.07, 0);
+  box(l, INK, 0.09, LAMP_TOP - 0.2, 0.09, 0, (LAMP_TOP - 0.2) / 2 + 0.1, 0);
+  box(l, INK, 0.34, 0.06, 0.34, 0, LAMP_TOP - 0.05, 0);
   const bulb = new THREE.Mesh(
-    new THREE.BoxGeometry(0.24, 0.26, 0.24),
+    new THREE.BoxGeometry(0.28, 0.3, 0.28),
     new THREE.MeshStandardMaterial({ color: '#fff3c9', emissive: '#ffc94d', emissiveIntensity: 0.9 }),
   );
-  bulb.position.set(x, 2.25, z);
+  bulb.position.set(x, LAMP_TOP + 0.13, z);
   bulbs.push(bulb);
 }
 
+/** Every bench faces the same way: toward the camera's left (+z), back rest behind. */
+const BENCH_SEAT = 0.5;
 function bench(p: THREE.Object3D, x: number, z: number): void {
   const b = group(p, x, 0, z);
-  box(b, WOOD, 0.9, 0.07, 0.36, 0, 0.36, 0.04);
-  box(b, WOOD, 0.9, 0.3, 0.06, 0, 0.6, -0.14);
-  for (const s of [1, -1]) box(b, INK, 0.07, 0.36, 0.34, s * 0.38, 0.18, 0.04);
+  box(b, WOOD, 0.96, 0.08, 0.42, 0, BENCH_SEAT - 0.04, 0.06);
+  box(b, WOOD, 0.96, 0.4, 0.07, 0, BENCH_SEAT + 0.3, -0.16);
+  for (const s of [1, -1]) {
+    box(b, INK, 0.07, BENCH_SEAT - 0.06, 0.4, s * 0.42, (BENCH_SEAT - 0.06) / 2, 0.06);
+    box(b, INK, 0.07, 0.3, 0.07, s * 0.42, BENCH_SEAT + 0.12, 0.2); // arm rest
+  }
 }
 
 function fountain(p: THREE.Object3D, x: number, z: number): void {
   const f = group(p, x, 0, z);
-  box(f, STONE, 0.96, 0.24, 0.96, 0, 0.12, 0);
-  box(f, WATER, 0.8, 0.05, 0.8, 0, 0.245, 0);
-  box(f, STONE, 0.22, 0.7, 0.22, 0, 0.55, 0);
-  box(f, STONE, 0.56, 0.1, 0.56, 0, 0.9, 0);
-  box(f, WATER, 0.44, 0.05, 0.44, 0, 0.96, 0);
-  box(f, WATER, 0.1, 0.34, 0.1, 0, 1.12, 0);
+  box(f, STONE, 1.4, 0.34, 1.4, 0, 0.17, 0);
+  box(f, WATER, 1.2, 0.06, 1.2, 0, 0.345, 0);
+  box(f, STONE, 0.3, 1.0, 0.3, 0, 0.8, 0);
+  box(f, STONE, 0.82, 0.12, 0.82, 0, 1.3, 0);
+  box(f, WATER, 0.66, 0.06, 0.66, 0, 1.37, 0);
+  box(f, STONE, 0.18, 0.5, 0.18, 0, 1.6, 0);
+  box(f, STONE, 0.4, 0.1, 0.4, 0, 1.86, 0);
+  box(f, WATER, 0.28, 0.06, 0.28, 0, 1.92, 0);
 }
 
 function ticketBooth(p: THREE.Object3D, x: number, z: number): void {
   const b = group(p, x, 0, z);
-  for (let i = 0; i < 4; i++) box(b, i % 2 ? CREAM : RED, 0.215, 1.25, 0.86, -0.3225 + i * 0.215, 0.625, 0);
-  box(b, INK, 0.02, 0.4, 0.5, 0.44, 0.85, 0); // the window, facing the path
-  box(b, CREAM, 1.05, 0.08, 1.05, 0, 1.3, 0);
-  box(b, RED, 0.8, 0.14, 0.8, 0, 1.4, 0);
-  box(b, SUN, 0.2, 0.2, 0.2, 0, 1.56, 0);
-  const awning = box(b, RED, 0.4, 0.05, 0.9, 0.6, 1.12, 0);
+  for (let i = 0; i < 4; i++) box(b, i % 2 ? CREAM : RED, 0.24, 2.0, 0.96, -0.36 + i * 0.24, 1.0, 0);
+  box(b, INK, 0.02, 0.6, 0.56, 0.49, 1.35, 0); // the window, facing the path
+  box(b, CREAM, 0.3, 0.06, 0.66, 0.6, 1.02, 0); // counter
+  box(b, CREAM, 1.2, 0.1, 1.2, 0, 2.05, 0);
+  box(b, RED, 0.9, 0.18, 0.9, 0, 2.19, 0);
+  box(b, SUN, 0.24, 0.24, 0.24, 0, 2.4, 0);
+  const awning = box(b, RED, 0.5, 0.06, 1.04, 0.68, 1.82, 0);
   awning.rotation.z = -0.35;
 }
 
-function balloonCart(p: THREE.Object3D, x: number, z: number): void {
+function balloonCart(p: THREE.Object3D, x: number, z: number): THREE.Group {
   const c = group(p, x, 0, z);
-  box(c, WOOD, 0.7, 0.3, 0.5, 0, 0.42, 0);
-  box(c, CREAM, 0.76, 0.05, 0.56, 0, 0.6, 0);
-  for (const s of [1, -1]) box(c, INK, 0.28, 0.28, 0.06, s * 0.2, 0.16, 0.26);
-  const spots: [number, number, number, string][] = [
-    [-0.2, 1.75, 0, RED], [0.12, 2.05, 0.08, BLUE], [0.34, 1.65, -0.1, SUN], [-0.05, 2.4, -0.06, PINK], [0.26, 2.3, 0.14, LAV],
-  ];
-  for (const [bx, by, bz, color] of spots) {
-    box(c, color, 0.3, 0.36, 0.3, bx, by, bz);
-    box(c, INK, 0.012, by - 0.62 - 0.18, 0.012, bx * 0.6, (by - 0.18 + 0.62) / 2, bz * 0.6);
-  }
+  box(c, WOOD, 0.8, 0.4, 0.56, 0, 0.6, 0);
+  box(c, CREAM, 0.88, 0.06, 0.64, 0, 0.83, 0);
+  for (const s of [1, -1]) box(c, INK, 0.36, 0.36, 0.06, s * 0.24, 0.2, 0.3);
+  return c;
 }
 
 /** A string of little flags between two points. */
-function bunting(p: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, sag = 0.25): void {
-  const n = Math.max(4, Math.round(a.distanceTo(b) / 0.32));
+function bunting(p: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, sag = 0.3): void {
+  const n = Math.max(4, Math.round(a.distanceTo(b) / 0.34));
   for (let i = 0; i <= n; i++) {
     const k = i / n;
     const at = a.clone().lerp(b, k);
     at.y -= Math.sin(Math.PI * k) * sag;
-    const flag = box(p, [RED, SUN, BLUE, PINK, LAV][i % 5], 0.16, 0.16, 0.03, at.x, at.y - 0.08, at.z);
+    const flag = box(p, [RED, SUN, BLUE, PINK, LAV][i % 5], 0.18, 0.18, 0.03, at.x, at.y - 0.09, at.z);
     flag.rotation.set(0, Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2, Math.PI / 4);
   }
 }
 
+/** The gate: three cells wide and tall enough to walk under without ducking. */
+const GATE_HALF = 2;
 function gate(p: THREE.Object3D): THREE.Mesh {
   const { x, z } = PARK.gate;
   for (const s of [1, -1]) {
-    for (let i = 0; i < 5; i++) box(p, i % 2 ? CREAM : RED, 0.34, 0.5, 0.34, x, 0.25 + i * 0.5, z + s);
-    box(p, SUN, 0.42, 0.14, 0.42, x, 2.57, z + s);
+    for (let i = 0; i < 6; i++) box(p, i % 2 ? CREAM : RED, 0.42, 0.56, 0.42, x, 0.28 + i * 0.56, z + s * GATE_HALF);
+    box(p, SUN, 0.52, 0.16, 0.52, x, 3.44, z + s * GATE_HALF);
   }
-  box(p, RED, 0.3, 0.2, 2.6, x, 2.75, z);
+  box(p, RED, 0.36, 0.24, GATE_HALF * 2 + 0.6, x, 3.64, z);
   // The sign faces into the sun, which is also where the camera is.
   const c = document.createElement('canvas');
   c.width = 512;
@@ -169,17 +182,17 @@ function gate(p: THREE.Object3D): THREE.Mesh {
   tex.colorSpace = THREE.SRGBColorSpace;
   const plain = new THREE.MeshStandardMaterial({ color: CREAM, roughness: 0.8 });
   const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
-  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.56, 2.2), [face, plain, plain, plain, plain, plain]);
-  sign.position.set(x + 0.12, 3.14, z);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.8, 3.2), [face, plain, plain, plain, plain, plain]);
+  sign.position.set(x + 0.14, 4.18, z);
   sign.castShadow = true;
   return sign;
 }
 
 function fence(p: THREE.Object3D, x: number, z: number): void {
   const f = group(p, x, 0, z);
-  box(f, CREAM, 0.08, 0.06, 1.0, 0, 0.4, 0);
-  box(f, CREAM, 0.08, 0.06, 1.0, 0, 0.2, 0);
-  for (const dz of [-0.33, 0, 0.33]) box(f, CREAM, 0.1, 0.56, 0.12, 0, 0.28, dz);
+  box(f, CREAM, 0.08, 0.07, 1.0, 0, 0.56, 0);
+  box(f, CREAM, 0.08, 0.07, 1.0, 0, 0.28, 0);
+  for (const dz of [-0.33, 0, 0.33]) box(f, CREAM, 0.1, 0.78, 0.12, 0, 0.39, dz);
 }
 
 // ---- Rides ----------------------------------------------------------------------
@@ -388,10 +401,11 @@ export const park: Feature = {
       solid.push([x, z]);
     };
     put(fountain, PLAZA.x, PLAZA.z);
-    put(ticketBooth, 11, -2);
-    put(balloonCart, 11, 2);
-    // Benches round the plaza and one at the far end of the walk.
-    for (const [x, z] of [[19, -4], [25, -4], [19, 4], [25, 4], [34, -2]] as const) put(bench, x, z);
+    put(ticketBooth, 11, -3);
+    balloonCart(scenery, 11, 3);
+    solid.push([11, 3]);
+    // Benches round the plaza and one at the far end of the walk. They are seats, not scenery.
+    for (const [x, z] of BENCHES) bench(scenery, x, z);
     // Lamps at the plaza corners and along the main walk.
     const lamps = [[20, -2], [24, -2], [24, 2], [20, 2], [15, -2], [15, 2], [30, -2], [30, 2]] as const;
     for (const [x, z] of lamps) {
@@ -408,16 +422,16 @@ export const park: Feature = {
     for (const [x, z, kind, scale] of trees) put((p, tx, tz) => (kind === 'pine' ? pine : roundTree)(p, tx, tz, scale), x, z);
     // A picket fence along the front, either side of the gate.
     for (let z = PARK.z; z <= PARK.z + PARK.d - 1; z++) {
-      if (Math.abs(z - PARK.gate.z) <= 1) continue;
+      if (Math.abs(z - PARK.gate.z) <= GATE_HALF) continue;
       put(fence, PARK.x, z);
     }
-    solid.push([PARK.gate.x, PARK.gate.z - 1], [PARK.gate.x, PARK.gate.z + 1]);
+    solid.push([PARK.gate.x, PARK.gate.z - GATE_HALF], [PARK.gate.x, PARK.gate.z + GATE_HALF]);
     const signBoard = gate(scenery);
     // Bunting strung round the plaza.
     for (let i = 0; i < 4; i++) {
       const [ax, az] = lamps[i];
       const [bx, bz] = lamps[(i + 1) % 4];
-      bunting(scenery, new THREE.Vector3(ax, 2.1, az), new THREE.Vector3(bx, 2.1, bz));
+      bunting(scenery, new THREE.Vector3(ax, LAMP_TOP - 0.15, az), new THREE.Vector3(bx, LAMP_TOP - 0.15, bz));
     }
     // Flowers, scattered on the grass between cells so nobody treads on them.
     const onPath = (x: number, z: number) => paths.some(([px, pz, w, d]) => x > px - 0.6 && x < px + w - 0.4 && z > pz - 0.6 && z < pz + d - 0.4);
@@ -435,6 +449,25 @@ export const park: Feature = {
     scenery.add(signBoard);
     for (const b of bulbs) root.add(b);
 
+    // Things that move a little on their own: balloons tugging at their strings,
+    // and water hopping out of the fountain.
+    const balloons: { mesh: THREE.Mesh; string: THREE.Mesh; base: THREE.Vector3; phase: number }[] = [];
+    const balloonSpots: [number, number, number, string][] = [
+      [-0.22, 2.2, 0, RED], [0.14, 2.55, 0.1, BLUE], [0.38, 2.1, -0.12, SUN], [-0.05, 2.95, -0.08, PINK], [0.3, 2.85, 0.16, LAV],
+    ];
+    balloonSpots.forEach(([bx, by, bz, color], i) => {
+      const mesh = box(root, color, 0.34, 0.4, 0.34, 11 + bx, by, 3 + bz);
+      const string = box(root, INK, 0.014, 1, 0.014, 11, 1, 3);
+      string.castShadow = false;
+      balloons.push({ mesh, string, base: mesh.position.clone(), phase: i * 1.7 });
+    });
+    const drops: THREE.Mesh[] = [];
+    for (let i = 0; i < 10; i++) {
+      const d = box(root, WATER, 0.09, 0.09, 0.09, PLAZA.x, 1.9, PLAZA.z);
+      d.castShadow = false;
+      drops.push(d);
+    }
+
     const { wheel, cars } = buildWheel(root);
     const { turn, mounts } = buildCarousel(root);
     const { mat, mark } = buildTrampoline(root);
@@ -442,7 +475,7 @@ export const park: Feature = {
     addLandmark(ctx, 'Park', PARK.gate.x + 3, PARK.gate.z);
 
     // ---- Everything solid claims its cells ---------------------------------------
-    const cellsOf: Record<RideKind, [number, number][]> = { wheel: [], carousel: [], trampoline: [], swing: [] };
+    const cellsOf: Record<RideKind, [number, number][]> = { wheel: [], carousel: [], trampoline: [], swing: [], bench: [...BENCHES] };
     for (let dx = -2; dx <= 2; dx++) cellsOf.wheel.push([WHEEL.x + dx, WHEEL.z]);
     for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) cellsOf.carousel.push([CAROUSEL.x + dx, CAROUSEL.z + dz]);
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) cellsOf.trampoline.push([TRAMPOLINE.x + dx, TRAMPOLINE.z + dz]);
@@ -471,11 +504,16 @@ export const park: Feature = {
       carousel: boardingCells('carousel'),
       trampoline: boardingCells('trampoline'),
       swing: boardingCells('swing'),
+      bench: BENCHES.map(([x, z]) => [x, z + 1] as [number, number]), // you sit down from the front
     };
     const nextTo = (kind: RideKind, x: number, z: number) => boarding[kind].some(([bx, bz]) => bx === x && bz === z);
 
     // ---- Riding ------------------------------------------------------------------
-    const state = { rides: 0, riding: null as RideKind | null, riders: 0, npcRides: 0 };
+    const state = {
+      rides: 0, riding: null as RideKind | null, riders: 0, npcRides: 0,
+      /** Where each real ride is, for anything that wants to put a marker over it. */
+      spots: { wheel: [WHEEL.x, 9.2, WHEEL.z], carousel: [CAROUSEL.x, 5.6, CAROUSEL.z], trampoline: [TRAMPOLINE.x, 3.2, TRAMPOLINE.z], swing: [SWING.x, 6.6, SWING.z] },
+    };
     ctx.state.park = state;
     const cube = ctx.state.cube;
     const cubeMesh = ctx.scene.getObjectByName('cube');
@@ -497,7 +535,13 @@ export const park: Feature = {
     };
 
     const board = (who: 'cube' | Member, kind: RideKind, x: number, z: number): boolean => {
-      const seat = freeSeat(kind);
+      let seat = freeSeat(kind);
+      if (kind === 'bench') {
+        // Sit on the bench you are standing in front of, if it has room.
+        const b = BENCHES.findIndex(([bx, bz]) => bx === x && bz === z - 1);
+        const taken = new Set(riders.filter((r) => r.kind === 'bench').map((r) => r.seat));
+        seat = b < 0 ? -1 : [b * 2, b * 2 + 1].find((sidx) => !taken.has(sidx)) ?? -1;
+      }
       if (seat < 0) return false;
       riders.push({ who, kind, seat, t: 0, from: new THREE.Vector3(x, 0, z), startAngle: wheelAngle, leaving: -1 });
       return true;
@@ -551,9 +595,15 @@ export const park: Feature = {
         return a + Math.PI / 2;
       }
       if (r.kind === 'swing') {
-        const a = swingAngle + (r.seat / SWING.seats) * Math.PI * 2;
-        seatAt.set(SWING.x + Math.sin(a) * SWING_REACH, SWING_SEAT_Y, SWING.z + Math.cos(a) * SWING_REACH);
-        return a; // facing outward
+        // Exactly where the chair is, including the crown's slow tilt.
+        const a0 = (r.seat / SWING.seats) * Math.PI * 2;
+        seatAt.set(Math.sin(a0) * SWING_REACH, SWING_SEAT_Y, Math.cos(a0) * SWING_REACH).applyMatrix4(spin.matrixWorld);
+        return swingAngle + a0; // facing outward
+      }
+      if (r.kind === 'bench') {
+        const [bx, bz] = BENCHES[Math.floor(r.seat / 2)];
+        seatAt.set(bx + (r.seat % 2 ? 0.24 : -0.24), BENCH_SEAT, bz + 0.06);
+        return 0;
       }
       // Trampoline: everyone bounces to their own beat, a little higher each time.
       const [ox, oz] = TRAMPOLINE_SPOTS[r.seat];
@@ -566,7 +616,7 @@ export const park: Feature = {
     };
     const finished = (r: Rider): boolean => {
       if (r.kind === 'wheel') return wheelAngle - r.startAngle >= Math.PI * 2;
-      return r.t >= { carousel: CAROUSEL.seconds, trampoline: TRAMPOLINE.seconds, swing: SWING.seconds }[r.kind];
+      return r.t >= { carousel: CAROUSEL.seconds, trampoline: TRAMPOLINE.seconds, swing: SWING.seconds, bench: BENCH_SECONDS }[r.kind];
     };
 
     let sinceInvite = 0;
@@ -576,9 +626,30 @@ export const park: Feature = {
       wheelAngle += dt * WHEEL.speed;
       turnAngle += dt * CAROUSEL.speed;
       swingAngle += dt * SWING.speed;
-      spin.rotation.y = swingAngle;
+      // The crown leans as it turns, so the chairs rise and dip in a wave.
+      spin.rotation.set(Math.sin(time * 0.9) * 0.075, swingAngle, Math.cos(time * 0.9) * 0.075);
+      spin.updateMatrixWorld(true);
+      balloons.forEach((b) => {
+        b.mesh.position.set(
+          b.base.x + Math.sin(time * 1.3 + b.phase) * 0.06,
+          b.base.y + Math.sin(time * 1.9 + b.phase) * 0.07,
+          b.base.z + Math.cos(time * 1.1 + b.phase) * 0.05,
+        );
+        // The string runs from the cart up to the balloon.
+        const len = b.mesh.position.y - 0.2 - 0.86;
+        b.string.scale.y = len;
+        b.string.position.set((11 + b.mesh.position.x) / 2, 0.86 + len / 2, (3 + b.mesh.position.z) / 2);
+        b.string.rotation.set(Math.atan2(b.mesh.position.z - 3, len), 0, -Math.atan2(b.mesh.position.x - 11, len));
+      });
+      drops.forEach((d, i) => {
+        const k = (time * 0.9 + i / drops.length) % 1;
+        const a = i * 2.4;
+        const out = k * 0.52;
+        d.position.set(PLAZA.x + Math.cos(a) * out, 1.95 + 0.5 * k - 2.1 * k * k, PLAZA.z + Math.sin(a) * out);
+        d.scale.setScalar(1 - k * 0.5);
+      });
       wheel.rotation.z = wheelAngle;
-      for (const car of cars) car.rotation.z = -wheelAngle; // cars hang level
+      cars.forEach((car, i) => (car.rotation.z = -wheelAngle + Math.sin(time * 1.6 + i * 0.9) * 0.07)); // cars hang level, and sway
       turn.rotation.y = turnAngle;
       mounts.forEach((m, i) => (m.position.y = 0.95 + Math.sin(time * 2.2 + i * 1.7) * 0.2));
       bulbs.forEach((b, i) => ((b.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.8 + Math.sin(time * 3 + i) * 0.15));
@@ -604,12 +675,17 @@ export const park: Feature = {
               r.from.z + (seatAt.z - r.from.z) * on,
             );
             const bounce = r.kind === 'trampoline' ? Math.max(0, r.t - HOP) / 0.92 : 0;
+            const squash = r.kind === 'trampoline' && on === 1 ? Math.max(0, 0.2 - (seatAt.y - TRAMPOLINE.top)) : 0;
+            cubeMesh.scale.set(1 + squash * 0.8, 1 - squash * 1.5, 1 + squash * 0.8);
             cubeMesh.rotation.set(bounce >= 1 && on === 1 ? (bounce % 1) * Math.PI * 2 : 0, r.kind === 'carousel' || r.kind === 'swing' ? yaw * on : 0, 0);
           }
         } else {
           const n = r.who.n;
           const s = r.who.rig.root.scale.x;
           const sitting = r.kind !== 'trampoline';
+          // Squash as they hit the mat, stretch on the way up.
+          const low = r.kind === 'trampoline' && on === 1 ? Math.max(0, 0.22 - (seatAt.y - TRAMPOLINE.top)) : 0;
+          r.who.rig.body.scale.set(1 + low * 0.9, 1 - low * 1.4, 1 + low * 0.9);
           // Seated: hips rest on the seat. Bouncing: feet on the mat.
           const y = sitting ? seatAt.y + (0.1 - HIP) * s : seatAt.y;
           n.carry = {
@@ -617,7 +693,7 @@ export const park: Feature = {
             y: y * on + hop,
             z: r.from.z + (seatAt.z - r.from.z) * on,
             yaw,
-            pose: sitting ? 'sit' : 'bounce',
+            pose: r.kind === 'bench' ? 'rest' : sitting ? 'sit' : 'bounce',
           };
         }
 
@@ -628,10 +704,12 @@ export const park: Feature = {
             state.rides += 1;
             cube.carried = false;
             ctx.events.emit('direct:cube.teleport', [r.from.x, r.from.z]);
-            ctx.events.emit('park:rode', { ride: r.kind });
+            if (r.kind !== 'bench') ctx.events.emit('park:rode', { ride: r.kind });
+            cubeMesh?.scale.set(1, 1, 1);
             ctx.bump(0.08);
           } else {
             const n = r.who.n;
+            r.who.rig.body.scale.set(1, 1, 1);
             n.carry = null;
             n.mode = n.persona.wanders ? 'idle' : 'march';
             n.t = 0;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bake, box, buildFace, group, HIP, SCALE, type Rig } from '../../characters/rig';
+import { bake, box, buildFace, fuse, group, HIP, SCALE, type Rig } from '../../characters/rig';
 
 /**
  * The leader and his soldiers. He is a blocky parody: dark buttoned-up suit, stocky
@@ -144,4 +144,103 @@ export function buildRocketSite(): { site: THREE.Group; rocket: THREE.Group; fla
   flame.castShadow = false;
   flame.visible = false;
   return { site, rocket, flame };
+}
+
+/**
+ * A tank. It joins the column like any other soldier, which is why it is built on the
+ * same skeleton: the hull is its "torso" and the turret is its "head", so it turns to
+ * look at things the way people do.
+ */
+export function buildTank(emote: THREE.Sprite): Rig {
+  const root = new THREE.Group();
+  const body = group(root);
+  const torso = group(body, 0, HIP, 0);
+  const hull = group(torso, 0, -HIP, 0);
+  box(hull, OLIVE, 0.82, 0.3, 1.1, 0, 0.42, 0);
+  box(hull, OLIVE_DARK, 0.86, 0.1, 0.9, 0, 0.6, -0.04);
+  for (const s of [1, -1]) {
+    box(hull, INK, 0.2, 0.34, 1.16, s * 0.4, 0.2, 0);
+    for (let i = 0; i < 4; i++) box(hull, '#3b3b3f', 0.21, 0.2, 0.2, s * 0.4, 0.2, -0.42 + i * 0.28); // road wheels
+  }
+  box(hull, GOLD, 0.12, 0.12, 0.014, 0, 0.42, 0.556);
+  const legL = group(body, 0.12, HIP, 0);
+  const legR = group(body, -0.12, HIP, 0);
+  const armL = group(body, 0.3, 1.36, 0);
+  const armR = group(body, -0.3, 1.36, 0);
+
+  // The turret hangs from the head pivot, which sits at head height on this skeleton.
+  const head = group(body, 0, 1.4, 0);
+  const turret = group(head, 0, -1.4, 0);
+  box(turret, OLIVE, 0.56, 0.26, 0.6, 0, 0.78, -0.06);
+  box(turret, OLIVE_DARK, 0.3, 0.1, 0.3, 0.06, 0.95, -0.1); // hatch
+  box(turret, OLIVE_DARK, 0.11, 0.11, 0.78, 0, 0.78, 0.6); // barrel
+  box(turret, INK, 0.14, 0.14, 0.1, 0, 0.78, 0.98);
+  box(turret, RED, 0.03, 0.42, 0.03, -0.2, 1.1, -0.26); // aerial with a little pennant
+  box(turret, RED, 0.16, 0.1, 0.02, -0.11, 1.26, -0.26);
+
+  const dummy = new THREE.Mesh();
+  dummy.visible = false;
+  head.add(dummy);
+  emote.position.set(0, 1.9, 0);
+  root.add(emote);
+  return bake({ root, body, torso, head, armL, armR, legL, legR, lids: [], brows: [], pupils: [], mouth: dummy, sway: [], hang: [], emote, stride: 1, headTop: 0.6 });
+}
+
+/** A gold statue of himself, pointing at nothing in particular. He built it. Nobody asked. */
+export function buildStatue(): THREE.Group {
+  const s = new THREE.Group();
+  const GOLD_DARK = '#b8963a';
+  box(s, '#a59f96', 0.94, 0.16, 0.94, 0, 0.08, 0);
+  box(s, '#b3ada3', 0.76, 0.5, 0.76, 0, 0.41, 0);
+  box(s, INK, 0.5, 0.16, 0.012, 0, 0.42, 0.386); // plaque
+  const f = group(s, 0, 0.66, 0);
+  f.scale.setScalar(0.8);
+  for (const side of [1, -1]) {
+    box(f, GOLD, 0.26, 0.62, 0.27, side * 0.15, 0.31, 0);
+    box(f, GOLD_DARK, 0.27, 0.12, 0.34, side * 0.15, 0.06, 0.035);
+  }
+  box(f, GOLD, 0.6, 0.62, 0.36, 0, 0.93, 0);
+  box(f, GOLD_DARK, 0.62, 0.2, 0.38, 0, 0.7, 0);
+  box(f, GOLD, 0.17, 0.5, 0.2, -0.385, 0.98, 0); // one arm at his side
+  const arm = box(f, GOLD, 0.17, 0.55, 0.2, 0.385, 1.36, 0.22); // the other pointing onward
+  arm.rotation.x = -1.25;
+  box(f, GOLD, 0.56, 0.5, 0.5, 0, 1.52, 0);
+  box(f, GOLD_DARK, 0.5, 0.15, 0.5, 0, 1.82, -0.01); // the haircut, immortalised
+  box(f, GOLD_DARK, 0.46, 0.09, 0.42, 0, 1.93, -0.045);
+  return fuse(s);
+}
+
+/** A number that hangs over the launch pad during the countdown. */
+export function buildCountdown(): { sprite: THREE.Sprite; show(text: string | null, pulse: number): void } {
+  const c = document.createElement('canvas');
+  c.width = c.height = 160;
+  const g = c.getContext('2d')!;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sprite.renderOrder = 10;
+  sprite.visible = false;
+  let last: string | null = null;
+  return {
+    sprite,
+    show(text, pulse) {
+      sprite.visible = text !== null;
+      if (text === null) return void (last = null);
+      if (text !== last) {
+        last = text;
+        g.clearRect(0, 0, 160, 160);
+        g.font = "900 130px 'Avenir Next', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif";
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.lineJoin = 'round';
+        g.strokeStyle = '#f6f1e6';
+        g.lineWidth = 22;
+        g.strokeText(text, 80, 86);
+        g.fillStyle = RED;
+        g.fillText(text, 80, 86);
+        tex.needsUpdate = true;
+      }
+      sprite.scale.setScalar(1.1 + pulse * 0.5);
+    },
+  };
 }

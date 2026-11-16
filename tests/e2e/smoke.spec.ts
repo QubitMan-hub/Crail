@@ -272,7 +272,7 @@ test('with a charm, bumping someone recruits them and they follow the cube', asy
   await clearStage(page);
   await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
   await direct(page, 'femboys.spawn', 0, 0, 1, 3, { idle: 999 });
-  await direct(page, 'cult.charms', 1);
+  await direct(page, 'cult.charms', 2); // a goth costs two
   await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
   // The goth joined instead of glaring. The charm is spent.
   await page.waitForFunction(() => (window as any).__crail.state.cult.members.length === 1);
@@ -318,4 +318,73 @@ test('other characters get on the rides too, and get off again', async ({ page }
     return [s.goths.npcs[0], s.femboys.npcs[0]].map((n: any) => ({ x: n.x, z: n.z, carried: n.carry !== null }));
   });
   expect(after).toEqual([{ x: 16, z: -4, carried: false }, { x: 15, z: 5, carried: false }]);
+});
+
+// ---- Balance and extras ---------------------------------------------------------
+
+test('recruiting has a price: a goth costs two charms, and the same ride will not pay twice in a row', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, 1, 0, 2, { idle: 999 });
+  await direct(page, 'cult.charms', 1);
+  await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
+  await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].mode === 'stare');
+  // One charm is not enough: she is not recruited, the charm is kept, and the game says why.
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.members.length)).toBe(0);
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
+  await expect(page.locator('#hint')).toContainText('Goths cost');
+
+  await direct(page, 'cult.charms', 0);
+  await direct(page, 'cube.teleport', 15, 9);
+  for (const rides of [1, 2]) {
+    await holdUntil(page, 'KeyW', 's.park.riding !== null');
+    await page.waitForFunction((n) => (window as any).__crail.state.park.rides === n, rides);
+  }
+  // Two rides on the trampoline, one charm.
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
+});
+
+test('the coup: recruit the leader and his soldiers come with him', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 1, 0, 2, { idle: 999 });
+  await direct(page, 'leader.soldier');
+  await direct(page, 'leader.soldier');
+  expect(await page.evaluate(() => (window as any).__crail.state.soldiers.npcs.length)).toBe(2);
+  await direct(page, 'cult.charms', 3);
+  await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
+  await page.waitForFunction(() => (window as any).__crail.state.cult.members.length === 3);
+  const after = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return { charms: s.cult.charms, rank: s.cult.rank, soldiers: s.soldiers.npcs.map((n: any) => n.cult) };
+  });
+  expect(after).toEqual({ charms: 0, rank: 'Sect', soldiers: [true, true] });
+  await expect(page.locator('#cult')).toContainText('Cult 3 · Sect');
+});
+
+test('the leader can put up a statue and build a tank, and sometimes the rocket works', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 3, 0, 2, { idle: 999 });
+  await direct(page, 'leader.statue');
+  await direct(page, 'leader.tank');
+  await direct(page, 'leader.site');
+  const army = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return { statue: s.army.monument.built, soldiers: s.soldiers.npcs.length, pad: s.rocket.built };
+  });
+  expect(army).toEqual({ statue: true, soldiers: 1, pad: true });
+  await page.waitForFunction(() => (window as any).__crail.state.army.tank === true);
+  // The statue is solid.
+  const at = await page.evaluate(() => (window as any).__crail.state.army.monument);
+  await direct(page, 'cube.teleport', at.x, at.z + 1);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
+  expect(await cubeState(page)).toMatchObject({ x: at.x, z: at.z + 1 });
+  // Force a successful launch: he celebrates instead of fuming.
+  await direct(page, 'leader.launch', 'success');
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.successes === 1);
+  await page.waitForFunction(() => (window as any).__crail.state.leader.npcs[0].mode === 'twirl');
 });

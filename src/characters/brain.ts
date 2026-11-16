@@ -162,11 +162,11 @@ export interface Npc {
   /** Somewhere they have decided to walk to (a ride, say). */
   goal: { x: number; z: number } | null;
   /** Set while a ride is carrying them: where they are drawn, and how they sit. */
-  carry: { x: number; y: number; z: number; yaw: number; pose: 'sit' | 'bounce' } | null;
+  carry: { x: number; y: number; z: number; yaw: number; pose: 'sit' | 'bounce' | 'rest' } | null;
   /** The last few cells it stood on, newest first. Followers walk along this. */
   trail: { x: number; z: number }[];
-  /** A reaction queued from outside ('fume', 'salute'), played when next free. */
-  order: 'fume' | 'salute' | null;
+  /** A reaction queued from outside, played when next free. */
+  order: 'fume' | 'salute' | 'cheer' | null;
   variant: number;
   /** The cell she stands on. */
   x: number;
@@ -796,6 +796,12 @@ export function tick(n: Npc, w: World, dt: number): void {
     const what = n.order;
     n.order = null;
     n.wait = 0;
+    if (what === 'cheer') {
+      // It worked. He spins on the spot with his arms out.
+      setMode(n, 'twirl', 0.95);
+      say(n, 'sparkle');
+      return;
+    }
     setMode(n, what, what === 'fume' ? 1.8 : 1.1);
     if (what === 'fume') say(n, 'anger');
     return;

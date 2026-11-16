@@ -40,6 +40,13 @@ const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 
 function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: number): Pose {
   const p: Pose = { ...REST, lids: n.persona.restLids };
+  if (n.carry?.pose === 'rest') {
+    // Sitting on a bench, doing nothing at all, and enjoying it.
+    p.legL = p.legR = SEATED_LEGS;
+    p.armLx = p.armRx = -0.5;
+    p.headYaw = Math.sin(time * 0.6 + n.id.length) * 0.5;
+    return p;
+  }
   if (n.carry) {
     // On a ride: arms in the air, whatever their usual temperament.
     const wave = Math.sin(time * 9 + n.id.length);

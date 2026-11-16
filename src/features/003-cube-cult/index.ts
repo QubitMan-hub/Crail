@@ -3,7 +3,8 @@ import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
 import type { DirIndex, Lead, Npc } from '../../characters/brain';
-import type { Member } from '../../characters/cast';
+import { everyone, type Member } from '../../characters/cast';
+import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
 import { box, fuse, group, HIP, mat } from '../../characters/rig';
 
 /**
@@ -20,8 +21,20 @@ const STONE_DARK = '#8b857c';
 const FLAME = '#ffb23e';
 
 export const SHRINE = { x: -8, z: -1 };
-const MAX_CHARMS = 5;
-const SHRINE_REFILL = 25;
+const MAX_CHARMS = 6;
+const SHRINE_REFILL = 30;
+/** Seconds before the same ride will pay out a charm again. Visiting all four is the fast way. */
+const RIDE_REST = 40;
+/** What it takes to recruit each kind. The leader is dear, but his soldiers follow him for free. */
+const COST: Record<string, number> = { soldier: 1, femboy: 1, goth: 2, leader: 3 };
+const NAMES: Record<string, string> = { soldier: 'Soldiers', femboy: 'Femboys', goth: 'Goths', leader: 'The leader' };
+/** [members needed, name, what the player is told]. */
+const RANKS: [number, string, string][] = [
+  [1, 'Following', 'You have a follower. Stand still and see what they do.'],
+  [3, 'Sect', 'A sect of three. The cube has earned a halo.'],
+  [6, 'Order', 'An order of six. The ground glows when they worship.'],
+  [10, 'Religion', 'Ten members. This is a religion now.'],
+];
 const FOLLOW_SPEED = 3.1;
 
 const ROBE = '#3b3b42';
@@ -112,28 +125,51 @@ export const cubeCult: Feature = {
     });
 
     const members: Npc[] = [];
+    let clock = 0;
+
+    /** Put the robe on, fall in behind the cube. No charge: the caller has dealt with that. */
+    const enlist = (m: Member) => {
+      const n = m.n;
+      n.cult = true;
+      n.lead = lead;
+      n.speed = FOLLOW_SPEED;
+      n.focus = null;
+      n.goal = null;
+      n.wait = 0;
+      n.mode = 'revere';
+      n.t = 0;
+      n.timer = 1.1;
+      n.emote = { kind: 'heart', t: 0 };
+      robe(m);
+      members.push(n);
+      ctx.events.emit('cult:joined', { id: n.id });
+    };
+
     const state = {
       charms: 0,
       members,
+      rank: '',
       /** Called when the cube bumps someone. True if that bump recruited them. */
       tryRecruit(m: Member): boolean {
         const n = m.n;
         if (state.charms <= 0 || n.cult) return false;
         if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding'].includes(n.mode)) return false;
-        state.charms -= 1;
-        n.cult = true;
-        n.lead = lead;
-        n.speed = FOLLOW_SPEED;
-        n.focus = null;
-        n.wait = 0;
-        n.mode = 'revere';
-        n.t = 0;
-        n.timer = 1.1;
-        n.emote = { kind: 'heart', t: 0 };
-        robe(m);
-        members.push(n);
+        const cost = COST[n.persona.kind] ?? 1;
+        if (state.charms < cost) {
+          // Not enough. They react the way they always did, and you learn the price.
+          tip(`${NAMES[n.persona.kind] ?? 'They'} cost ✦${cost}. You have ✦${state.charms}.`);
+          return false;
+        }
+        state.charms -= cost;
+        enlist(m);
+        if (n.persona.kind === 'leader') {
+          // Recruit the leader and his whole army comes with him. That is called a coup.
+          const army = everyone(ctx).filter((e) => e.n.persona.kind === 'soldier' && !e.n.cult && e.n.mode !== 'riding');
+          for (const soldier of army) enlist(soldier);
+          if (army.length) tip(`A coup. ${army.length} soldier${army.length > 1 ? 's' : ''} joined for free.`);
+          ctx.events.emit('cult:coup', { soldiers: army.length });
+        }
         ctx.bump(0.1);
-        ctx.events.emit('cult:joined', { id: n.id });
         refresh(true);
         return true;
       },
@@ -145,10 +181,27 @@ export const cubeCult: Feature = {
       state.charms = Math.min(MAX_CHARMS, state.charms + n);
       if (state.charms > before) {
         refresh(true);
-        if (members.length === 0) tip('Bump into someone to recruit them');
+        if (members.length === 0) tip('Bump into someone to recruit them. Goths cost ✦2.');
       }
     };
-    ctx.events.on('park:rode', () => gain());
+
+    // ---- Rides: each one pays out a charm, then needs a rest -------------------
+    const rested = new Map<string, number>();
+    const rideReady = (ride: string) => clock - (rested.get(ride) ?? -999) >= RIDE_REST;
+    ctx.events.on<{ ride: string }>('park:rode', ({ ride }) => {
+      if (!rideReady(ride)) return tip('That ride has no charm yet. Try another one.');
+      rested.set(ride, clock);
+      gain();
+    });
+    // A little sparkle floats over every ride that has a charm waiting.
+    const markers = new Map<string, THREE.Sprite>();
+    for (const [ride, [x, y, z]] of Object.entries((ctx.state.park?.spots ?? {}) as Record<string, number[]>)) {
+      const marker = makeSymbolSprite();
+      marker.position.set(x, y, z);
+      ctx.scene.add(marker);
+      markers.set(ride, marker);
+    }
+
     ctx.events.on<[DirIndex]>('direct:cult.face', ([d]) => (lead.dir = d));
     ctx.events.on<[number]>('direct:cult.charms', ([n]) => {
       state.charms = n;
@@ -180,11 +233,32 @@ export const cubeCult: Feature = {
       if (occupant !== shrine) return;
       // Everyone bows when the cube visits its own shrine.
       for (const n of members) if (n.mode === 'march') Object.assign(n, { mode: 'revere', t: 0, timer: 1.4 });
-      if (!ready) return;
+      if (!ready) return tip('The shrine is not ready yet.');
       ready = false;
       refill = 0;
-      gain();
+      // A bigger congregation gives more: one charm, plus one for every three members.
+      const tithe = 1 + Math.floor(members.length / 3);
+      gain(tithe);
+      if (tithe > 1) tip(`The congregation gives ✦${tithe}.`);
     });
+
+    // ---- What a growing cult earns the cube -------------------------------------
+    // Three members: a halo. Six: the ground glows when they worship.
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.42, 0.045, 8, 28),
+      new THREE.MeshStandardMaterial({ color: '#f6cf6b', emissive: '#f6b93b', emissiveIntensity: 0.9 }),
+    );
+    halo.rotation.x = Math.PI / 2;
+    halo.visible = false;
+    ctx.scene.add(halo);
+    const aura = new THREE.Mesh(
+      new THREE.RingGeometry(0.75, 1.0, 48),
+      new THREE.MeshBasicMaterial({ color: '#f6b93b', transparent: true, opacity: 0, depthWrite: false }),
+    );
+    aura.rotation.x = -Math.PI / 2;
+    ctx.scene.add(aura);
+    const cubeMesh = ctx.scene.getObjectByName('cube');
+    const at = new THREE.Vector3();
 
     // ---- The counter in the corner ---------------------------------------------
     const hud = document.createElement('div');
@@ -194,10 +268,17 @@ export const cubeCult: Feature = {
     const membersEl = document.createElement('span');
     hud.append(charmsEl, membersEl);
     document.body.appendChild(hud);
+    let announced = 0;
     function refresh(bump: boolean) {
+      const rank = [...RANKS].reverse().find(([size]) => members.length >= size);
+      state.rank = rank?.[1] ?? '';
       charmsEl.innerHTML = `<b>✦</b> ${state.charms}`;
       charmsEl.title = 'Charms';
-      membersEl.textContent = `Cult ${members.length}`;
+      membersEl.textContent = `Cult ${members.length}${state.rank ? ` · ${state.rank}` : ''}`;
+      if (rank && rank[0] > announced) {
+        announced = rank[0];
+        tip(rank[2]);
+      }
       if (bump) {
         hud.classList.remove('bump');
         void hud.offsetWidth;
@@ -211,10 +292,11 @@ export const cubeCult: Feature = {
       if (!hint) return;
       hint.textContent = text;
       hint.classList.remove('gone');
-      tipFor = 4.5;
+      tipFor = 5;
     }
 
     ctx.onUpdate((dt, time) => {
+      clock += dt;
       // Anyone removed from the world (scripted scenes) is no longer a member.
       for (let i = members.length - 1; i >= 0; i--) {
         if (ctx.grid.at(members[i].x, members[i].z) !== members[i].occ) {
@@ -238,6 +320,25 @@ export const cubeCult: Feature = {
       idol.position.y = 1.1 + Math.sin(time * 2) * 0.05;
       idol.rotation.y += dt * (ready ? 2.2 : 0.3);
       idol.scale.setScalar(ready ? 1 + Math.sin(time * 5) * 0.08 : 0.8);
+
+      markers.forEach((marker, ride) => {
+        const on = rideReady(ride);
+        showSymbol(marker, on ? 'sparkle' : null, 1, 99, 1.5 + Math.sin(time * 3) * 0.12);
+        if (on) marker.position.y += Math.sin(time * 2.2) * 0.004;
+      });
+
+      if (cubeMesh) {
+        cubeMesh.getWorldPosition(at);
+        halo.visible = members.length >= 3;
+        halo.position.set(at.x, at.y + 0.86 + Math.sin(time * 2.4) * 0.03, at.z);
+        halo.rotation.z = time * 0.8;
+        // The glow only comes when they are actually worshipping.
+        const worshipped = members.length >= 6 && cube.idleFor > 2.2 && !cube.pinned;
+        const glow = aura.material as THREE.MeshBasicMaterial;
+        glow.opacity += ((worshipped ? 0.55 : 0) - glow.opacity) * (1 - Math.exp(-4 * dt));
+        aura.position.set(at.x, 0.015, at.z);
+        aura.scale.setScalar(1 + (Math.sin(time * 2.6) * 0.5 + 0.5) * 0.7);
+      }
 
       if (tipFor > 0 && (tipFor -= dt) <= 0) hint?.classList.add('gone');
     });
