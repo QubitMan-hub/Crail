@@ -344,7 +344,7 @@ export const cubeCult: Feature = {
     dot.position.y = 0.152;
     idol.add(dot);
     // The shrine stands right in front of the temple, so one mark covers both.
-    addLandmark(ctx, { name: 'Temple', x: TEMPLE.x, z: TEMPLE.z, color: ROBE, h: 2.6 });
+    addLandmark(ctx, { name: 'Temple', x: TEMPLE.x, z: TEMPLE.z, color: ROBE });
     let refill = SHRINE_REFILL - 4;
     let ready = false;
     ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {

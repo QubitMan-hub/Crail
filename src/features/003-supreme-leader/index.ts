@@ -101,8 +101,8 @@ export const supremeLeader: Feature = {
     );
     puff.rotation.x = -Math.PI / 2;
     ctx.scene.add(puff);
-    const statueMark = addLandmark(ctx, { name: 'Statue', x: 0, z: 0, color: '#d6b24a', h: 3, hidden: true });
-    const rocketMark = addLandmark(ctx, { name: 'Rocket', x: 0, z: 0, color: '#8d8a96', h: 3.4, hidden: true });
+    const statueMark = addLandmark(ctx, { name: 'Statue', x: 0, z: 0, color: '#d6b24a', hidden: true });
+    const rocketMark = addLandmark(ctx, { name: 'Rocket', x: 0, z: 0, color: '#8d8a96', hidden: true });
     const rocketSite = {
       built: false, x: 0, z: 0, age: 0, sinceLaunch: 0, launches: 0, successes: 0, strikes: 0, hits: 0,
       /** idle, counting down, or in flight. `t` is seconds into the current phase. */

@@ -12,8 +12,6 @@ export interface Landmark {
   /** For places that cover an area: size in cells, with (x, z) as the top-left corner. */
   w?: number;
   d?: number;
-  /** For single buildings: how tall the map draws it, in cells. */
-  h?: number;
   hidden?: boolean;
 }
 

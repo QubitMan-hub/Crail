@@ -474,20 +474,14 @@ test('M opens a map of places and people, and closes it again', async ({ page })
   expect(places.map((m: any) => m.name)).toEqual(expect.arrayContaining(['Park', 'Temple']));
   // The map names places, not commenters, and does not mark the rides.
   expect(places.every((m: any) => !('credit' in m) && !('marks' in m))).toBe(true);
-  // Something was actually drawn: the cube is a red block in the middle, lit from above
-  // with a darker side, like the real one.
-  const reds = await page.evaluate(() => {
+  // Something was actually drawn: the cube's red square is in the middle of the canvas.
+  const [r, g, b] = await page.evaluate(() => {
     const c = document.querySelector('#map canvas') as HTMLCanvasElement;
-    const k = c.width / c.clientWidth;
-    const data = c.getContext('2d')!.getImageData(c.width / 2 - 3 * k, c.height / 2 - 24 * k, 1, 40 * k).data;
-    const seen = new Set<string>();
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i] > 130 && data[i] - data[i + 2] > 90 && data[i + 3] === 255) seen.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
-    }
-    return [...seen];
+    return Array.from(c.getContext('2d')!.getImageData(c.width / 2, c.height / 2, 1, 1).data);
   });
-  expect(reds).toContain('255,122,85');
-  expect(reds.length).toBeGreaterThan(1);
+  expect(r).toBeGreaterThan(200);
+  expect(r - b).toBeGreaterThan(120);
+  expect(g).toBeLessThan(140);
   // The button works too, for phones, and the cube does not move when the map is tapped.
   await page.keyboard.press('KeyM');
   await expect(page.locator('#map')).toBeHidden();
