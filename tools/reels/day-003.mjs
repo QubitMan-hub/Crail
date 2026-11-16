@@ -4,8 +4,8 @@
 //   8.4-19.4  ONE     soldiers built by hand, a gold statue nobody asked for, a rocket with a 0% record
 //   19.4-28   TWO     the park: four rides, zero inspections, and he does not queue
 //   28-44.6   THREE   the cult: preach to recruit, he is immune, the temple ordains, they worship
-//   44.6-61.2 WAR     he noticed: conscription, an aimed rocket, the tank, then the map and bailing off a ride
-//   61.2-65.8 OUT     she still has the bow
+//   44.6-61.2 WAR     he noticed: conscription, an aimed rocket, and the tank
+//   56.4-61.0 OUT     she still has the bow
 //
 // Needs files that are not in the repository:
 //   captures/day-003-assets/{top,park,cult}.png   screenshots of the three real comments
@@ -13,8 +13,8 @@ import { existsSync } from 'node:fs';
 import { esc, keyframes, pop, smooth } from './kit.mjs';
 
 const ASSETS = 'captures/day-003-assets';
-const T = { combo: 5.2, one: 8.4, statue: 11.4, rocket: 13.6, two: 19.4, swing: 22.4, wheel: 25.0, three: 28.0, immune: 33.4, temple: 35.6, walk: 39.6, war: 44.6, pad: 47.3, strike: 49.0, tank: 53.4, map: 56.4, bail: 58.8, out: 61.2, black: 65.5 };
-const seconds = 65.8;
+const T = { combo: 5.2, one: 8.4, statue: 11.4, rocket: 13.6, two: 19.4, swing: 22.4, wheel: 25.0, three: 28.0, immune: 33.4, temple: 35.6, walk: 39.6, war: 44.6, pad: 47.3, strike: 49.0, tank: 53.4, out: 56.4, black: 60.7 };
+const seconds = 61.0;
 /** Where the war plays: the cube and three followers here, him and his pad up-left of them. */
 const W = { x: 60, z: -40 };
 const HIM = { x: W.x - 13, z: W.z };
@@ -32,8 +32,6 @@ function prepare() {
 // D = down-right, W = up-right, A = up-left, S = down-left.
 const keys = [
   [54.75, 54.85, 'D'], [55.05, 55.15, 'D'],
-  [56.5, 56.6, 'M'], [58.6, 58.7, 'M'],
-  [60.1, 60.2, 'D'],
   [36.4, 36.5, 'W'],
   [40.0, 40.1, 'D'], [40.4, 40.5, 'D'], [40.8, 40.9, 'D'],
 ];
@@ -99,13 +97,6 @@ const actions = [
   [T.war, 'cut'], [45.3, 'leader.conscript'], [45.6, 'leader.launch', 'strike'],
   [T.pad, 'cut'], [T.strike, 'cut'],
   [T.tank + 0.1, 'leader.shell'],
-  // The map, opened somewhere with things on it: between the temple and the park, with neighbours.
-  [T.map, 'cube.teleport', 1, -5],
-  [T.map, 'goths.spawn', 1, -6, 4, 3, { idle: 99 }], [T.map, 'goths.spawn', 2, -8, 6, 1, { idle: 99 }], [T.map, 'goths.spawn', 3, -4, 7, 3, { idle: 99 }],
-  [T.map, 'femboys.spawn', 2, 3, -11, 3, { idle: 99 }], [T.map, 'femboys.spawn', 0, 5, -9, 1, { idle: 99 }], [T.map, 'femboys.spawn', 1, 2, -13, 3, { idle: 99 }],
-  [T.map, 'cut'],
-  // Bailing off the trampoline.
-  [T.bail, 'cube.teleport', 15, 9], [T.bail + 0.05, 'park.ride', 'trampoline'], [T.bail, 'cut'],
   // Out: her again, with the bow.
   ...clearAll(T.out),
   [T.out, 'cube.teleport', -70, 30],
@@ -123,7 +114,7 @@ const zoom = [
   [T.temple, 0.8], [T.walk - 0.01, 0.9],
   [T.walk, 0.85], [41.5, 0.85], [T.war - 0.01, 1.0],
   [T.war, 1.5], [T.pad - 0.01, 1.6], [T.pad, 1.0], [T.strike - 0.01, 0.9],
-  [T.strike, 0.95], [T.tank, 0.85], [T.map, 0.85], [T.bail - 0.01, 0.85], [T.bail, 1.0], [T.out - 0.01, 1.1],
+  [T.strike, 0.95], [T.tank, 0.85], [T.out - 0.01, 0.85],
   [T.out, 1.75], [seconds, 1.95],
 ];
 function camera(t) {
@@ -139,8 +130,7 @@ function camera(t) {
   else if (t < T.war) cam.focus = [keyframes([[T.walk, DOOR.x + 0.6], [40, DOOR.x + 0.6], [41.4, DOOR.x + 2.6], [T.war, DOOR.x + 2.8]], t), DOOR.z + 0.2];
   else if (t < T.pad) cam.focus = [HIM.x, HIM.z + 1];
   else if (t < T.strike) cam.at = 'rocket';
-  else if (t < T.bail) return cam; // on the cube, wherever it gets thrown
-  else if (t < T.out) cam.focus = [17.2, 5.4];
+  else if (t < T.out) return cam; // on the cube, wherever it gets thrown
   else cam.follow = ['goths', 0];
   return cam;
 }
@@ -165,9 +155,7 @@ const captions = [
   [44.8, 45.7, 'Then he noticed.'], [45.9, 47.1, 'He drafts my people now.'],
   [47.5, 48.7, 'And the rocket?'], [49.2, 50.0, 'It’s aimed.'], [50.1, 50.9, 'At me.'], [52.4, 53.3, 'That cost me a charm.'],
   [53.6, 54.6, 'The tank shoots too.'], [55.8, 56.3, 'Missed.'],
-  [56.7, 57.5, 'There’s a map now.'], [57.6, 58.5, 'Press M.'],
-  [59.0, 59.9, 'And you can bail'], [59.9, 60.9, 'off any ride.'],
-  [61.5, 62.2, 'Day four.'], [62.2, 63.1, 'Top comment wins.'], [63.4, 64.1, 'Please.'], [64.1, 65.2, 'Just say “add a tree”.'],
+  [56.7, 57.4, 'Day four.'], [57.4, 58.3, 'Top comment wins.'], [58.6, 59.3, 'Please.'], [59.3, 60.4, 'Just say “add a tree”.'],
 ];
 // Short written asides, popped on like a reply.
 const asides = [
@@ -183,23 +171,21 @@ const asides = [
   [49.3, 51.8, 'get out of the ring'],
   [52.2, 53.3, '−1 ✦'],
   [55.7, 56.35, 'tank accuracy: also 0%'],
-  [60.3, 61.15, 'no charm for quitters'],
+
 ];
 
 const sfx = [
   [T.combo, 'boom'], [6.2, 'pop'], [6.8, 'pop'], [7.4, 'pop'],
   [T.one, 'pop'], [11.6, 'pop'], [13.7, 'tick'], [14.5, 'tick'], [15.3, 'tick'],
   [T.two, 'pop'], [T.three, 'pop'], [36.5, 'boom'],
-  [T.war, 'pop'], [45.6, 'tick'], [46.4, 'tick'], [47.2, 'tick'], [51.9, 'boom'], [55.6, 'boom'], [T.map + 0.1, 'pop'], [T.bail, 'pop'], [64.9, 'dun'],
+  [T.war, 'pop'], [45.6, 'tick'], [46.4, 'tick'], [47.2, 'tick'], [51.9, 'boom'], [55.6, 'boom'], [60.1, 'dun'],
 ];
 const music = {
-  sections: [[0, T.combo], [T.one, 64.1]],
-  duck: [[0.2, 5.0], [8.6, 11.0], [11.6, 13.2], [13.9, 14.8], [16.4, 19.3], [19.6, 22.3], [22.6, 24.8], [25.2, 26.9], [28.2, 33.2], [33.6, 35.4], [35.8, 39.4], [39.9, 40.9], [41.6, 44.5], [44.8, 47.1], [47.5, 48.7], [49.2, 50.9], [52.4, 54.6], [55.8, 58.5], [59.0, 60.9], [61.5, 65.2]],
+  sections: [[0, T.combo], [T.one, 59.3]],
+  duck: [[0.2, 5.0], [8.6, 11.0], [11.6, 13.2], [13.9, 14.8], [16.4, 19.3], [19.6, 22.3], [22.6, 24.8], [25.2, 26.9], [28.2, 33.2], [33.6, 35.4], [35.8, 39.4], [39.9, 40.9], [41.6, 44.5], [44.8, 47.1], [47.5, 48.7], [49.2, 50.9], [52.4, 54.6], [55.8, 56.3], [56.7, 60.4]],
 };
 
 const css = `
-  #reel { z-index:9; }
-  #map p { display:none; }
   .big { position:absolute; left:0; right:0; text-align:center; font-weight:900; line-height:1; letter-spacing:.01em; }
   .sub { position:absolute; left:0; right:0; text-align:center; font-weight:800; font-size:26px; letter-spacing:.05em; }
   .tag { display:inline-block; font-weight:800; font-size:15px; letter-spacing:.14em; padding:6px 12px 5px;
@@ -268,8 +254,8 @@ function html(t) {
     h += `<div class="big" ${scaled(pop(t, 42.4), 'top:12%;font-size:50px')}>CULT: 5 · SECT</div>`;
     h += `<div class="sub" style="top:18.5%;font-size:21px;opacity:${t > 43.1 ? 1 : 0}">ride rides · earn charms · preach</div>`;
   }
-  if (within(t, 64.0, T.black)) {
-    h += `<div class="big" ${scaled(pop(t, 64.0), 'top:13%;font-size:46px')}>she still has the bow.</div>`;
+  if (within(t, 59.2, T.black)) {
+    h += `<div class="big" ${scaled(pop(t, 59.2), 'top:13%;font-size:46px')}>she still has the bow.</div>`;
   }
 
   const c = captions.find(([a, b]) => within(t, a, b));
