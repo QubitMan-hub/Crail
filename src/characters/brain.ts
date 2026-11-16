@@ -106,6 +106,7 @@ export const HUFF_SPEED = 2.6;
 export const TURN_WAIT = 0.26;
 export const EMOTE_SECONDS = 1.7;
 export const HOP_SECONDS = 0.45;
+/** How far a character strays from home before turning back. */
 const LEASH = 5;
 
 /** The parts of the cube a goth can see (and one she can set: pinned). */
@@ -177,6 +178,8 @@ export interface Npc {
   /** The cell she stands on. */
   x: number;
   z: number;
+  /** Where she lives: the middle of the patch she wanders in and returns to. */
+  home: { x: number; z: number };
   /** The cell she is walking into, and how far along (0..1). */
   nx: number | null;
   nz: number | null;
@@ -213,7 +216,7 @@ export function createNpc(
   if (!grid.claim(x, z, occ)) return null;
   return {
     id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
-    variant, x, z, nx: null, nz: null, p: 0, dir, speed: persona.speed,
+    variant, x, z, home: { x, z }, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
     followCooldown: 4, emote: null, sx: 0, sz: 0, sitDir: 1, sitRolls: 0,
@@ -278,7 +281,9 @@ const isFreeAhead = (n: Npc, w: World, d: DirIndex) => w.grid.isFree(n.x + DIRS[
 
 /** A new heading: mostly straight on, sometimes a turn, rarely back. Stays near the cube. */
 function pickDir(n: Npc, w: World): DirIndex | null {
-  const far = manhattan(n, w.cube) > LEASH;
+  // Everyone has a home patch and drifts back to it. Nobody trails after the cube
+  // unless they have a reason to, so the world stays spread out.
+  const far = manhattan(n, n.home) > LEASH;
   let total = 0;
   const weights = [0, 1, 2, 3].map((i) => {
     const d = i as DirIndex;
@@ -286,8 +291,8 @@ function pickDir(n: Npc, w: World): DirIndex | null {
     const rel = (d - n.dir + 4) % 4;
     let wgt = rel === 0 ? 3 : rel === 2 ? 0.4 : 2;
     if (far) {
-      const after = Math.abs(w.cube.x - (n.x + DIRS[d][0])) + Math.abs(w.cube.z - (n.z + DIRS[d][1]));
-      wgt *= after < manhattan(n, w.cube) ? 8 : 0.05;
+      const after = Math.abs(n.home.x - (n.x + DIRS[d][0])) + Math.abs(n.home.z - (n.z + DIRS[d][1]));
+      wgt *= after < manhattan(n, n.home) ? 8 : 0.05;
     }
     total += wgt;
     return wgt;

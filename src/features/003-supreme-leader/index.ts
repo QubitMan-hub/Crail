@@ -59,6 +59,8 @@ export const supremeLeader: Feature = {
     const cultSize = (): number => ctx.state.cult?.members.length ?? 0;
     const leaders = createCast(ctx, {
       key: 'leader', persona: LEADER, variants: [null], build: buildLeader, count: 1, seedSalt: 0x1ead,
+      // His district is to the north-west. The statue and the flag end up there too.
+      home: { x: -4, z: -15 },
       // Femboys wave at everyone. He is not exempt.
       bow: ['#f6a8c4', '#ee6fa4'],
       onEvent(event, npc) {
@@ -117,9 +119,10 @@ export const supremeLeader: Feature = {
       }
       return null;
     };
+    /** Too far from him to be any use, and out of sight, so it can be rebuilt nearer. */
     const farAway = (x: number, z: number) => {
-      const c = ctx.state.cube ?? { x: 0, z: 0 };
-      return Math.abs(x - c.x) + Math.abs(z - c.z) > 18 && leaders.offscreen(x, z);
+      const n = boss();
+      return !!n && Math.abs(x - n.x) + Math.abs(z - n.z) > 12 && leaders.offscreen(x, z);
     };
 
     /** What he builds next. The statue is built once and never again. */

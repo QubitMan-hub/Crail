@@ -168,8 +168,8 @@ describe('goth behaviour', () => {
         }
       }
     });
-    // They stay in the neighbourhood rather than drifting off forever.
-    for (const n of npcs) expect(Math.abs(n.x - s.cube.x) + Math.abs(n.z - s.cube.z)).toBeLessThan(30);
+    // They keep to their own patch rather than trailing after the cube or drifting off forever.
+    for (const n of npcs) expect(Math.abs(n.x - n.home.x) + Math.abs(n.z - n.home.z)).toBeLessThan(16);
   });
 });
 

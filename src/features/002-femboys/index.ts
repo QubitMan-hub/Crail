@@ -30,6 +30,8 @@ export const femboys: Feature = {
       build: buildFemboy,
       count: 4,
       seedSalt: 0xf3b0,
+      // The femboys hang about just outside the park gate.
+      home: { x: 3, z: -8 },
       onEvent(event) {
         if (event === 'bow') bowAge = -0.9; // tied on at the end of the gift animation
       },

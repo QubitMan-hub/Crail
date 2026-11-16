@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { GameContext } from '../core/game';
 import { seededRandom } from '../core/rng';
 import { animate, newMotion, type Motion } from './animate';
-import { createNpc, relocate, startFollow, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from './brain';
+import { createNpc, startFollow, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from './brain';
 import { makeSymbolSprite } from './emotes';
 import { buildBow, type Rig } from './rig';
 
@@ -33,6 +33,8 @@ export interface CastOptions<V> {
   build(variant: V, emote: THREE.Sprite): Rig;
   count: number;
   seedSalt: number;
+  /** The middle of the patch this kind lives in. They start scattered round it and stay near it. */
+  home?: { x: number; z: number };
   /** Things this kind does that the feature wants to show (hearts breaking, bows appearing...). */
   onEvent?(event: string, npc: Npc): void;
   /** Colours of the bow this kind is given when someone gifts them one. */
@@ -99,12 +101,13 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     world.sitter = null;
   };
 
-  // Opening cast: scattered a short walk from the cube, never on top of anyone.
-  for (let i = 0, tries = 0; i < opts.count && tries < 300; tries++) {
-    const x = Math.round((rand() - 0.5) * 12);
-    const z = Math.round((rand() - 0.5) * 12);
-    const d = Math.abs(x) + Math.abs(z);
-    if (d < 3 || d > 7) continue;
+  // Opening cast: scattered round their own patch of the world, never on top of anyone,
+  // and never right beside where the cube starts.
+  const centre = opts.home ?? { x: 0, z: 0 };
+  for (let i = 0, tries = 0; i < opts.count && tries < 400; tries++) {
+    const x = centre.x + Math.round((rand() - 0.5) * 12);
+    const z = centre.z + Math.round((rand() - 0.5) * 12);
+    if (Math.abs(x - centre.x) + Math.abs(z - centre.z) > 7 || Math.abs(x) + Math.abs(z) < 4) continue;
     const crowded = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => !ctx.grid.isFree(x + dx, z + dz));
     if (crowded) continue;
     if (spawn(i, x, z, Math.floor(rand() * 4) as DirIndex)) i++;
@@ -173,16 +176,6 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     for (const m of members) {
       tick(m.n, world, dt);
 
-      // The cube wandered off: quietly move anyone left far behind to just out of view.
-      if (!world.staged && Math.abs(m.n.x - cube.x) + Math.abs(m.n.z - cube.z) > 13 && offscreen(m.n.x, m.n.z)) {
-        for (let tries = 0; tries < 12; tries++) {
-          const a = rand() * Math.PI * 2;
-          const r = 6 + rand() * 6;
-          const x = cube.x + Math.round(Math.cos(a) * r);
-          const z = cube.z + Math.round(Math.sin(a) * r);
-          if (offscreen(x, z) && relocate(m.n, world, x, z)) break;
-        }
-      }
       animate(m.rig, m.n, world, m.motion, time, dt);
     }
   });

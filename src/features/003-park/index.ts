@@ -741,7 +741,7 @@ export const park: Feature = {
       if ((sinceInvite += dt) > 3.5) {
         sinceInvite = 0;
         const visiting = crowd.filter((m) => m.n.mode === 'visit').length;
-        if (visiting + riders.length < 7) {
+        if (visiting + riders.length < 5) {
           const idle = crowd.filter(
             (m) =>
               !m.world.staged && !m.n.cult && m.n.persona.wanders && ['idle', 'walk'].includes(m.n.mode) &&

@@ -3,8 +3,8 @@
 //   5.2-8.4   COMBO   red card: three comments, one weekend
 //   8.4-19.4  ONE     soldiers built by hand, a gold statue nobody asked for, a rocket with a 0% record
 //   19.4-28   TWO     the park: four rides, zero inspections, and he does not queue
-//   28-41.5   THREE   the cult: rides for charms, charms for members, and a coup
-//   41.5-46.1 OUT     she still has the bow
+//   28-44.6   THREE   the cult: preach to recruit, he is immune, the temple ordains, they worship
+//   44.6-49.2 OUT     she still has the bow
 //
 // Needs files that are not in the repository:
 //   captures/day-003-assets/{top,park,cult}.png   screenshots of the three real comments
@@ -12,8 +12,10 @@ import { existsSync } from 'node:fs';
 import { esc, keyframes, pop, smooth } from './kit.mjs';
 
 const ASSETS = 'captures/day-003-assets';
-const T = { combo: 5.2, one: 8.4, statue: 11.4, rocket: 13.6, two: 19.4, swing: 22.4, wheel: 25.0, three: 28.0, coup: 32.5, walk: 36.0, out: 41.5, black: 45.8 };
-const seconds = 46.1;
+const T = { combo: 5.2, one: 8.4, statue: 11.4, rocket: 13.6, two: 19.4, swing: 22.4, wheel: 25.0, three: 28.0, immune: 33.4, temple: 35.6, walk: 39.6, out: 44.6, black: 48.9 };
+const seconds = 49.2;
+/** The temple's door cell: where the cube stands to be let in. */
+const DOOR = { x: -11, z: -2 };
 /** Where the cult scene plays. */
 const C = { x: 60, z: 30 };
 
@@ -25,8 +27,8 @@ function prepare() {
 
 // D = down-right, W = up-right, A = up-left, S = down-left.
 const keys = [
-  [29.0, 29.1, 'S'], [30.3, 30.4, 'W'], [33.0, 33.1, 'A'],
-  [36.6, 36.7, 'D'], [37.0, 37.1, 'D'], [37.4, 37.5, 'D'],
+  [36.4, 36.5, 'W'],
+  [40.0, 40.1, 'D'], [40.4, 40.5, 'D'], [40.8, 40.9, 'D'],
 ];
 
 const CASTS = ['goths', 'femboys', 'soldiers', 'leader'];
@@ -59,14 +61,25 @@ const actions = [
   [T.two, 'park.board', 'femboys', 4, 'swing'], [T.two, 'park.board', 'femboys', 5, 'bench'],
   [T.two, 'park.board', 'leader', 0, 'swing'],
   [T.two, 'cut'], [T.swing, 'cut'], [22.6, 'leader.drill'], [T.wheel, 'cut'],
-  // Three: a femboy, a goth with a bow, and a leader with an army. Six charms.
+  // Three: the cube stands still between a femboy and a goth and preaches. Three charms.
+  // The leader is right there too. Nothing happens to him.
   ...clearAll(T.three),
-  [T.three, 'cube.teleport', C.x, C.z], [T.three, 'cult.charms', 6], [T.three, 'cult.face', 0],
+  [T.three, 'cube.teleport', C.x, C.z], [T.three, 'cult.charms', 3], [T.three, 'cult.face', 1],
   [T.three, 'femboys.spawn', 0, C.x, C.z + 1, 3, { idle: 99 }],
-  [T.three, 'goths.spawn', 1, C.x, C.z - 1, 1, { idle: 99 }], [T.three, 'goths.bow', 0],
+  [T.three, 'goths.spawn', 1, C.x, C.z - 1, 1, { idle: 99 }],
   [T.three, 'leader.spawn', 0, C.x - 1, C.z, 0, { idle: 99 }],
-  [T.three, 'leader.soldier'], [T.three, 'leader.soldier'], [T.three, 'leader.tank'],
-  [T.three, 'cut'], [T.coup, 'cut'], [T.walk, 'cut'], [T.out, 'cut'],
+  [T.three, 'cut'], [T.immune, 'cut'],
+  // The temple: five members, already recruited, about to be ordained.
+  ...clearAll(T.temple),
+  [T.temple, 'cube.teleport', DOOR.x, DOOR.z], [T.temple, 'cult.charms', 0], [T.temple, 'cult.face', 3],
+  [T.temple, 'goths.spawn', 1, DOOR.x, DOOR.z + 2, 3, { idle: 99 }], [T.temple, 'goths.bow', 0],
+  [T.temple, 'femboys.spawn', 0, DOOR.x + 1, DOOR.z + 1, 3, { idle: 99 }],
+  [T.temple, 'femboys.spawn', 1, DOOR.x - 1, DOOR.z + 1, 3, { idle: 99 }],
+  [T.temple, 'goths.spawn', 2, DOOR.x + 2, DOOR.z + 2, 3, { idle: 99 }],
+  [T.temple, 'femboys.spawn', 2, DOOR.x - 2, DOOR.z + 2, 3, { idle: 99 }],
+  [T.temple, 'cult.recruit', 'goths', 0], [T.temple, 'cult.recruit', 'femboys', 0], [T.temple, 'cult.recruit', 'femboys', 1],
+  [T.temple, 'cult.recruit', 'goths', 1], [T.temple, 'cult.recruit', 'femboys', 2],
+  [T.temple, 'cut'], [T.walk, 'cut'], [T.out, 'cut'],
 ];
 
 const zoom = [
@@ -75,8 +88,9 @@ const zoom = [
   [T.rocket, 0.95], [16.0, 0.95], [17.6, 0.8], [T.two - 0.01, 0.9],
   [T.two, 0.29], [T.swing - 0.01, 0.34], [T.swing, 0.8], [T.wheel - 0.01, 0.9],
   [T.wheel, 0.82], [T.three - 0.01, 0.9],
-  [T.three, 1.4], [T.coup - 0.01, 1.5], [T.coup, 1.0], [T.walk - 0.01, 1.1],
-  [T.walk, 0.9], [38, 0.9], [T.out - 0.01, 1.1],
+  [T.three, 1.4], [T.immune - 0.01, 1.5], [T.immune, 1.7], [T.temple - 0.01, 1.85],
+  [T.temple, 0.8], [T.walk - 0.01, 0.9],
+  [T.walk, 0.85], [41.5, 0.85], [T.out - 0.01, 1.0],
   [T.out, 1.75], [seconds, 1.95],
 ];
 function camera(t) {
@@ -86,9 +100,10 @@ function camera(t) {
   else if (t < T.swing) cam.focus = [22, -0.5];
   else if (t < T.wheel) cam.focus = [29.4, 5.6];
   else if (t < T.three) cam.focus = [29.5, -9.5];
-  else if (t < T.coup) cam.focus = [C.x, C.z];
-  else if (t < T.walk) cam.focus = [C.x - 0.9, C.z];
-  else if (t < T.out) cam.focus = [keyframes([[T.walk, C.x + 0.2], [36.6, C.x + 0.2], [38, C.x + 2.7], [T.out, C.x + 2.9]], t), C.z];
+  else if (t < T.immune) cam.focus = [C.x, C.z];
+  else if (t < T.temple) cam.focus = [C.x - 0.7, C.z];
+  else if (t < T.walk) cam.focus = [DOOR.x + 0.3, DOOR.z - 0.4];
+  else if (t < T.out) cam.focus = [keyframes([[T.walk, DOOR.x + 0.6], [40, DOOR.x + 0.6], [41.4, DOOR.x + 2.6], [T.out, DOOR.x + 2.8]], t), DOOR.z + 0.2];
   else cam.follow = ['goths', 0];
   return cam;
 }
@@ -106,29 +121,31 @@ const captions = [
   [19.6, 20.3, 'Pick one:'], [20.3, 20.9, 'a park.'], [21.0, 21.7, 'Four rides.'], [21.7, 22.3, 'Zero inspections.'],
   [22.6, 23.4, 'Everyone rides.'], [23.6, 24.8, 'He does not queue.'],
   [25.2, 26.0, 'Every ride'], [26.0, 26.9, 'gives me a charm.'],
-  [28.2, 28.9, 'Pick two:'], [28.9, 29.6, 'a cult.'], [29.9, 30.8, 'Go on rides,'], [30.8, 31.6, 'recruit people.'], [31.7, 32.4, 'So… Disneyland.'],
-  [32.8, 33.6, 'Recruit him,'], [33.7, 34.6, 'his army joins free.'], [34.8, 35.8, 'That’s a coup.'],
-  [36.3, 37.3, 'Now they follow me.'], [38.2, 38.9, 'I stop,'], [38.9, 39.7, 'they worship.'], [40.0, 40.7, 'I have a halo.'], [40.7, 41.4, 'This is fine.'],
-  [41.8, 42.5, 'Day four.'], [42.5, 43.4, 'Top comment wins.'], [43.7, 44.4, 'Please.'], [44.4, 45.5, 'Just say “add a tree”.'],
+  [28.2, 28.9, 'Pick two:'], [28.9, 29.6, 'a cult.'], [29.9, 30.8, 'Rides give charms.'], [30.8, 31.9, 'Charms buy followers.'], [32.2, 33.2, 'So… Disneyland.'],
+  [33.6, 34.5, 'He can’t be recruited.'], [34.6, 35.4, 'I tried.'],
+  [35.8, 36.7, 'There’s a temple.'], [36.9, 37.9, 'Members get promoted.'], [38.1, 39.4, 'The boss gets a stick.'],
+  [39.9, 40.9, 'Now they follow me.'], [41.6, 42.3, 'I stop,'], [42.3, 43.1, 'they worship.'], [43.3, 43.9, 'I have a halo.'], [43.9, 44.5, 'This is fine.'],
+  [44.9, 45.6, 'Day four.'], [45.6, 46.5, 'Top comment wins.'], [46.8, 47.5, 'Please.'], [47.5, 48.6, 'Just say “add a tree”.'],
 ];
 // Short written asides, popped on like a reply.
 const asides = [
   [12.0, 13.5, 'nobody asked.'],
   [18.7, 19.35, 'success rate: 0%'],
   [21.8, 22.35, 'safety inspections: 0'],
-  [29.2, 30.2, 'femboy: ✦1'],
-  [30.5, 32.4, 'goth: ✦2 (expensive taste)'],
-  [33.3, 35.9, 'leader: ✦3 · army included'],
+  [28.6, 30.3, 'stand still to preach'],
+  [30.5, 33.3, 'goth: ✦2 (expensive taste)'],
+  [33.9, 35.5, 'leader: immune'],
+  [37.0, 39.5, 'acolyte → priest → high priest'],
 ];
 
 const sfx = [
   [T.combo, 'boom'], [6.2, 'pop'], [6.8, 'pop'], [7.4, 'pop'],
   [T.one, 'pop'], [11.6, 'pop'], [13.7, 'tick'], [14.5, 'tick'], [15.3, 'tick'],
-  [T.two, 'pop'], [T.three, 'pop'], [33.2, 'boom'], [45.2, 'dun'],
+  [T.two, 'pop'], [T.three, 'pop'], [36.5, 'boom'], [48.3, 'dun'],
 ];
 const music = {
-  sections: [[0, T.combo], [T.one, 44.4]],
-  duck: [[0.2, 5.0], [8.6, 11.0], [11.6, 13.2], [13.9, 14.8], [16.4, 19.3], [19.6, 22.3], [22.6, 24.8], [25.2, 26.9], [28.2, 32.4], [32.8, 35.8], [36.3, 37.3], [38.2, 41.4], [41.8, 45.5]],
+  sections: [[0, T.combo], [T.one, 47.5]],
+  duck: [[0.2, 5.0], [8.6, 11.0], [11.6, 13.2], [13.9, 14.8], [16.4, 19.3], [19.6, 22.3], [22.6, 24.8], [25.2, 26.9], [28.2, 33.2], [33.6, 35.4], [35.8, 39.4], [39.9, 40.9], [41.6, 44.5], [44.9, 48.6]],
 };
 
 const css = `
@@ -196,12 +213,12 @@ function html(t) {
   if (aside) h += `<div class="aside"><span ${scaled(pop(t, aside[0], 0.16), 'transform-origin:50% 50%')}>${esc(aside[2])}</span></div>`;
 
   if (within(t, 27.2, T.three)) h += `<div class="gain"><span ${scaled(pop(t, 27.2, 0.18))}>+1 <b>✦</b> charm</span></div>`;
-  if (within(t, 39.9, T.out)) {
-    h += `<div class="big" ${scaled(pop(t, 39.9), 'top:12%;font-size:50px')}>CULT: 6 · ORDER</div>`;
-    h += `<div class="sub" style="top:18.5%;font-size:21px;opacity:${t > 40.6 ? 1 : 0}">ride rides · earn charms · recruit everyone</div>`;
+  if (within(t, 42.4, T.out)) {
+    h += `<div class="big" ${scaled(pop(t, 42.4), 'top:12%;font-size:50px')}>CULT: 5 · SECT</div>`;
+    h += `<div class="sub" style="top:18.5%;font-size:21px;opacity:${t > 43.1 ? 1 : 0}">ride rides · earn charms · preach</div>`;
   }
-  if (within(t, 44.3, T.black)) {
-    h += `<div class="big" ${scaled(pop(t, 44.3), 'top:13%;font-size:46px')}>she still has the bow.</div>`;
+  if (within(t, 47.4, T.black)) {
+    h += `<div class="big" ${scaled(pop(t, 47.4), 'top:13%;font-size:46px')}>she still has the bow.</div>`;
   }
 
   const c = captions.find(([a, b]) => within(t, a, b));

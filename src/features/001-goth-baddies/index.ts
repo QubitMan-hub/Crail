@@ -27,6 +27,8 @@ export const gothBaddies: Feature = {
       build: buildGoth,
       count: 5,
       seedSalt: 0x601b,
+      // The goths keep to the south-west, away from the noise.
+      home: { x: -7, z: 9 },
       // If anyone gives a goth a bow, it is pink, and she keeps it.
       bow: ['#f6a8c4', '#ee6fa4'],
       onEvent(event) {
