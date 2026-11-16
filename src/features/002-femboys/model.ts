@@ -167,5 +167,5 @@ export function buildFemboy(v: Variant, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang: [], emote, stride: 1, headTop });
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang: [], emote, stride: 1, headTop, identity: { kind: 'femboy', trim: v.socks[1], hair: v.hair } });
 }

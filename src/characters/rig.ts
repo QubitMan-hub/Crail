@@ -28,6 +28,11 @@ export interface Rig {
   stride: number;
   /** Height (in head space) where something placed on the head should sit. */
   headTop: number;
+  /**
+   * What still shows if this character ends up in a uniform: the colour of the trim,
+   * the colour of the hair that peeks out, and what kind they were.
+   */
+  identity: { kind: string; trim: string; hair: string };
 }
 
 export const HIP = 0.78;

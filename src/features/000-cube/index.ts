@@ -119,6 +119,26 @@ export const cube: Feature = {
 
     ctx.events.on<[boolean]>('direct:cube.pin', ([on]) => (state.pinned = on));
 
+    // Something exploded next to the cube. It is thrown clear, tumbling, and lands a few cells away.
+    let fling: { from: THREE.Vector3; to: Cell; t: number; spin: THREE.Vector3 } | null = null;
+    ctx.events.on<{ x: number; z: number }>('cube:blast', (origin) => {
+      if (fling || state.carried || state.pinned) return;
+      let dx = Math.sign(state.x - origin.x);
+      let dz = Math.sign(state.z - origin.z);
+      if (dx === 0 && dz === 0) dx = 1; // a direct hit: thrown toward the camera
+      // As far as three cells, less if something is in the way.
+      for (const reach of [3, 2, 1]) {
+        const to = { x: state.x + dx * reach, z: state.z + dz * reach };
+        if (!ctx.grid.claim(to.x, to.z, me)) continue;
+        anim = null;
+        target = null;
+        state.moving = true;
+        state.idleFor = 0;
+        fling = { from: mesh.position.clone(), to, t: 0, spin: new THREE.Vector3(dz || 0.4, 0.3, -dx || 0.4).normalize() };
+        return;
+      }
+    });
+
     const begin = (dir: Dir) => {
       startPos.copy(mesh.position);
       startQuat.copy(mesh.quaternion);
@@ -166,6 +186,33 @@ export const cube: Feature = {
     };
 
     ctx.onUpdate((dt) => {
+      if (fling) {
+        // In the air: nothing the player presses matters until it lands.
+        fling.t += dt / 0.62;
+        const k = Math.min(1, fling.t);
+        mesh.position.set(
+          fling.from.x + (fling.to.x - fling.from.x) * k,
+          0.5 + Math.sin(Math.PI * k) * 2.2,
+          fling.from.z + (fling.to.z - fling.from.z) * k,
+        );
+        mesh.quaternion.setFromAxisAngle(fling.spin, k * Math.PI * 4);
+        ctx.focus.set(mesh.position.x, 0, mesh.position.z);
+        if (k < 1) return;
+        ctx.grid.release(state.x, state.z, me);
+        state.x = fling.to.x;
+        state.z = fling.to.z;
+        state.rolls += 1;
+        state.moving = false;
+        fling = null;
+        mesh.position.set(state.x, 0.5, state.z);
+        mesh.quaternion.identity();
+        dust.position.set(state.x, 0.012, state.z);
+        dustAge = 0;
+        thud.play(1, 0.8);
+        ctx.bump(0.14);
+        ctx.events.emit('cube:rolled', { ...state });
+        return;
+      }
       cooldown -= dt;
       let remaining = dt;
       // Loop so a long frame can finish one roll and start the next.

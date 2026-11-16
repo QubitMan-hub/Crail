@@ -3,8 +3,9 @@ import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
 import { tip } from '../../core/tip';
-import { DIRS, LEADER, relocate, SOLDIER, type DirIndex, type Npc } from '../../characters/brain';
-import { createCast, type Member } from '../../characters/cast';
+import { DIRS, floor, LEADER, relocate, SOLDIER, type DirIndex, type Npc } from '../../characters/brain';
+import { createCast, everyone, type Member } from '../../characters/cast';
+import { box } from '../../characters/rig';
 import {
   buildCountdown, buildFlag, buildLeader, buildRocketSite, buildSoldier, buildStatue, buildTank, SOLDIER_SCALE,
 } from './model';
@@ -23,8 +24,16 @@ const DRILL_EVERY = 21;
 const COUNTDOWN = 2.4;
 /** A cult this size outnumbers his column. His soldiers can count. */
 const INTIMIDATING = 6;
+/** A cult this size is a rival. From here on, the rockets are aimed. */
+const RIVAL = 3;
+/** Seconds of warning before something lands: long enough to roll clear if you are paying attention. */
+const STRIKE_WARNING = 2.2;
+const SHELL_WARNING = 1.3;
+/** He presses passers-by into his column: at most this many, and not more often than this. */
+const CONSCRIPTS = 3;
+const CONSCRIPT_EVERY = 30;
 
-type Outcome = 'tip' | 'fizzle' | 'success';
+type Outcome = 'tip' | 'fizzle' | 'success' | 'strike';
 type Project = 'soldier' | 'pad' | 'statue' | 'flag' | 'guard' | 'tank';
 
 /**
@@ -33,8 +42,13 @@ type Project = 'soldier' | 'pad' | 'statue' | 'flag' | 'guard' | 'tank';
  * at it, and a tank. Four soldiers and the tank march behind him. The guards stay.
  *
  * The cube can meddle: bump the statue or the flag and the guards come over; bump
- * the launch pad and the rocket goes early; bump him and his column surrounds you,
- * unless your cult is big enough that they think better of it.
+ * the launch pad and the rocket goes early; bump him and his column surrounds you
+ * while the tank takes a shot, unless your cult is big enough that they think better of it.
+ *
+ * He is not harmless. He presses goths and femboys who wander too close into his
+ * column. Once the cube's cult is big enough to be a rival, his rockets stop falling
+ * over and start being aimed at it. A blast throws the cube, flattens everyone nearby
+ * and costs a charm. There is always a warning ring first.
  */
 export const supremeLeader: Feature = {
   meta: {
@@ -68,6 +82,7 @@ export const supremeLeader: Feature = {
         if (event !== 'alarm') return;
         if (cultSize() >= INTIMIDATING) return tip('He points. His soldiers count your cult and stay where they are.');
         soldiers.world.alarm = ALARM_SECONDS;
+        fireShell();
       },
     });
     const boss = () => leaders.members[0]?.n;
@@ -86,10 +101,10 @@ export const supremeLeader: Feature = {
     );
     puff.rotation.x = -Math.PI / 2;
     ctx.scene.add(puff);
-    const statueMark = addLandmark(ctx, { name: 'Statue', x: 0, z: 0, color: '#d6b24a', credit: 'gyarados117', hidden: true });
-    const rocketMark = addLandmark(ctx, { name: 'Rocket', x: 0, z: 0, color: '#8d8a96', hidden: true });
+    const statueMark = addLandmark(ctx, { name: 'Statue', x: 0, z: 0, color: '#d6b24a', h: 3, hidden: true });
+    const rocketMark = addLandmark(ctx, { name: 'Rocket', x: 0, z: 0, color: '#8d8a96', h: 3.4, hidden: true });
     const rocketSite = {
-      built: false, x: 0, z: 0, age: 0, sinceLaunch: 0, launches: 0, successes: 0,
+      built: false, x: 0, z: 0, age: 0, sinceLaunch: 0, launches: 0, successes: 0, strikes: 0, hits: 0,
       /** idle, counting down, or in flight. `t` is seconds into the current phase. */
       phase: 'idle' as 'idle' | 'countdown' | 'flight',
       t: 0,
@@ -108,7 +123,7 @@ export const supremeLeader: Feature = {
     pole.visible = false;
     ctx.scene.add(pole);
     const flag = { built: false, x: 0, z: 0, age: 0, lowered: 0 };
-    const army = { monument, flag, tank: false, followers: 0, guards: 0 };
+    const army = { monument, flag, tank: false, followers: 0, guards: 0, conscripts: 0, blasts: 0 };
     ctx.state.army = army;
 
     const freeNextTo = (at: { x: number; z: number }, facing: DirIndex): [number, number] | null => {
@@ -212,7 +227,10 @@ export const supremeLeader: Feature = {
       if (!rocketSite.built || rocketSite.phase !== 'idle') return false;
       const roll = soldiers.world.rand();
       // The first one always fails. After that it works about one time in seven.
-      rocketSite.outcome = outcome ?? (rocketSite.launches === 0 ? 'tip' : roll < 0.55 ? 'tip' : roll < 0.85 ? 'fizzle' : 'success');
+      const c = ctx.state.cube;
+      const inRange = !!c && Math.abs(c.x - rocketSite.x) + Math.abs(c.z - rocketSite.z) < 34;
+      const aimed = cultSize() >= RIVAL && inRange && rocketSite.launches > 0 && roll < 0.75;
+      rocketSite.outcome = outcome ?? (aimed ? 'strike' : rocketSite.launches === 0 ? 'tip' : roll < 0.55 ? 'tip' : roll < 0.85 ? 'fizzle' : 'success');
       rocketSite.phase = 'countdown';
       rocketSite.t = 0;
       rocketSite.sinceLaunch = 0;
@@ -233,6 +251,101 @@ export const supremeLeader: Feature = {
       return guards().length;
     };
 
+    // ---- Things that land on people -----------------------------------------------
+    const flat = (color: string, inner: number, outer: number) => {
+      const m = new THREE.Mesh(
+        new THREE.RingGeometry(inner, outer, 44),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false }),
+      );
+      m.rotation.x = -Math.PI / 2;
+      ctx.scene.add(m);
+      return m;
+    };
+    /** A warning ring on the floor: where something is about to land. */
+    const warning = () => ({ ring: flat('#e03a2b', 0.78, 0.96), dot: flat('#e03a2b', 0, 0.2), x: 0, z: 0, on: false });
+    const strikeMark = warning();
+    const shellMark = warning();
+    const showWarning = (w: ReturnType<typeof warning>, time: number, size: number) => {
+      const pulse = 0.55 + Math.sin(time * 14) * 0.3;
+      for (const m of [w.ring, w.dot]) {
+        (m.material as THREE.MeshBasicMaterial).opacity = w.on ? pulse : 0;
+        m.position.set(w.x, 0.016, w.z);
+        m.scale.setScalar(size);
+      }
+    };
+    // What comes down: a second rocket for strikes, and a shell for the tank.
+    const warhead = buildRocketSite().rocket;
+    warhead.visible = false;
+    ctx.scene.add(warhead);
+    const shell = box(ctx.scene, '#1d1b19', 0.16, 0.16, 0.3, 0, 0, 0);
+    shell.visible = false;
+    // The bang itself: a flash, a ring racing outward, and a scorch mark that fades.
+    const flash = box(ctx.scene, '#ffb23e', 1, 1, 1, 0, 0, 0);
+    flash.material = new THREE.MeshBasicMaterial({ color: '#ffb23e', transparent: true });
+    flash.castShadow = false;
+    flash.visible = false;
+    const shock = flat('#ffb23e', 0.7, 1.0);
+    const scorch = flat('#3a3530', 0, 1);
+    const bang = { age: 9, x: 0, z: 0, size: 1 };
+
+    /** Something goes off at a cell. Everyone within `radius` cells is knocked flat; the cube is thrown. */
+    const blast = (x: number, z: number, radius: number): boolean => {
+      Object.assign(bang, { age: 0, x, z, size: radius });
+      army.blasts += 1;
+      ctx.bump(0.5);
+      for (const m of everyone(ctx)) {
+        if (Math.max(Math.abs(m.n.x - x), Math.abs(m.n.z - z)) <= radius) floor(m.n, m.world);
+      }
+      if (monument.built && Math.abs(monument.x - x) + Math.abs(monument.z - z) <= radius + 1) monument.wobble = 0;
+      const c = ctx.state.cube;
+      const hit = !!c && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) <= radius - 1; // inside the warning ring
+      if (hit) ctx.events.emit('cube:blast', { x, z });
+      ctx.events.emit('army:blast', { x, z, radius, hit });
+      return hit;
+    };
+
+    // The tank's shot: fired once per alarm, at wherever the cube was when it took aim.
+    let shot: { t: number; from: THREE.Vector3; aimed: boolean } | null = null;
+    const fireShell = () => {
+      const tank = tanks()[0];
+      if (!tank || shot) return;
+      shot = { t: 0, from: new THREE.Vector3(tank.n.x, 0.8, tank.n.z), aimed: false };
+    };
+
+    // Conscription: anyone who is not in the cult and wanders too close gets a helmet.
+    const drafted = () => everyone(ctx).filter((m) => m.n.drafted && !m.n.cult);
+    const conscript = (reach: number): boolean => {
+      const n = boss();
+      if (!n || n.nx !== null || !['idle', 'walk'].includes(n.mode) || drafted().length >= CONSCRIPTS) return false;
+      const pick = everyone(ctx).find(
+        (m) =>
+          ['goth', 'femboy'].includes(m.n.persona.kind) && !m.n.cult && !m.n.drafted && m.n.nx === null &&
+          ['idle', 'walk'].includes(m.n.mode) && Math.abs(m.n.x - n.x) + Math.abs(m.n.z - n.z) <= reach,
+      );
+      if (!pick) return false;
+      // He points. That is the whole recruitment process.
+      const dx = pick.n.x - n.x;
+      const dz = pick.n.z - n.z;
+      n.dir = (Math.abs(dx) >= Math.abs(dz) ? (dx >= 0 ? 0 : 2) : dz >= 0 ? 1 : 3) as DirIndex;
+      Object.assign(n, { mode: 'order', t: 0, timer: 1.4, wait: 0 });
+      Object.assign(pick.n, { drafted: true, lead: n, mode: 'march', t: 0, wait: 0, goal: null, focus: null });
+      pick.n.emote = { kind: 'bang', t: 0 };
+      if (!pick.rig.head.getObjectByName('helmet')) {
+        const helmet = new THREE.Group();
+        helmet.name = 'helmet';
+        box(helmet, '#6f7752', 0.62, 0.2, 0.6, 0, pick.rig.headTop + 0.02, -0.01);
+        box(helmet, '#565d40', 0.68, 0.05, 0.66, 0, pick.rig.headTop - 0.08, -0.01);
+        box(helmet, '#d6b24a', 0.08, 0.08, 0.014, 0, pick.rig.headTop + 0.02, 0.3);
+        pick.rig.head.add(helmet);
+      }
+      const c = ctx.state.cube;
+      if (c && Math.abs(c.x - n.x) + Math.abs(c.z - n.z) < 16) {
+        tip(`He conscripted a ${pick.n.persona.kind}. Preach to them to win them back.`);
+      }
+      ctx.events.emit('army:conscripted', { id: pick.n.id });
+      return true;
+    };
+
     // ---- The cube meddles --------------------------------------------------------
     ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {
       if (occupant === plinth) {
@@ -251,6 +364,9 @@ export const supremeLeader: Feature = {
     ctx.events.on('direct:leader.build', () => (leaders.world.wantBuild = true));
     ctx.events.on<[Outcome?]>('direct:leader.launch', ([outcome]) => void launch(outcome));
     ctx.events.on('direct:leader.alarm', () => (soldiers.world.alarm = ALARM_SECONDS));
+    ctx.events.on('direct:leader.shell', fireShell);
+    ctx.events.on('direct:leader.conscript', () => void conscript(8));
+    ctx.events.on<[number, number, number]>('direct:leader.blast', ([x, z, radius]) => void blast(x, z, radius));
     ctx.events.on('direct:leader.drill', drill);
     for (const what of ['pad', 'statue', 'flag', 'guard', 'tank', 'soldier'] as const) {
       ctx.events.on(`direct:leader.${what === 'pad' ? 'site' : what}`, () => {
@@ -267,6 +383,13 @@ export const supremeLeader: Feature = {
       rocketSite.phase = 'idle';
       rocketMark.hidden = true;
       statueMark.hidden = true;
+      strikeMark.on = shellMark.on = false;
+      shot = null;
+      warhead.visible = shell.visible = false;
+      for (const m of everyone(ctx)) {
+        m.n.drafted = false;
+        m.rig.head.getObjectByName('helmet')?.removeFromParent();
+      }
       everBuilt = 0;
       countdown.show(null, 0);
     });
@@ -278,6 +401,7 @@ export const supremeLeader: Feature = {
 
     let sinceBuild = BUILD_EVERY - 3;
     let sinceDrill = 6;
+    let sinceConscript = CONSCRIPT_EVERY - 12;
     let wasRiding = false;
     ctx.onUpdate((dt, time) => {
       clock += dt;
@@ -313,6 +437,64 @@ export const supremeLeader: Feature = {
           }
         }
       }
+
+      // Conscripts march at the back of the column, behind the regulars.
+      for (const m of drafted()) {
+        m.n.lead = n;
+        m.n.slot = place++;
+      }
+      army.conscripts = drafted().length;
+      // Anyone who has since joined the cube's cult hands the helmet back.
+      for (const m of everyone(ctx)) {
+        if (m.n.drafted && m.n.cult) m.n.drafted = false;
+      }
+      sinceConscript += dt;
+      if (!staged && sinceConscript > CONSCRIPT_EVERY && conscript(3)) sinceConscript = 0;
+
+      // The tank's shell: it takes aim, the ring appears, and then it arrives.
+      if (shot) {
+        shot.t += dt;
+        const AIM = 0.8;
+        const c = ctx.state.cube;
+        if (!shot.aimed && shot.t >= AIM && c) {
+          shot.aimed = true;
+          Object.assign(shellMark, { x: c.x, z: c.z, on: true });
+          tip('The tank is aiming at you. Move.');
+        }
+        if (shot.aimed) {
+          const k = Math.min(1, (shot.t - AIM) / SHELL_WARNING);
+          shell.visible = true;
+          shell.position.set(
+            shot.from.x + (shellMark.x - shot.from.x) * k,
+            0.8 + Math.sin(Math.PI * k) * 3.2 - 0.6 * k,
+            shot.from.z + (shellMark.z - shot.from.z) * k,
+          );
+          shell.rotation.y = Math.atan2(shellMark.x - shot.from.x, shellMark.z - shot.from.z);
+          if (k >= 1) {
+            shell.visible = false;
+            shellMark.on = false;
+            blast(shellMark.x, shellMark.z, 1);
+            shot = null;
+          }
+        }
+      }
+      showWarning(shellMark, time, 1);
+      showWarning(strikeMark, time, 1.9);
+
+      // The bang.
+      bang.age += dt;
+      const b = Math.min(1, bang.age / 0.55);
+      flash.visible = bang.age < 0.22;
+      flash.position.set(bang.x, 0.7, bang.z);
+      flash.scale.setScalar((0.5 + bang.age * 5) * (0.6 + bang.size * 0.3));
+      flash.rotation.y = bang.age * 9;
+      (flash.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - bang.age / 0.22);
+      shock.position.set(bang.x, 0.02, bang.z);
+      shock.scale.setScalar(0.3 + b * (1.6 + bang.size * 1.5));
+      (shock.material as THREE.MeshBasicMaterial).opacity = bang.age < 0.55 ? 0.8 * (1 - b) : 0;
+      scorch.position.set(bang.x, 0.008, bang.z);
+      scorch.scale.setScalar(0.55 + bang.size * 0.45);
+      (scorch.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.34 * (1 - bang.age / 22));
 
       // Drill, every so often, and a salute whenever he gets on a ride.
       sinceDrill += dt;
@@ -396,7 +578,38 @@ export const supremeLeader: Feature = {
         return;
       }
 
-      if (rocketSite.outcome === 'success') {
+      if (rocketSite.outcome === 'strike') {
+        // This one is aimed. It goes straight up, a ring appears where the cube is,
+        // and after a fair warning it comes down on that spot.
+        const UP = 1.1;
+        const LOCK = 0.9;
+        const land = 0.6 + UP + STRIKE_WARNING;
+        const up = Math.min(1, (t - 0.6) / UP);
+        rocket.visible = up < 1;
+        rocket.position.set(0, 0.16 + 15 * up * up, 0);
+        flame.visible = true;
+        flame.scale.y = 1.3 + Math.sin(t * 60) * 0.2;
+        const c = ctx.state.cube;
+        if (crossed(LOCK) && c) {
+          Object.assign(strikeMark, { x: c.x, z: c.z, on: true });
+          tip('That one is aimed at you. Get out of the ring.');
+        }
+        const down = (t - (land - 0.45)) / 0.45;
+        warhead.visible = down > 0 && down < 1;
+        warhead.position.set(strikeMark.x, 12 * (1 - Math.min(1, Math.max(0, down))) ** 2, strikeMark.z);
+        warhead.rotation.z = Math.PI;
+        if (crossed(land)) {
+          strikeMark.on = false;
+          warhead.visible = false;
+          rocketSite.strikes += 1;
+          const hit = blast(strikeMark.x, strikeMark.z, 2);
+          if (hit) rocketSite.hits += 1;
+          n.order = hit ? 'cheer' : 'fume';
+          everyoneSalutes();
+          if (!hit) tip('It missed. He is not happy.');
+        }
+        if (t > land + 2.5) rocketSite.phase = 'idle';
+      } else if (rocketSite.outcome === 'success') {
         // It works. Nobody is more surprised than he is.
         const k = (t - 0.6) / 2.2;
         rocket.position.set(Math.sin(t * 30) * 0.02, 0.16 + 16 * k * k, 0);

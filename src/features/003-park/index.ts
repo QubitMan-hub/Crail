@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
+import { tip } from '../../core/tip';
 import { seededRandom } from '../../core/rng';
 import { everyone, type Member } from '../../characters/cast';
 import { box, fuse, group, HIP } from '../../characters/rig';
@@ -64,6 +65,8 @@ interface Rider {
   /** Wheel only: how far the wheel had turned when they boarded. */
   startAngle: number;
   leaving: number;
+  /** Got off before half way: no charm for that. */
+  early: boolean;
 }
 
 // ---- Scenery ------------------------------------------------------------------
@@ -473,11 +476,7 @@ export const park: Feature = {
     const { mat, mark } = buildTrampoline(root);
     const { spin } = buildSwing(root);
     addLandmark(ctx, {
-      name: 'Park', x: PARK.x, z: PARK.z, w: PARK.w, d: PARK.d, color: '#c5dba6', credit: 'dg._.2004',
-      marks: [
-        { x: WHEEL.x, z: WHEEL.z, color: RED }, { x: CAROUSEL.x, z: CAROUSEL.z, color: PINK },
-        { x: TRAMPOLINE.x, z: TRAMPOLINE.z, color: BLUE }, { x: SWING.x, z: SWING.z, color: LAV },
-      ],
+      name: 'Park', x: PARK.x, z: PARK.z, w: PARK.w, d: PARK.d, color: '#c5dba6',
     });
 
     // ---- Everything solid claims its cells ---------------------------------------
@@ -549,7 +548,7 @@ export const park: Feature = {
         seat = b < 0 ? -1 : [b * 2, b * 2 + 1].find((sidx) => !taken.has(sidx)) ?? -1;
       }
       if (seat < 0) return false;
-      riders.push({ who, kind, seat, t: 0, from: new THREE.Vector3(x, 0, z), startAngle: wheelAngle, leaving: -1 });
+      riders.push({ who, kind, seat, t: 0, from: new THREE.Vector3(x, 0, z), startAngle: wheelAngle, leaving: -1, early: false });
       return true;
     };
 
@@ -559,6 +558,12 @@ export const park: Feature = {
       cube.pinned = true;
       cube.carried = true;
       state.riding = kind;
+      tapped = false;
+      armed = false;
+      if (!toldHow) {
+        toldHow = true;
+        tip('Press a direction to get off early.');
+      }
     };
     const boardNpc = (m: Member, kind: RideKind): boolean => {
       const n = m.n;
@@ -620,6 +625,17 @@ export const park: Feature = {
       seatAt.set(TRAMPOLINE.x + ox, TRAMPOLINE.top + height * 4 * phase * (1 - phase), TRAMPOLINE.z + oz);
       return (r.seat * 1.3) % (Math.PI * 2);
     };
+    /** How far through its ride something is, 0 to 1. */
+    const progress = (r: Rider): number => {
+      if (r.kind === 'wheel') return (wheelAngle - r.startAngle) / (Math.PI * 2);
+      return r.t / { carousel: CAROUSEL.seconds, trampoline: TRAMPOLINE.seconds, swing: SWING.seconds, bench: BENCH_SECONDS }[r.kind];
+    };
+    // The cube can get off whenever it likes: any direction key, or a tap.
+    let tapped = false;
+    ctx.input.onTap(() => (tapped = true));
+    // The key that got the cube onto the ride must be let go before a key can get it off.
+    let armed = false;
+    let toldHow = false;
     const finished = (r: Rider): boolean => {
       if (r.kind === 'wheel') return wheelAngle - r.startAngle >= Math.PI * 2;
       return r.t >= { carousel: CAROUSEL.seconds, trampoline: TRAMPOLINE.seconds, swing: SWING.seconds, bench: BENCH_SECONDS }[r.kind];
@@ -665,6 +681,11 @@ export const park: Feature = {
       for (let i = riders.length - 1; i >= 0; i--) {
         const r = riders[i];
         r.t += dt;
+        if (r.who === 'cube' && !ctx.input.heldDir()) armed = true;
+        if (r.who === 'cube' && r.leaving < 0 && r.t > HOP + 0.25 && ((armed && ctx.input.heldDir()) || tapped)) {
+          r.early = progress(r) < 0.5;
+          r.leaving = 0;
+        }
         if (r.leaving < 0 && finished(r)) r.leaving = 0;
         if (r.leaving >= 0) r.leaving += dt;
         const yaw = seat(r);
@@ -710,7 +731,8 @@ export const park: Feature = {
             state.rides += 1;
             cube.carried = false;
             ctx.events.emit('direct:cube.teleport', [r.from.x, r.from.z]);
-            if (r.kind !== 'bench') ctx.events.emit('park:rode', { ride: r.kind });
+            if (r.early) tip('You got off early. Stay on for at least half the ride to earn its charm.');
+            else if (r.kind !== 'bench') ctx.events.emit('park:rode', { ride: r.kind });
             cubeMesh?.scale.set(1, 1, 1);
             ctx.bump(0.08);
           } else {
@@ -726,6 +748,7 @@ export const park: Feature = {
         }
       }
       state.riders = riders.length;
+      tapped = false;
       // The mat dips under whoever is lowest.
       const dip = riders.some((r) => r.kind === 'trampoline') ? Math.max(0, 0.16 - lowest) * 0.7 : 0;
       mat.position.y = TRAMPOLINE.top - 0.02 - dip;

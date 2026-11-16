@@ -185,6 +185,7 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
       p.mouthW = 0.5;
       p.mouthH = 2.2;
       break;
+    case 'floored':
     case 'plop':
       p.legL = SEATED_LEGS - 0.1;
       p.legR = SEATED_LEGS - 0.1;
@@ -359,6 +360,11 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
     px = seatX;
     pz = seatZ;
     py = SEAT_Y;
+  } else if (n.mode === 'floored') {
+    // Blown off their feet: straight down onto the floor, with a bounce.
+    const fall = Math.min(1, n.t / 0.14);
+    const bounce = n.t > 0.14 ? Math.exp(-(n.t - 0.14) * 8) * Math.abs(Math.sin((n.t - 0.14) * 15)) * 0.14 : 0;
+    py = FLOOR_SEAT_Y * fall + bounce;
   } else if (n.mode === 'plop') {
     const fall = Math.min(1, n.t / 0.17);
     const bounce = n.t > 0.17 ? Math.exp(-(n.t - 0.17) * 9) * Math.abs(Math.sin((n.t - 0.17) * 16)) * 0.09 : 0;
@@ -381,7 +387,7 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
   else m.phase = 0;
 
   const target = targetPose(n, w, m, time, px, pz);
-  const ease = 1 - Math.exp(-(n.mode === 'hang' || n.mode === 'plop' ? 22 : 12) * dt);
+  const ease = 1 - Math.exp(-(n.mode === 'hang' || n.mode === 'plop' || n.mode === 'floored' ? 22 : 12) * dt);
   const p = m.pose;
   for (const k of Object.keys(p) as (keyof Pose)[]) p[k] += (target[k] - p[k]) * ease;
   // Rising from the floor: legs fold back under her in step with the lift.

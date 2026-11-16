@@ -12,10 +12,8 @@ export interface Landmark {
   /** For places that cover an area: size in cells, with (x, z) as the top-left corner. */
   w?: number;
   d?: number;
-  /** Who asked for it. Shown on the map under the name. */
-  credit?: string;
-  /** Smaller unlabelled marks inside it (rides in a park, say). */
-  marks?: { x: number; z: number; color: string }[];
+  /** For single buildings: how tall the map draws it, in cells. */
+  h?: number;
   hidden?: boolean;
 }
 

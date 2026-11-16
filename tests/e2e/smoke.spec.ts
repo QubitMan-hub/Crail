@@ -470,18 +470,24 @@ test('M opens a map of places and people, and closes it again', async ({ page })
   await page.keyboard.press('KeyM');
   await expect(page.locator('#map')).toBeVisible();
   await expect(page.locator('#map canvas')).toBeVisible();
-  const places = await page.evaluate(() =>
-    (window as any).__crail.state.landmarks.filter((m: any) => !m.hidden).map((m: any) => `${m.name}:${m.credit ?? ''}`),
-  );
-  expect(places).toEqual(expect.arrayContaining(['Park:dg._.2004', 'Temple:megamouse173']));
-  // Something was actually drawn: the cube's red square is in the middle of the canvas.
-  const [r, g, b] = await page.evaluate(() => {
+  const places = await page.evaluate(() => (window as any).__crail.state.landmarks.filter((m: any) => !m.hidden));
+  expect(places.map((m: any) => m.name)).toEqual(expect.arrayContaining(['Park', 'Temple']));
+  // The map names places, not commenters, and does not mark the rides.
+  expect(places.every((m: any) => !('credit' in m) && !('marks' in m))).toBe(true);
+  // Something was actually drawn: the cube is a red block in the middle, lit from above
+  // with a darker side, like the real one.
+  const reds = await page.evaluate(() => {
     const c = document.querySelector('#map canvas') as HTMLCanvasElement;
-    return Array.from(c.getContext('2d')!.getImageData(c.width / 2, c.height / 2, 1, 1).data);
+    const k = c.width / c.clientWidth;
+    const data = c.getContext('2d')!.getImageData(c.width / 2 - 3 * k, c.height / 2 - 24 * k, 1, 40 * k).data;
+    const seen = new Set<string>();
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 130 && data[i] - data[i + 2] > 90 && data[i + 3] === 255) seen.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+    }
+    return [...seen];
   });
-  expect(r).toBeGreaterThan(200);
-  expect(r - b).toBeGreaterThan(120);
-  expect(g).toBeLessThan(140);
+  expect(reds).toContain('255,122,85');
+  expect(reds.length).toBeGreaterThan(1);
   // The button works too, for phones, and the cube does not move when the map is tapped.
   await page.keyboard.press('KeyM');
   await expect(page.locator('#map')).toBeHidden();
@@ -490,4 +496,101 @@ test('M opens a map of places and people, and closes it again', async ({ page })
   await page.locator('#map').click();
   await expect(page.locator('#map')).toBeHidden();
   expect(await cubeState(page)).toMatchObject({ x: 0, z: 0, rolls: 0 });
+});
+
+// ---- Second pass on day 3 -------------------------------------------------------
+
+test('a direction key gets the cube off a ride early, but half a ride earns no charm', async ({ page }) => {
+  test.setTimeout(60_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'cube.teleport', 15, 9);
+  await holdUntil(page, 'KeyW', 's.park.riding !== null');
+  await page.waitForTimeout(900);
+  await holdUntil(page, 'KeyD', 's.park.riding === null');
+  expect(await cubeState(page)).toMatchObject({ carried: false, pinned: false });
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(0);
+  await expect(page.locator('#hint')).toContainText('got off early');
+});
+
+test('a recruit keeps their own colours under the robe', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, 2, 2, 1, { idle: 999 });
+  await direct(page, 'femboys.spawn', 0, -2, 2, 1, { idle: 999 });
+  await direct(page, 'cult.recruit', 'goths', 0);
+  await direct(page, 'cult.recruit', 'femboys', 0);
+  const kept = await page.evaluate(() =>
+    (window as any).__crail.state.everyone.map((m: any) => ({
+      kind: m.rig.identity.kind,
+      cult: m.n.cult,
+      robe: m.rig.root.userData.robe,
+      same: m.rig.root.userData.robe.trim === m.rig.identity.trim && m.rig.root.userData.robe.hair === m.rig.identity.hair,
+      loose: m.rig.sway.filter((p: any) => !m.rig.hang.includes(p)).every((p: any) => p.visible),
+    })),
+  );
+  expect(kept.map((k: any) => [k.kind, k.cult, k.same, k.loose])).toEqual([
+    ['goth', true, true, true],
+    ['femboy', true, true, true],
+  ]);
+  // And the two robes are not the same robe.
+  expect(kept[0].robe).not.toEqual(kept[1].robe);
+});
+
+test('a blast flattens whoever is near it, throws the cube and costs a charm', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, 1, 1, 1, { idle: 999 });
+  await direct(page, 'femboys.spawn', 0, -5, 5, 1, { idle: 999 });
+  await direct(page, 'cult.charms', 2);
+  await direct(page, 'leader.blast', 0, 1, 2);
+  expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs[0].mode)).toBe('floored');
+  expect(await page.evaluate(() => (window as any).__crail.state.femboys.npcs[0].mode)).not.toBe('floored');
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
+  // The cube lands somewhere else, on a free cell, and can move again.
+  await page.waitForFunction(() => {
+    const c = (window as any).__crail.state.cube;
+    return !c.moving && !c.pinned && (c.x !== 0 || c.z !== 0);
+  });
+  // She gets up again.
+  await page.waitForFunction(() => (window as any).__crail.state.goths.npcs[0].mode !== 'floored');
+});
+
+test('with a cult of three, the rocket is aimed: a warning, then it lands where the cube was', async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 6, 0, 2, { idle: 999 });
+  await direct(page, 'leader.site');
+  await direct(page, 'cult.charms', 3);
+  await direct(page, 'leader.launch', 'strike');
+  // Stay put: it hits, and he is delighted.
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 1, null, { timeout: 30_000 });
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(2);
+  expect(await page.evaluate(() => (window as any).__crail.state.rocket.hits)).toBe(1);
+  // Next time, roll out of the ring: it misses and he fumes.
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.phase === 'idle' && !(window as any).__crail.state.cube.moving, null, { timeout: 30_000 });
+  const before = await cubeState(page);
+  await direct(page, 'leader.launch', 'strike');
+  await page.waitForFunction(() => /aimed at you/.test(document.querySelector('#hint')!.textContent ?? ''), null, { timeout: 30_000 });
+  await direct(page, 'cube.teleport', before.x - 6, before.z + 6);
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 2, null, { timeout: 60_000 });
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(2);
+  expect(await page.evaluate(() => (window as any).__crail.state.rocket.hits)).toBe(1);
+});
+
+test('he conscripts a passer-by, and preaching wins them back', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 5, 0, 2, { idle: 999 });
+  await direct(page, 'femboys.spawn', 0, 5, 2, 1, { idle: 999 });
+  await direct(page, 'leader.conscript');
+  const drafted = () => page.evaluate(() => {
+    const m = (window as any).__crail.state.everyone.find((e: any) => e.n.persona.kind === 'femboy');
+    return { drafted: m.n.drafted, helmet: !!m.rig.head.getObjectByName('helmet'), cult: m.n.cult };
+  });
+  expect(await drafted()).toEqual({ drafted: true, helmet: true, cult: false });
+  await page.waitForFunction(() => (window as any).__crail.state.army.conscripts === 1);
+  await direct(page, 'cult.recruit', 'femboys', 0);
+  expect(await drafted()).toEqual({ drafted: false, helmet: false, cult: true });
 });

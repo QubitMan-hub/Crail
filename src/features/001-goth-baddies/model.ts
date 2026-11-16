@@ -217,5 +217,5 @@ export function buildGoth(v: Variant, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride, headTop });
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride, headTop, identity: { kind: 'goth', trim: PURPLE, hair: PURPLE } });
 }

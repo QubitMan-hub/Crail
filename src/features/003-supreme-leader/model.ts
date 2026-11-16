@@ -67,7 +67,7 @@ export function buildLeader(_v: unknown, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.76 });
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.76, identity: { kind: 'leader', trim: SUIT_TRIM, hair: HAIR } });
 }
 
 /** Soldiers are three-quarters his size, so the column reads as "his army", not his equals. */
@@ -119,7 +119,7 @@ export function buildSoldier(_v: unknown, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.72 });
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.72, identity: { kind: 'soldier', trim: OLIVE, hair: RED } });
 }
 
 /** The launch pad and the rocket on it. The rocket is its own group so it can go up. And come back. */
@@ -183,7 +183,7 @@ export function buildTank(emote: THREE.Sprite): Rig {
   head.add(dummy);
   emote.position.set(0, 1.9, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, lids: [], brows: [], pupils: [], mouth: dummy, sway: [], hang: [], emote, stride: 1, headTop: 0.6 });
+  return bake({ root, body, torso, head, armL, armR, legL, legR, lids: [], brows: [], pupils: [], mouth: dummy, sway: [], hang: [], emote, stride: 1, headTop: 0.6, identity: { kind: 'tank', trim: OLIVE, hair: OLIVE_DARK } });
 }
 
 /** A gold statue of himself, pointing at nothing in particular. He built it. Nobody asked. */

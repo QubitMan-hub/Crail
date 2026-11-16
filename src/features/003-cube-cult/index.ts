@@ -57,8 +57,9 @@ const ROPE = '#8d7c5d';
 
 /**
  * The uniform: a floor-length charcoal robe, a caped collar, wide sleeves and a deep
- * hood with nothing visible inside it. Whoever they were, they look like this now.
- * The only colour is a small red cube on a cord, and any bow they refuse to give up.
+ * hood with nothing visible inside it. But you can still tell who is under it: the
+ * trim is in their old colours, their hair peeks out under the brim, and anything
+ * that stuck out before (ears, twin tails, a cap, a gun barrel) still sticks out.
  */
 function robe(m: Member): void {
   const { rig, n } = m;
@@ -68,6 +69,10 @@ function robe(m: Member): void {
     for (const child of part.children) child.visible = false;
   }
   rig.stride = 0; // nothing under there to see moving
+  const { trim, hair, kind } = rig.identity;
+  rig.root.userData.robe = { trim, hair };
+  // Ears, tails and loose locks stay on show. Long hair down the back goes inside the hood.
+  for (const loose of rig.sway) if (!rig.hang.includes(loose)) loose.visible = true;
 
   // Above the waist the robe bends with them; the skirt hangs straight from the hips.
   const top = group(rig.torso);
@@ -82,7 +87,7 @@ function robe(m: Member): void {
   const skirt = group(rig.body, 0, HIP, 0);
   box(skirt, ROBE, 0.6 * wide, 0.3, 0.42, 0, -0.08, 0);
   box(skirt, ROBE, 0.66 * wide, 0.42, 0.48, 0, -0.4, 0); // flares toward the floor
-  box(skirt, ROBE_LIGHT, 0.7 * wide, 0.1, 0.52, 0, -0.71, 0);
+  box(skirt, trim, 0.7 * wide, 0.1, 0.52, 0, -0.71, 0);
   box(skirt, ROPE, 0.62 * wide, 0.05, 0.44, 0, 0.05, 0);
   box(skirt, ROPE, 0.05, 0.3, 0.05, 0.14 * wide, -0.1, 0.23);
   fuse(skirt);
@@ -91,6 +96,7 @@ function robe(m: Member): void {
     const sleeve = group(arm);
     box(sleeve, ROBE, 0.2, 0.5, 0.24, 0, -0.2, 0);
     box(sleeve, ROBE, 0.27, 0.16, 0.32, 0, -0.5, 0); // bell cuff
+    box(sleeve, trim, 0.28, 0.05, 0.33, 0, -0.56, 0);
     box(sleeve, VOID, 0.2, 0.02, 0.25, 0, -0.585, 0);
     fuse(sleeve);
   }
@@ -100,7 +106,19 @@ function robe(m: Member): void {
   box(hood, ROBE, 0.72, 0.16, 0.76, 0, 0.63, 0.02);
   box(hood, ROBE, 0.72, 0.7, 0.12, 0, 0.32, -0.32);
   for (const side of [1, -1]) box(hood, ROBE, 0.11, 0.7, 0.66, side * 0.305, 0.32, 0.03);
-  box(hood, ROBE_LIGHT, 0.72, 0.09, 0.1, 0, 0.57, 0.37); // the brim droops forward
+  box(hood, trim, 0.72, 0.09, 0.1, 0, 0.57, 0.37); // the brim droops forward, in their colours
+  box(hood, hair, 0.42, 0.09, 0.05, 0.02, 0.47, 0.262); // a fringe, peeking out
+  if (kind === 'soldier') {
+    // He kept the cap. It goes over the hood.
+    box(hood, '#6f7752', 0.8, 0.08, 0.76, 0, 0.74, 0.02);
+    box(hood, '#c8452f', 0.62, 0.06, 0.6, 0, 0.69, 0.02);
+    box(hood, INK, 0.44, 0.035, 0.16, 0, 0.67, 0.42);
+  }
+  if (kind === 'tank') {
+    // It used to be a tank. Old habits.
+    box(hood, '#565d40', 0.11, 0.11, 0.6, 0, 0.3, 0.5);
+    box(hood, INK, 0.14, 0.14, 0.08, 0, 0.3, 0.8);
+  }
   box(hood, ROBE, 0.7, 0.14, 0.62, 0, 0.0, 0.0);
   // The point: three shrinking blocks, leaning back.
   box(hood, ROBE, 0.5, 0.2, 0.5, 0, 0.78, -0.08);
@@ -224,6 +242,8 @@ export const cubeCult: Feature = {
     const enlist = (m: Member) => {
       const n = m.n;
       n.cult = true;
+      n.drafted = false; // the robe outranks the helmet
+      m.rig.head.getObjectByName('helmet')?.removeFromParent();
       n.lead = lead;
       n.speed = FOLLOW_SPEED;
       n.focus = null;
@@ -266,6 +286,14 @@ export const cubeCult: Feature = {
         if (members.length === 0) tip('Stop next to someone and stay still to preach. Goths cost ✦2.');
       }
     };
+
+    // A blast that catches the cube knocks a charm out of it.
+    ctx.events.on('cube:blast', () => {
+      if (state.charms <= 0) return;
+      state.charms -= 1;
+      refresh(true);
+      tip('The blast knocked a charm out of you.');
+    });
 
     // ---- Rides: each one pays out a charm, then needs a rest -------------------
     const rested = new Map<string, number>();
@@ -316,7 +344,7 @@ export const cubeCult: Feature = {
     dot.position.y = 0.152;
     idol.add(dot);
     // The shrine stands right in front of the temple, so one mark covers both.
-    addLandmark(ctx, { name: 'Temple', x: TEMPLE.x, z: TEMPLE.z, color: ROBE, credit: 'megamouse173' });
+    addLandmark(ctx, { name: 'Temple', x: TEMPLE.x, z: TEMPLE.z, color: ROBE, h: 2.6 });
     let refill = SHRINE_REFILL - 4;
     let ready = false;
     ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {

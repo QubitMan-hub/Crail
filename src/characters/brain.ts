@@ -97,7 +97,7 @@ export type Mode =
   | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff'
   | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl'
   | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm' | 'revere'
-  | 'visit' | 'riding' | 'listen';
+  | 'visit' | 'riding' | 'listen' | 'floored';
 
 export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger' | 'heart' | 'sparkle';
 
@@ -160,6 +160,10 @@ export interface Npc {
   slot: number;
   /** Recruited by the cube. Follows it from now on, whatever they were before. */
   cult: boolean;
+  /** Conscripted: marches in someone's column whatever they were before. A sermon undoes it. */
+  drafted: boolean;
+  /** Caught by a blast in the middle of a step: goes down on arriving. */
+  knocked: boolean;
   /** A cell just stepped out of while going round something, so they do not step straight back. */
   avoid: { x: number; z: number; steps: number } | null;
   /** A guard's post: where to stand and which way to face. Guards do not follow the column. */
@@ -215,7 +219,7 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
+    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
     variant, x, z, home: { x, z }, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -308,7 +312,7 @@ function pickDir(n: Npc, w: World): DirIndex | null {
 
 function wander(n: Npc, w: World): void {
   n.focus = null;
-  if (!n.persona.wanders || n.cult) return setMode(n, 'march');
+  if (!n.persona.wanders || n.cult || n.drafted) return setMode(n, 'march');
   const d = pickDir(n, w);
   if (d === null) return setMode(n, 'idle', 0.6);
   n.speed = n.persona.speed;
@@ -357,7 +361,7 @@ const faceCube = (n: Npc, w: World) => void (n.dir = dirToward(n, w.cube) ?? n.d
 
 /** The cube just bumped into her. Each bump within a few seconds escalates. */
 function react(n: Npc, w: World): void {
-  if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding'].includes(n.mode)) return;
+  if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding', 'floored'].includes(n.mode)) return;
   if (n.mode === 'toSit') w.sitter = null;
   n.wait = 0;
   n.focus = null;
@@ -661,10 +665,17 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     if (n.t > 1.15) setMode(n, 'rise');
   },
 
+  /** Knocked flat by a blast. Lies there a moment, then gets up. */
+  floored(n) {
+    if (n.t > n.timer) setMode(n, 'rise');
+  },
+
   rise(n, w) {
     if (n.t < 0.45) return;
-    w.sitter = null;
-    w.sitCooldown = 25;
+    if (w.sitter === n.id) {
+      w.sitter = null;
+      w.sitCooldown = 25;
+    }
     n.dir = dirToward(n, w.cube) ?? n.dir;
     n.stareKind = 'bonked';
     setMode(n, 'stare');
@@ -827,6 +838,11 @@ export function tick(n: Npc, w: World, dt: number): void {
     n.nx = n.nz = null;
     n.p = 0;
   }
+  if (n.knocked) {
+    n.knocked = false;
+    floor(n, w);
+    return;
+  }
   if (n.mode === 'stare') n.clearFor = isFreeAhead(n, w, n.dir) ? n.clearFor + dt : 0;
   if (n.pending) {
     n.pending = false;
@@ -854,6 +870,20 @@ export function tick(n: Npc, w: World, dt: number): void {
     return;
   }
   MODES[n.mode](n, w);
+}
+
+/** Knock someone off their feet. They get up again by themselves. */
+export function floor(n: Npc, w: World): void {
+  if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding', 'floored', 'toSit'].includes(n.mode)) return;
+  if (n.nx !== null) {
+    n.knocked = true;
+    return;
+  }
+  if (n.mode === 'listen') n.timer = 0;
+  n.wait = 0;
+  n.pending = false;
+  n.emote = { kind: 'bang', t: 0 };
+  setMode(n, 'floored', 1.2 + w.rand() * 0.6);
 }
 
 /** Move her somewhere else entirely (used to keep the world populated as the cube travels). */
