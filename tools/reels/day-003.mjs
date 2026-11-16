@@ -141,21 +141,21 @@ const frozen = (t) => t >= T.combo && t < T.one - 0.2;
 
 // Voice-over, as estimated. Retimed to the real recording afterwards.
 const captions = [
-  [0.2, 1.0, 'Day three'], [1.0, 1.6, 'of letting'], [1.6, 2.3, 'Instagram comments'], [2.3, 2.9, 'build my game.'],
+  [0.2, 1.0, 'Day three'], [1.0, 1.6, 'of letting'], [1.6, 2.3, 'Instagram comments'], [2.3, 2.9, 'build this game.'],
   [3.2, 4.0, 'You chose'], [4.0, 5.0, 'a dictator.'],
-  [5.4, 6.4, 'I had a free weekend.'], [6.5, 7.3, 'So you get'], [7.3, 8.2, 'three features.'],
+  [5.4, 6.4, 'It was a free weekend.'], [6.5, 7.3, 'So you get'], [7.3, 8.2, 'three features.'],
   [8.6, 9.4, 'He builds soldiers.'], [9.5, 10.2, 'One at a time.'], [10.3, 11.0, 'By hand.'],
   [11.6, 12.5, 'He built a gold statue'], [12.5, 13.2, 'of himself.'],
   [13.9, 14.8, 'And a rocket.'], [16.4, 17.4, 'Success rate:'], [17.4, 18.3, 'zero percent.'], [18.6, 19.3, 'They clap anyway.'],
   [19.6, 20.3, 'Pick one:'], [20.3, 20.9, 'a park.'], [21.0, 21.7, 'Four rides.'], [21.7, 22.3, 'Zero inspections.'],
   [22.6, 23.4, 'Everyone rides.'], [23.6, 24.8, 'He does not queue.'],
-  [25.2, 26.0, 'Every ride'], [26.0, 26.9, 'gives me a charm.'],
+  [25.2, 26.0, 'Every ride'], [26.0, 26.9, 'gives you a charm.'],
   [28.2, 28.9, 'Pick two:'], [28.9, 29.6, 'a cult.'], [29.9, 30.8, 'Rides give charms.'], [30.8, 31.9, 'Charms buy followers.'], [32.2, 33.2, 'So… Disneyland.'],
-  [33.6, 34.5, 'He can’t be recruited.'], [34.6, 35.4, 'I tried.'],
+  [33.6, 34.5, 'He can’t be recruited.'], [34.6, 35.4, 'You can try.'],
   [35.8, 36.7, 'There’s a temple.'], [36.9, 37.9, 'Members get promoted.'], [38.1, 39.4, 'The boss gets a stick.'],
-  [39.9, 40.9, 'Now they follow me.'], [41.6, 42.3, 'I stop,'], [42.3, 43.1, 'they worship.'], [43.3, 43.9, 'I have a halo.'], [43.9, 44.5, 'This is fine.'],
-  [44.8, 45.7, 'Then he noticed.'], [45.9, 47.1, 'He drafts my people now.'],
-  [47.5, 48.7, 'He also has a rocket.'], [49.2, 50.0, 'It’s aimed.'], [50.1, 50.9, 'At me.'], [52.4, 53.3, 'That cost me a charm.'],
+  [39.9, 40.9, 'Now they follow you.'], [41.6, 42.3, 'Stop moving,'], [42.3, 43.1, 'they worship.'], [43.3, 43.9, 'You get a halo.'], [43.9, 44.5, 'This is fine.'],
+  [44.8, 45.7, 'Then he noticed.'], [45.9, 47.1, 'He drafts your people now.'],
+  [47.5, 48.7, 'He also has a rocket.'], [49.2, 50.0, 'It’s aimed.'], [50.1, 50.9, 'At you.'], [52.4, 53.3, 'That costs you a charm.'],
   [53.6, 54.6, 'The tank shoots too.'], [55.8, 56.3, 'Missed.'],
   [56.7, 57.4, 'Day four.'], [57.4, 58.3, 'Top comment wins.'], [58.6, 59.3, 'Please.'], [59.3, 60.4, 'Just say “add a tree”.'],
 ];
@@ -245,8 +245,8 @@ function html(t) {
     h += '</div>';
   }
   h += chapter(t, T.one, 10.6, 'top', '① TOP COMMENT');
-  h += chapter(t, T.two, 21.6, 'park', '② MY PICK');
-  h += chapter(t, T.three, 29.0, 'cult', '③ MY PICK');
+  h += chapter(t, T.two, 21.6, 'park', '② BONUS PICK');
+  h += chapter(t, T.three, 29.0, 'cult', '③ BONUS PICK');
 
   const aside = asides.find(([a, b]) => within(t, a, b));
   if (aside) h += `<div class="aside"><span ${scaled(pop(t, aside[0], 0.16), 'transform-origin:50% 50%')}>${esc(aside[2])}</span></div>`;
