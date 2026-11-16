@@ -23,7 +23,7 @@ test('day 0 still boots and draws the cube', async ({ page }) => {
   expect(await page.evaluate(() => (window as any).__crail.state.goths)).toBeUndefined();
   // The centre of the screen must be cube-red, not floor.
   await page.waitForTimeout(300);
-  const shot = await page.locator('canvas').screenshot();
+  const shot = await page.locator('#game canvas').screenshot();
   const [r, g, b] = await page.evaluate(async (b64) => {
     const img = new Image();
     img.src = 'data:image/png;base64,' + b64;
@@ -54,7 +54,7 @@ test('keys roll the cube one cell at a time', async ({ page }) => {
 });
 
 test('tapping the floor sends the cube there', async ({ page }) => {
-  const box = (await page.locator('canvas').boundingBox())!;
+  const box = (await page.locator('#game canvas').boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.72, box.y + box.height * 0.36);
   await page.waitForFunction(() => (window as any).__crail.state.cube.rolls > 0);
   await page.waitForFunction(() => !(window as any).__crail.state.cube.moving);
@@ -460,4 +460,34 @@ test('the leader can put up a statue and build a tank, and sometimes the rocket 
   await direct(page, 'leader.launch', 'success');
   await page.waitForFunction(() => (window as any).__crail.state.rocket.successes === 1);
   await page.waitForFunction(() => (window as any).__crail.state.leader.npcs[0].mode === 'twirl');
+});
+
+// ---- The map --------------------------------------------------------------------
+
+test('M opens a map of places and people, and closes it again', async ({ page }) => {
+  await open(page, '?seed=3');
+  await expect(page.locator('#map')).toBeHidden();
+  await page.keyboard.press('KeyM');
+  await expect(page.locator('#map')).toBeVisible();
+  await expect(page.locator('#map canvas')).toBeVisible();
+  const places = await page.evaluate(() =>
+    (window as any).__crail.state.landmarks.filter((m: any) => !m.hidden).map((m: any) => `${m.name}:${m.credit ?? ''}`),
+  );
+  expect(places).toEqual(expect.arrayContaining(['Park:dg._.2004', 'Temple:megamouse173']));
+  // Something was actually drawn: the cube's red square is in the middle of the canvas.
+  const [r, g, b] = await page.evaluate(() => {
+    const c = document.querySelector('#map canvas') as HTMLCanvasElement;
+    return Array.from(c.getContext('2d')!.getImageData(c.width / 2, c.height / 2, 1, 1).data);
+  });
+  expect(r).toBeGreaterThan(200);
+  expect(r - b).toBeGreaterThan(120);
+  expect(g).toBeLessThan(140);
+  // The button works too, for phones, and the cube does not move when the map is tapped.
+  await page.keyboard.press('KeyM');
+  await expect(page.locator('#map')).toBeHidden();
+  await page.locator('#map-btn').click();
+  await expect(page.locator('#map')).toBeVisible();
+  await page.locator('#map').click();
+  await expect(page.locator('#map')).toBeHidden();
+  expect(await cubeState(page)).toMatchObject({ x: 0, z: 0, rolls: 0 });
 });

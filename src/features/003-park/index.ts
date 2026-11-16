@@ -472,7 +472,13 @@ export const park: Feature = {
     const { turn, mounts } = buildCarousel(root);
     const { mat, mark } = buildTrampoline(root);
     const { spin } = buildSwing(root);
-    addLandmark(ctx, 'Park', PARK.gate.x + 3, PARK.gate.z);
+    addLandmark(ctx, {
+      name: 'Park', x: PARK.x, z: PARK.z, w: PARK.w, d: PARK.d, color: '#c5dba6', credit: 'dg._.2004',
+      marks: [
+        { x: WHEEL.x, z: WHEEL.z, color: RED }, { x: CAROUSEL.x, z: CAROUSEL.z, color: PINK },
+        { x: TRAMPOLINE.x, z: TRAMPOLINE.z, color: BLUE }, { x: SWING.x, z: SWING.z, color: LAV },
+      ],
+    });
 
     // ---- Everything solid claims its cells ---------------------------------------
     const cellsOf: Record<RideKind, [number, number][]> = { wheel: [], carousel: [], trampoline: [], swing: [], bench: [...BENCHES] };

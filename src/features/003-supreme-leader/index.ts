@@ -86,6 +86,8 @@ export const supremeLeader: Feature = {
     );
     puff.rotation.x = -Math.PI / 2;
     ctx.scene.add(puff);
+    const statueMark = addLandmark(ctx, { name: 'Statue', x: 0, z: 0, color: '#d6b24a', credit: 'gyarados117', hidden: true });
+    const rocketMark = addLandmark(ctx, { name: 'Rocket', x: 0, z: 0, color: '#8d8a96', hidden: true });
     const rocketSite = {
       built: false, x: 0, z: 0, age: 0, sinceLaunch: 0, launches: 0, successes: 0,
       /** idle, counting down, or in flight. `t` is seconds into the current phase. */
@@ -159,7 +161,7 @@ export const supremeLeader: Feature = {
         Object.assign(monument, { built: true, x: spot[0], z: spot[1], age: 0 });
         statue.position.set(spot[0], 0, spot[1]);
         statue.visible = true;
-        addLandmark(ctx, 'Statue', spot[0], spot[1]);
+        Object.assign(statueMark, { x: spot[0], z: spot[1], hidden: false });
         for (const m of loyal()) m.n.order = 'salute'; // unveiling
         return;
       }
@@ -184,6 +186,8 @@ export const supremeLeader: Feature = {
         Object.assign(rocketSite, { built: true, x: spot[0], z: spot[1], age: 0, phase: 'idle', t: 0, sinceLaunch: LAUNCH_EVERY - 7 });
         site.position.set(spot[0], 0, spot[1]);
         site.visible = true;
+        // The launch site moves with him, so its mark on the map moves too.
+        Object.assign(rocketMark, { x: spot[0], z: spot[1], hidden: false });
         return;
       }
       if (what === 'guard' && !monument.built) return;
@@ -261,6 +265,8 @@ export const supremeLeader: Feature = {
         mesh.visible = false;
       }
       rocketSite.phase = 'idle';
+      rocketMark.hidden = true;
+      statueMark.hidden = true;
       everBuilt = 0;
       countdown.show(null, 0);
     });

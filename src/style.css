@@ -64,15 +64,26 @@ html, body {
 #credits li + li { border-top: 1px solid rgba(29, 27, 25, 0.1); }
 #credits b { display: block; font-weight: 800; letter-spacing: 0.02em; }
 #credits span { opacity: 0.7; }
-.landmark {
-  position: fixed; transform: translate(-50%, -50%); pointer-events: none; user-select: none;
-  display: none; align-items: center; gap: 5px;
-  font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
-  background: rgba(255, 253, 248, 0.9); padding: 5px 8px 4px; border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(29, 27, 25, 0.12);
+#map-btn {
+  position: fixed; top: max(18px, env(safe-area-inset-top)); right: 104px;
+  font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink); background: none; border: 0;
+  padding: 8px; opacity: 0.55; cursor: pointer;
 }
-.landmark.shown { display: flex; }
-.landmark i { font-style: normal; display: inline-block; font-size: 11px; color: var(--red); }
+#map-btn:hover, #map-btn:focus-visible, #map-btn[aria-pressed='true'] { opacity: 1; }
+#map {
+  position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  background: rgba(233, 227, 214, 0.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+#map[hidden] { display: none; }
+#map canvas {
+  background: #fffdf8; border-radius: 22px; box-shadow: 0 18px 50px rgba(29, 27, 25, 0.18);
+}
+#map p {
+  margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.6;
+}
 #cult {
   position: fixed; top: calc(max(18px, env(safe-area-inset-top)) + 34px); right: 20px;
   display: flex; gap: 10px; pointer-events: none; user-select: none;

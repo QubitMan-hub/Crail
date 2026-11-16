@@ -1,6 +1,7 @@
 import './style.css';
 import { createGame } from './core/game';
 import { currentDay, parseSelection, selectFeatures } from './core/feature';
+import { setupMap } from './core/map';
 import { allFeatures } from './features';
 
 const features = selectFeatures(allFeatures, parseSelection(location.search));
@@ -29,6 +30,8 @@ dayBtn.addEventListener('click', () => {
   dayBtn.setAttribute('aria-expanded', String(open));
   dayBtn.blur();
 });
+
+const map = setupMap(game.ctx, document.getElementById('map-btn') as HTMLButtonElement);
 
 const hint = document.getElementById('hint')!;
 game.ctx.events.on('cube:rolled', () => hint.classList.add('gone'));
@@ -62,6 +65,7 @@ applySound();
   day,
   features: features.map((f) => f.meta),
   state: game.ctx.state,
+  map,
   /** Scripted control for tests and video shots, e.g. direct('cube.teleport', 3, 4). */
   direct: (name: string, ...args: unknown[]) => game.ctx.events.emit(`direct:${name}`, args),
   // Only in ?manual mode: lets the reel renderer drive time and the camera.
