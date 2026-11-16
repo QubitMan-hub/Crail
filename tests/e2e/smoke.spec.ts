@@ -345,23 +345,75 @@ test('recruiting has a price: a goth costs two charms, and the same ride will no
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
 });
 
-test('the coup: recruit the leader and his soldiers come with him', async ({ page }) => {
+test('the leader cannot be recruited, however many charms the cube has', async ({ page }) => {
   test.setTimeout(120_000);
   await open(page, '?seed=3');
   await clearStage(page);
   await direct(page, 'leader.spawn', 0, 1, 0, 2, { idle: 999 });
   await direct(page, 'leader.soldier');
-  await direct(page, 'leader.soldier');
-  expect(await page.evaluate(() => (window as any).__crail.state.soldiers.npcs.length)).toBe(2);
-  await direct(page, 'cult.charms', 3);
+  await direct(page, 'cult.charms', 6);
   await holdUntil(page, 'KeyD', 's.cube.bonks >= 1');
-  await page.waitForFunction(() => (window as any).__crail.state.cult.members.length === 3);
+  // He reacts the way he always does: he points, and the alarm goes up.
+  await page.waitForFunction(() => (window as any).__crail.state.leader.npcs[0].mode === 'order');
   const after = await page.evaluate(() => {
     const s = (window as any).__crail.state;
-    return { charms: s.cult.charms, rank: s.cult.rank, soldiers: s.soldiers.npcs.map((n: any) => n.cult) };
+    return { charms: s.cult.charms, members: s.cult.members.length, leader: s.leader.npcs[0].cult, soldier: s.soldiers.npcs[0].cult };
   });
-  expect(after).toEqual({ charms: 0, rank: 'Sect', soldiers: [true, true] });
-  await expect(page.locator('#cult')).toContainText('Cult 3 · Sect');
+  expect(after).toEqual({ charms: 6, members: 0, leader: false, soldier: false });
+  await expect(page.locator('#hint')).toContainText('answers to no one');
+});
+
+test('one statue only, with a flag and guards who leave their posts when the cube meddles', async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 3, 0, 2, { idle: 999 });
+  await direct(page, 'leader.statue');
+  const first = await page.evaluate(() => ({ ...(window as any).__crail.state.army.monument }));
+  await direct(page, 'leader.statue');
+  const second = await page.evaluate(() => ({ ...(window as any).__crail.state.army.monument }));
+  expect([second.x, second.z]).toEqual([first.x, first.z]);
+  await direct(page, 'leader.flag');
+  await direct(page, 'leader.guard');
+  await direct(page, 'leader.guard');
+  expect(await page.evaluate(() => (window as any).__crail.state.army.guards)).toBe(2);
+  // Both walk to a post beside the statue and stay there.
+  const posted = () =>
+    page.waitForFunction(() => {
+      const s = (window as any).__crail.state;
+      return s.soldiers.npcs.every((n: any) => n.post && n.x === n.post.x && n.z === n.post.z);
+    });
+  await posted();
+  // With the leader, the flag and both guards round it, the statue is hemmed in.
+  // Bump the flag instead: it drops to half mast and the guards come for the cube.
+  const at = await page.evaluate(() => ({ ...(window as any).__crail.state.army.flag }));
+  await direct(page, 'cube.teleport', at.x, at.z - 1);
+  await holdUntil(page, 'KeyS', 's.cube.bonks >= 1');
+  expect(await page.evaluate(() => (window as any).__crail.state.soldiers.npcs.every((n: any) => n.alert > 0))).toBe(true);
+  expect(await page.evaluate(() => (window as any).__crail.state.army.flag.lowered)).toBeGreaterThan(0.5);
+  await expect(page.locator('#hint')).toContainText('Half mast');
+  await page.waitForFunction(() => (window as any).__crail.state.soldiers.npcs.every((n: any) => n.alert <= 0));
+  await direct(page, 'cube.teleport', at.x + 6, at.z + 6);
+  await posted();
+});
+
+test('the temple ordains members into ranks', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  for (const [i, x] of [-1, 0, 1, 2].entries()) await direct(page, 'femboys.spawn', i, x, 3, 1, { idle: 999 });
+  // Recruit all four directly, then visit the temple.
+  await direct(page, 'cult.charms', 4);
+  await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    for (const m of [...s.everyone]) s.cult.tryRecruit(m);
+  });
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.members.length)).toBe(4);
+  await direct(page, 'cube.teleport', -11, -2);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
+  const ranks = await page.evaluate(() => [...(window as any).__crail.state.cult.ranks.values()]);
+  expect(ranks).toEqual(['high', 'priest', 'priest', 'acolyte']);
+  await expect(page.locator('#hint')).toContainText('1 high priest, 2 priests, 1 acolyte');
 });
 
 test('the leader can put up a statue and build a tank, and sometimes the rocket works', async ({ page }) => {

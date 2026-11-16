@@ -91,6 +91,11 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
     // Eyes front. Arms straight. Do not blink first.
     p.armLz = p.armRz = 0;
     p.brow = 0.2;
+    // A guard on duty keeps its eyes on the cube when it comes close.
+    if (n.post && !n.cult && Math.hypot(w.cube.x - px, w.cube.z - pz) < 3.4) {
+      lookAtCube(0.3);
+      p.brow = 0.4;
+    }
   } else if (n.mode === 'idle' || n.mode === 'walk') {
     // Standing around: slow look left and right, weight on one hip.
     p.headYaw = Math.sin(time * 0.55 + seed) * 0.55;

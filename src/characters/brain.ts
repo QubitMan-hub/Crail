@@ -159,6 +159,12 @@ export interface Npc {
   slot: number;
   /** Recruited by the cube. Follows it from now on, whatever they were before. */
   cult: boolean;
+  /** A cell just stepped out of while going round something, so they do not step straight back. */
+  avoid: { x: number; z: number; steps: number } | null;
+  /** A guard's post: where to stand and which way to face. Guards do not follow the column. */
+  post: { x: number; z: number; dir: DirIndex } | null;
+  /** Seconds a guard stays off its post, crowding the cube, after something sets it off. */
+  alert: number;
   /** Somewhere they have decided to walk to (a ride, say). */
   goal: { x: number; z: number } | null;
   /** Set while a ride is carrying them: where they are drawn, and how they sit. */
@@ -206,7 +212,7 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, goal: null, carry: null, trail: [], order: null,
+    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
     variant, x, z, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -439,6 +445,19 @@ const RING = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -
 /** Where worshippers stand, as (forward, sideways) from the cube: behind it, then the four diagonals. */
 const GATHER = [[-1, 0], [-1, 1], [-1, -1], [1, 1], [1, -1]];
 
+/** Take up a place right beside the cube and glare at it. */
+function surround(n: Npc, w: World): void {
+  // Everyone has their own spot around the cube: four sides first, then the corners.
+  const [ox, oz] = RING[n.slot % RING.length];
+  const spot = { x: w.cube.x + ox, z: w.cube.z + oz };
+  if (n.x === spot.x && n.z === spot.z) return void faceCube(n, w);
+  const taken = !w.grid.isFree(spot.x, spot.z, n.occ);
+  const close = Math.max(Math.abs(n.x - w.cube.x), Math.abs(n.z - w.cube.z)) <= 1;
+  // Someone else is standing on it: get as near as possible and glare from there.
+  if (taken && (close || manhattan(n, spot) === 1)) return void faceCube(n, w);
+  approach(n, w, spot);
+}
+
 /** One step toward a cell: the direct way if it is free, otherwise round whatever is in the way. */
 function approach(n: Npc, w: World, to: { x: number; z: number }): void {
   const dx = to.x - n.x;
@@ -452,8 +471,21 @@ function approach(n: Npc, w: World, to: { x: number; z: number }): void {
   else ways = Math.abs(dx) >= Math.abs(dz) ? [alongX, alongZ] : [alongZ, alongX];
   // Keep going straight when that still gets closer: columns look better without zig-zags.
   if (ways.includes(n.dir) && dx !== 0 && dz !== 0) ways = [n.dir, ...ways.filter((d) => d !== n.dir)];
-  const d = ways.find((way) => isFreeAhead(n, w, way));
-  if (d === undefined || turn(n, d)) return;
+  const open = (way: DirIndex) => {
+    const x = n.x + DIRS[way][0];
+    const z = n.z + DIRS[way][1];
+    return w.grid.isFree(x, z) && !(n.avoid && n.avoid.x === x && n.avoid.z === z);
+  };
+  let d = ways.find(open);
+  if (d === undefined) {
+    // Every direct way is taken. Step round it: whichever free cell is nearest the target,
+    // and remember where we came from so the next step does not undo this one.
+    const after = (way: DirIndex) => Math.abs(to.x - n.x - DIRS[way][0]) + Math.abs(to.z - n.z - DIRS[way][1]);
+    d = ([0, 1, 2, 3] as DirIndex[]).filter(open).sort((p, q) => after(p) - after(q))[0];
+    if (d === undefined) return;
+    n.avoid = { x: n.x, z: n.z, steps: 4 };
+  } else if (n.avoid && --n.avoid.steps <= 0) n.avoid = null;
+  if (turn(n, d)) return;
   step(n, w, d);
 }
 
@@ -716,6 +748,13 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   riding() {},
 
   march(n, w) {
+    if (n.post && !n.cult) {
+      // A guard: stay on the post unless something has set them off.
+      if (n.alert > 0) return surround(n, w);
+      if (n.x === n.post.x && n.z === n.post.z) return void (n.dir = n.post.dir);
+      if (!w.grid.isFree(n.post.x, n.post.z, n.occ) && manhattan(n, n.post) <= 1) return;
+      return approach(n, w, n.post);
+    }
     if (w.alarm > 0 && !n.cult) return setMode(n, 'swarm');
     const lead = n.lead;
     if (!lead) return;
@@ -753,15 +792,7 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
 
   swarm(n, w) {
     if (w.alarm <= 0) return setMode(n, 'march');
-    // Everyone has their own spot around the cube: four sides first, then the corners.
-    const [ox, oz] = RING[n.slot % RING.length];
-    const spot = { x: w.cube.x + ox, z: w.cube.z + oz };
-    if (n.x === spot.x && n.z === spot.z) return void faceCube(n, w);
-    const taken = !w.grid.isFree(spot.x, spot.z, n.occ);
-    const close = Math.max(Math.abs(n.x - w.cube.x), Math.abs(n.z - w.cube.z)) <= 1;
-    // Someone else is standing on it: get as near as possible and glare from there.
-    if (taken && (close || manhattan(n, spot) === 1)) return void faceCube(n, w);
-    approach(n, w, spot);
+    surround(n, w);
   },
 };
 
@@ -771,6 +802,7 @@ export function tick(n: Npc, w: World, dt: number): void {
   n.strikeAge += dt;
   if (n.strikeAge > 7) n.strikes = 0;
   n.followCooldown -= dt;
+  if (n.alert > 0) n.alert -= dt;
   if (n.emote && (n.emote.t += dt) > EMOTE_SECONDS) n.emote = null;
 
   if (n.nx !== null && n.nz !== null) {

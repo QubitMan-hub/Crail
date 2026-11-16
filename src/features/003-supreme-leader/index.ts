@@ -1,25 +1,40 @@
 import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
+import { addLandmark } from '../../core/landmarks';
+import { tip } from '../../core/tip';
 import { DIRS, LEADER, relocate, SOLDIER, type DirIndex, type Npc } from '../../characters/brain';
 import { createCast, type Member } from '../../characters/cast';
-import { buildCountdown, buildLeader, buildRocketSite, buildSoldier, buildStatue, buildTank, SOLDIER_SCALE } from './model';
+import {
+  buildCountdown, buildFlag, buildLeader, buildRocketSite, buildSoldier, buildStatue, buildTank, SOLDIER_SCALE,
+} from './model';
 
-const MAX_SOLDIERS = 6;
+/** How many soldiers and tanks march behind him. The rest stay to guard his statue. */
+const FOLLOWERS = 4;
+const TANKS = 1;
+const GUARDS = 2;
+/** He replaces soldiers the cube's cult takes from him, but not forever. */
+const MOST_EVER_BUILT = 14;
 const BUILD_EVERY = 7;
 const LAUNCH_EVERY = 26;
 const ALARM_SECONDS = 7;
+const GUARD_ALERT_SECONDS = 6;
 const DRILL_EVERY = 21;
 const COUNTDOWN = 2.4;
+/** A cult this size outnumbers his column. His soldiers can count. */
+const INTIMIDATING = 6;
 
 type Outcome = 'tip' | 'fizzle' | 'success';
-type Project = 'soldier' | 'pad' | 'statue' | 'tank';
+type Project = 'soldier' | 'pad' | 'statue' | 'flag' | 'guard' | 'tank';
 
 /**
  * The leader builds a military, in this order: two soldiers, a rocket, two more
- * soldiers, a gold statue of himself, two more soldiers, and a tank.
- * The soldiers and the tank follow him in a column and drill on command.
- * The rocket has a countdown and, most of the time, a problem.
+ * soldiers, one gold statue of himself with a flag beside it and two guards posted
+ * at it, and a tank. Four soldiers and the tank march behind him. The guards stay.
+ *
+ * The cube can meddle: bump the statue or the flag and the guards come over; bump
+ * the launch pad and the rocket goes early; bump him and his column surrounds you,
+ * unless your cult is big enough that they think better of it.
  */
 export const supremeLeader: Feature = {
   meta: {
@@ -34,16 +49,23 @@ export const supremeLeader: Feature = {
       build: (kind, emote) => (kind === 'tank' ? buildTank(emote) : buildSoldier(null, emote)),
     });
     const isTank = (m: Member) => m.n.variant === 1;
-    const infantry = () => soldiers.members.filter((m) => !isTank(m)).length;
-    const hasTank = () => soldiers.members.some(isTank);
+    /** Still his: not recruited by the cube. */
+    const loyal = () => soldiers.members.filter((m) => !m.n.cult);
+    const followers = () => loyal().filter((m) => !isTank(m) && !m.n.post);
+    const guards = () => loyal().filter((m) => m.n.post);
+    const tanks = () => loyal().filter(isTank);
+    let everBuilt = 0;
 
+    const cultSize = (): number => ctx.state.cult?.members.length ?? 0;
     const leaders = createCast(ctx, {
       key: 'leader', persona: LEADER, variants: [null], build: buildLeader, count: 1, seedSalt: 0x1ead,
       // Femboys wave at everyone. He is not exempt.
       bow: ['#f6a8c4', '#ee6fa4'],
       onEvent(event, npc) {
         if (event === 'built') build(npc);
-        if (event === 'alarm') soldiers.world.alarm = ALARM_SECONDS;
+        if (event !== 'alarm') return;
+        if (cultSize() >= INTIMIDATING) return tip('He points. His soldiers count your cult and stay where they are.');
+        soldiers.world.alarm = ALARM_SECONDS;
       },
     });
     const boss = () => leaders.members[0]?.n;
@@ -71,20 +93,26 @@ export const supremeLeader: Feature = {
     };
     ctx.state.rocket = rocketSite;
 
-    // ---- The statue ------------------------------------------------------------
+    // ---- The parade ground: one statue, one flag, two guards -------------------
     const plinth: Occupant = { kind: 'structure', id: 'statue' };
     const statue = buildStatue();
     statue.visible = false;
     ctx.scene.add(statue);
-    const monument = { built: false, x: 0, z: 0, age: 0 };
-    ctx.state.army = { monument, tank: false, infantry: 0 };
+    const monument = { built: false, x: 0, z: 0, age: 0, wobble: 9 };
+    const flagpole: Occupant = { kind: 'structure', id: 'flag' };
+    const { pole, banner, top: flagTop } = buildFlag();
+    pole.visible = false;
+    ctx.scene.add(pole);
+    const flag = { built: false, x: 0, z: 0, age: 0, lowered: 0 };
+    const army = { monument, flag, tank: false, followers: 0, guards: 0 };
+    ctx.state.army = army;
 
-    const freeNextTo = (n: Npc): [number, number] | null => {
-      // Behind him first, then either side, then in front.
-      const order = [2, 1, 3, 0].map((turn) => ((n.dir + turn) % 4) as DirIndex);
+    const freeNextTo = (at: { x: number; z: number }, facing: DirIndex): [number, number] | null => {
+      // Behind first, then either side, then in front.
+      const order = [2, 1, 3, 0].map((turn) => ((facing + turn) % 4) as DirIndex);
       for (const d of order) {
-        const x = n.x + DIRS[d][0];
-        const z = n.z + DIRS[d][1];
+        const x = at.x + DIRS[d][0];
+        const z = at.z + DIRS[d][1];
         if (ctx.grid.isFree(x, z)) return [x, z];
       }
       return null;
@@ -94,52 +122,87 @@ export const supremeLeader: Feature = {
       return Math.abs(x - c.x) + Math.abs(z - c.z) > 18 && leaders.offscreen(x, z);
     };
 
-    /** What he builds next. He has a plan, and the plan ends with a tank. */
+    /** What he builds next. The statue is built once and never again. */
     const nextProject = (): Project | null => {
-      const men = infantry();
-      if (men < 2) return 'soldier';
-      if (!rocketSite.built || farAway(rocketSite.x, rocketSite.z)) return 'pad';
-      if (men < 4) return 'soldier';
-      if (!monument.built || farAway(monument.x, monument.z)) return 'statue';
-      if (men < MAX_SOLDIERS) return 'soldier';
-      if (!hasTank()) return 'tank';
+      const canRecruit = everBuilt < MOST_EVER_BUILT;
+      const men = followers().length;
+      if (men < 2 && canRecruit) return 'soldier';
+      if (!rocketSite.built) return 'pad';
+      if (men < FOLLOWERS && canRecruit) return 'soldier';
+      if (!monument.built) return 'statue';
+      if (!flag.built) return 'flag';
+      if (guards().length < GUARDS && canRecruit) return 'guard';
+      if (tanks().length < TANKS && canRecruit) return 'tank';
+      if (farAway(rocketSite.x, rocketSite.z)) return 'pad'; // the launch site moves with him
       return null;
     };
 
-    const place = (what: 'pad' | 'statue', x: number, z: number): boolean => {
-      const who = what === 'pad' ? pad : plinth;
-      const thing = what === 'pad' ? rocketSite : monument;
-      if (thing.built) ctx.grid.release(thing.x, thing.z, who);
-      if (!ctx.grid.claim(x, z, who)) return false;
-      Object.assign(thing, { built: true, x, z, age: 0 });
-      const mesh = what === 'pad' ? site : statue;
-      mesh.position.set(x, 0, z);
-      mesh.visible = true;
-      if (what === 'pad') Object.assign(rocketSite, { phase: 'idle', t: 0, sinceLaunch: LAUNCH_EVERY - 7 });
-      return true;
-    };
+    /** The two guard posts: the camera-facing sides of the statue, looking outward. */
+    const posts = (): { x: number; z: number; dir: DirIndex }[] =>
+      [
+        { x: monument.x + 1, z: monument.z, dir: 0 as DirIndex },
+        { x: monument.x, z: monument.z + 1, dir: 1 as DirIndex },
+        { x: monument.x - 1, z: monument.z, dir: 2 as DirIndex },
+        { x: monument.x, z: monument.z - 1, dir: 3 as DirIndex },
+      ].filter((p) => !(flag.built && p.x === flag.x && p.z === flag.z));
 
     function build(n: Npc, forced?: Project): void {
-      const spot = freeNextTo(n);
       const what = forced ?? nextProject();
-      if (!spot || !what) return;
-      const [x, z] = spot;
-      if (what === 'pad' || what === 'statue') {
-        place(what, x, z);
-        if (what === 'statue') for (const m of soldiers.members) m.n.order = 'salute'; // unveiling
+      if (!what) return;
+      if (what === 'statue') {
+        if (monument.built) return; // there is only ever one
+        const spot = freeNextTo(n, n.dir);
+        if (!spot || !ctx.grid.claim(spot[0], spot[1], plinth)) return;
+        Object.assign(monument, { built: true, x: spot[0], z: spot[1], age: 0 });
+        statue.position.set(spot[0], 0, spot[1]);
+        statue.visible = true;
+        addLandmark(ctx, 'Statue', spot[0], spot[1]);
+        for (const m of loyal()) m.n.order = 'salute'; // unveiling
         return;
       }
-      const recruit = soldiers.spawn(what === 'tank' ? 1 : 0, x, z, n.dir);
+      if (what === 'flag') {
+        if (flag.built || !monument.built) return;
+        // Behind the statue as the camera sees it, so it never hides the thing it honours
+        // and the two front sides stay free for the guards.
+        const spot = ([[-1, 0], [0, -1], [0, 1], [1, 0]] as const)
+          .map(([dx, dz]) => [monument.x + dx, monument.z + dz] as [number, number])
+          .find(([x, z]) => ctx.grid.isFree(x, z));
+        if (!spot || !ctx.grid.claim(spot[0], spot[1], flagpole)) return;
+        Object.assign(flag, { built: true, x: spot[0], z: spot[1], age: 0, lowered: 0 });
+        pole.position.set(spot[0], 0, spot[1]);
+        pole.visible = true;
+        return;
+      }
+      if (what === 'pad') {
+        const spot = freeNextTo(n, n.dir);
+        if (!spot) return;
+        if (rocketSite.built) ctx.grid.release(rocketSite.x, rocketSite.z, pad);
+        if (!ctx.grid.claim(spot[0], spot[1], pad)) return;
+        Object.assign(rocketSite, { built: true, x: spot[0], z: spot[1], age: 0, phase: 'idle', t: 0, sinceLaunch: LAUNCH_EVERY - 7 });
+        site.position.set(spot[0], 0, spot[1]);
+        site.visible = true;
+        return;
+      }
+      if (what === 'guard' && !monument.built) return;
+      const spot = freeNextTo(n, n.dir);
+      if (!spot) return;
+      const recruit = soldiers.spawn(what === 'tank' ? 1 : 0, spot[0], spot[1], n.dir);
       if (!recruit) return;
-      // Each new arrival takes the next place in the column behind him.
+      everBuilt += 1;
       recruit.n.lead = n;
-      recruit.n.slot = soldiers.members.length - 1;
       recruit.n.order = 'salute';
       recruit.rig.root.scale.setScalar(0.01); // pops up to full size below
+      if (what === 'guard') {
+        // Posted to the statue. He walks there himself and does not leave.
+        const taken = guards().map((g) => `${g.n.post!.x},${g.n.post!.z}`);
+        const open = posts().filter((p) => !taken.includes(`${p.x},${p.z}`));
+        // A post nobody is standing on, for preference; failing that, he waits for one to clear.
+        recruit.n.post = open.find((p) => ctx.grid.isFree(p.x, p.z, recruit.n.occ)) ?? open[0] ?? null;
+      }
     }
 
     const launch = (outcome?: Outcome) => {
-      if (!rocketSite.built || rocketSite.phase !== 'idle') return;
+      if (!rocketSite.built || rocketSite.phase !== 'idle') return false;
       const roll = soldiers.world.rand();
       // The first one always fails. After that it works about one time in seven.
       rocketSite.outcome = outcome ?? (rocketSite.launches === 0 ? 'tip' : roll < 0.55 ? 'tip' : roll < 0.85 ? 'fizzle' : 'success');
@@ -147,33 +210,55 @@ export const supremeLeader: Feature = {
       rocketSite.t = 0;
       rocketSite.sinceLaunch = 0;
       rocketSite.launches += 1;
+      return true;
     };
 
     // Drill: a salute that runs down the column, one soldier after the next.
     const pendingSalutes: { n: Npc; at: number }[] = [];
     let clock = 0;
-    const drill = () => {
-      soldiers.members.forEach((m, i) => pendingSalutes.push({ n: m.n, at: clock + i * 0.16 }));
+    const drill = () => loyal().forEach((m, i) => pendingSalutes.push({ n: m.n, at: clock + i * 0.16 }));
+
+    const alertGuards = () => {
+      for (const g of guards()) {
+        g.n.alert = GUARD_ALERT_SECONDS;
+        g.n.emote = { kind: 'bang', t: 0 };
+      }
+      return guards().length;
     };
+
+    // ---- The cube meddles --------------------------------------------------------
+    ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {
+      if (occupant === plinth) {
+        monument.wobble = 0;
+        tip(alertGuards() ? 'You touched the statue. The guards saw.' : 'A gift from himself, to himself.');
+      } else if (occupant === flagpole) {
+        flag.lowered = 1;
+        alertGuards();
+        tip('Half mast. That was not on the schedule.');
+      } else if (occupant === pad) {
+        if (launch()) tip('You pressed the button. Unscheduled launch.');
+      }
+    });
 
     // Scripted control, for tests and video shots.
     ctx.events.on('direct:leader.build', () => (leaders.world.wantBuild = true));
-    ctx.events.on<[Outcome?]>('direct:leader.launch', ([outcome]) => launch(outcome));
+    ctx.events.on<[Outcome?]>('direct:leader.launch', ([outcome]) => void launch(outcome));
     ctx.events.on('direct:leader.alarm', () => (soldiers.world.alarm = ALARM_SECONDS));
     ctx.events.on('direct:leader.drill', drill);
-    for (const what of ['pad', 'statue', 'tank', 'soldier'] as const) {
+    for (const what of ['pad', 'statue', 'flag', 'guard', 'tank', 'soldier'] as const) {
       ctx.events.on(`direct:leader.${what === 'pad' ? 'site' : what}`, () => {
         const n = boss();
         if (n) build(n, what);
       });
     }
     ctx.events.on('direct:leader.clear', () => {
-      for (const [thing, who, mesh] of [[rocketSite, pad, site], [monument, plinth, statue]] as const) {
+      for (const [thing, who, mesh] of [[rocketSite, pad, site], [monument, plinth, statue], [flag, flagpole, pole]] as const) {
         if (thing.built) ctx.grid.release(thing.x, thing.z, who);
         thing.built = false;
         mesh.visible = false;
       }
       rocketSite.phase = 'idle';
+      everBuilt = 0;
       countdown.show(null, 0);
     });
 
@@ -185,30 +270,32 @@ export const supremeLeader: Feature = {
     let sinceBuild = BUILD_EVERY - 3;
     let sinceDrill = 6;
     let wasRiding = false;
-    ctx.onUpdate((dt) => {
+    ctx.onUpdate((dt, time) => {
       clock += dt;
       const n = boss();
       if (!n) return;
       const staged = leaders.world.staged;
-      ctx.state.army.tank = hasTank();
-      ctx.state.army.infantry = infantry();
+      army.tank = tanks().length > 0;
+      army.followers = followers().length;
+      army.guards = guards().length;
 
-      // Time to build something? (Not once the cube's cult has got to him.)
+      // Time to build something?
       sinceBuild += dt;
-      if (!staged && !n.cult && sinceBuild > BUILD_EVERY && nextProject()) {
+      if (!staged && sinceBuild > BUILD_EVERY && nextProject()) {
         sinceBuild = 0;
         leaders.world.wantBuild = true;
       }
 
-      // Keep the column together: everyone knows their place, and anyone left far behind is brought back.
-      soldiers.members.forEach((m, i) => {
+      // The column: followers and tanks take the places behind him, in order.
+      // Guards are not in it, and neither is anyone the cube has recruited.
+      let place = 0;
+      for (const m of soldiers.members) {
         const full = isTank(m) ? 1 : SOLDIER_SCALE;
         const s = m.rig.root.scale.x;
         if (s < full) m.rig.root.scale.setScalar(Math.min(full, s + dt * 2.8));
-        // A soldier who has joined the cube's cult no longer answers to him.
-        if (m.n.cult) return;
+        if (m.n.cult || m.n.post) continue;
         m.n.lead = n;
-        m.n.slot = i;
+        m.n.slot = place++;
         if (!staged && Math.abs(m.n.x - n.x) + Math.abs(m.n.z - n.z) > 14 && leaders.offscreen(m.n.x, m.n.z)) {
           for (let tries = 0; tries < 8; tries++) {
             const x = n.x + Math.round((soldiers.world.rand() - 0.5) * 6);
@@ -216,12 +303,12 @@ export const supremeLeader: Feature = {
             if (relocate(m.n, soldiers.world, x, z)) break;
           }
         }
-      });
+      }
 
       // Drill, every so often, and a salute whenever he gets on a ride.
       sinceDrill += dt;
       const riding = n.mode === 'riding';
-      if ((riding && !wasRiding) || (!staged && !n.cult && sinceDrill > DRILL_EVERY && soldiers.members.length >= 2 && n.nx === null)) {
+      if ((riding && !wasRiding) || (!staged && sinceDrill > DRILL_EVERY && loyal().length >= 2 && n.nx === null)) {
         sinceDrill = 0;
         drill();
       }
@@ -234,18 +321,30 @@ export const supremeLeader: Feature = {
 
       if (monument.built) {
         monument.age += dt;
+        monument.wobble += dt;
         statue.scale.setScalar(popIn(monument.age));
+        // Bumped: it rocks on its plinth and settles.
+        statue.rotation.z = Math.sin(monument.wobble * 22) * 0.09 * Math.exp(-monument.wobble * 4);
+      }
+      if (flag.built) {
+        flag.age += dt;
+        pole.scale.setScalar(popIn(flag.age));
+        // Lowered flags creep back up on their own. Somebody is always watching the flag.
+        flag.lowered = Math.max(0, flag.lowered - dt / 7);
+        banner.position.y = flagTop - 0.3 - flag.lowered * 1.5;
+        banner.rotation.y = -0.5 + Math.sin(time * 2.3) * 0.22 + Math.sin(time * 5.1) * 0.06;
       }
 
       // ---- The rocket ----
       if (!rocketSite.built) return;
       rocketSite.age += dt;
       site.scale.setScalar(popIn(rocketSite.age));
-      const everyoneSalutes = () => soldiers.members.forEach((m) => !m.n.cult && (m.n.order = 'salute'));
+      const everyoneSalutes = () => loyal().forEach((m) => (m.n.order = 'salute'));
 
       if (rocketSite.phase === 'idle') {
         rocketSite.sinceLaunch += dt;
-        if (!staged && !n.cult && rocketSite.sinceLaunch > LAUNCH_EVERY) launch();
+        if (!staged && rocketSite.sinceLaunch > LAUNCH_EVERY) launch();
+        rocket.visible = true;
         rocket.position.set(0, 0.16, 0);
         rocket.rotation.set(0, 0, 0);
         rocket.scale.setScalar(Math.min(1, Math.max(0.001, (rocketSite.sinceLaunch - 0.2) / 0.3)));
@@ -277,7 +376,7 @@ export const supremeLeader: Feature = {
       const dud = () => {
         ctx.bump(0.22);
         ctx.events.emit('leader:dud');
-        if (!n.cult) n.order = 'fume';
+        n.order = 'fume';
         everyoneSalutes(); // they clap for everything
       };
       if (t < 0.6) {
@@ -298,13 +397,10 @@ export const supremeLeader: Feature = {
         if (crossed(2.0)) {
           rocketSite.successes += 1;
           ctx.events.emit('leader:launched');
-          if (!n.cult) n.order = 'cheer';
+          n.order = 'cheer';
           everyoneSalutes();
         }
-        if (t > 6) {
-          rocket.visible = true;
-          rocketSite.phase = 'idle';
-        }
+        if (t > 6) rocketSite.phase = 'idle';
       } else if (rocketSite.outcome === 'fizzle') {
         // A small hop, a cough, and it settles back at an angle.
         const k = Math.min(1, (t - 0.6) / 0.5);

@@ -384,3 +384,25 @@ describe('the cult of the cube', () => {
     expect(dist(goth, s.cube)).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('statue guards', () => {
+  it('walk to their post, face outward, leave it when alerted, and come back', () => {
+    const s = setup();
+    s.moveCube(6, 6);
+    const guard = s.add(-4, 2, 0, 0, SOLDIER);
+    guard.post = { x: -1, z: 3, dir: 1 };
+    s.run([guard], 4);
+    expect([guard.x, guard.z, guard.dir]).toEqual([-1, 3, 1]);
+    // An alarm for the marching column does not move a guard.
+    s.world.alarm = 5;
+    s.run([guard], 1);
+    expect([guard.x, guard.z]).toEqual([-1, 3]);
+    s.world.alarm = 0;
+    // His own alert does.
+    guard.alert = 8;
+    s.run([guard], 7);
+    expect(Math.abs(guard.x - 6) + Math.abs(guard.z - 6)).toBe(1);
+    s.run([guard], 9);
+    expect([guard.x, guard.z, guard.dir]).toEqual([-1, 3, 1]);
+  });
+});

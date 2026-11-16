@@ -244,3 +244,24 @@ export function buildCountdown(): { sprite: THREE.Sprite; show(text: string | nu
     },
   };
 }
+
+/** A flagpole for the parade ground. The banner is its own mesh so it can wave, and be lowered. */
+export function buildFlag(): { pole: THREE.Group; banner: THREE.Group; top: number } {
+  const pole = new THREE.Group();
+  const top = 3.3;
+  const still = group(pole);
+  box(still, '#a59f96', 0.5, 0.14, 0.5, 0, 0.07, 0);
+  box(still, '#8d8a96', 0.08, top + 0.2, 0.08, 0, (top + 0.2) / 2, 0);
+  box(still, GOLD, 0.16, 0.16, 0.16, 0, top + 0.28, 0);
+  fuse(still);
+  // The banner hangs from the pole and swings about it.
+  const banner = group(pole, 0, top - 0.3, 0);
+  const cloth = group(banner);
+  box(cloth, '#b8322a', 1.0, 0.62, 0.03, 0.54, 0, 0);
+  // His silhouette in gold: a head and that haircut. Parody needs no caption.
+  box(cloth, GOLD, 0.22, 0.2, 0.034, 0.54, -0.05, 0);
+  box(cloth, GOLD, 0.2, 0.07, 0.034, 0.54, 0.1, 0);
+  box(cloth, GOLD, 0.16, 0.04, 0.034, 0.54, 0.16, 0);
+  fuse(cloth);
+  return { pole, banner, top };
+}

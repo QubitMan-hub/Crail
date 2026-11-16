@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
+import { tip } from '../../core/tip';
 import type { DirIndex, Lead, Npc } from '../../characters/brain';
 import { everyone, type Member } from '../../characters/cast';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
@@ -9,9 +10,9 @@ import { box, fuse, group, HIP, mat } from '../../characters/rig';
 
 /**
  * The Cult of the Cube. Earn a charm (ride a ride, or visit the shrine), then bump
- * into anyone: they put on the robe and follow the cube from then on. Stop moving
- * and they gather in a circle and worship. This is the first thing in the game that
- * is a game: there is something to collect, and something to do with it.
+ * into anyone but the leader: they put on the robe and follow the cube from then on.
+ * Stop moving and they gather and worship. Take them to the temple to be ordained:
+ * priests make the shrine give more, and the high priest recruits on his own.
  */
 
 const RED = '#f2542d';
@@ -25,9 +26,15 @@ const MAX_CHARMS = 6;
 const SHRINE_REFILL = 30;
 /** Seconds before the same ride will pay out a charm again. Visiting all four is the fast way. */
 const RIDE_REST = 40;
-/** What it takes to recruit each kind. The leader is dear, but his soldiers follow him for free. */
-const COST: Record<string, number> = { soldier: 1, femboy: 1, goth: 2, leader: 3 };
-const NAMES: Record<string, string> = { soldier: 'Soldiers', femboy: 'Femboys', goth: 'Goths', leader: 'The leader' };
+/** What it takes to recruit each kind. The leader cannot be bought at any price. */
+const COST: Record<string, number> = { soldier: 1, femboy: 1, goth: 2 };
+const NAMES: Record<string, string> = { soldier: 'Soldiers', femboy: 'Femboys', goth: 'Goths' };
+/** The temple: a hall behind the shrine where members are ordained. */
+export const TEMPLE = { x: -11, z: -4 };
+type Rank = 'acolyte' | 'priest' | 'high';
+/** How often the high priest goes out and brings someone back, in seconds. */
+const PREACH_EVERY = 45;
+const GOLD = '#d6b24a';
 /** [members needed, name, what the player is told]. */
 const RANKS: [number, string, string][] = [
   [1, 'Following', 'You have a follower. Stand still and see what they do.'],
@@ -101,6 +108,81 @@ function robe(m: Member): void {
   }
 }
 
+/**
+ * Marks of rank, worn over the robe. An acolyte has none. A priest wears a red stole.
+ * The high priest wears a gold one, a gold band on the hood, and carries a staff.
+ */
+function dress(m: Member, rank: Rank): void {
+  for (const part of [m.rig.torso, m.rig.head, m.rig.armR]) part.getObjectByName('rank')?.removeFromParent();
+  if (rank === 'acolyte') return;
+  const color = rank === 'high' ? GOLD : RED;
+  const wide = m.n.persona.kind === 'leader' ? 1.22 : 1;
+  const stole = group(m.rig.torso);
+  stole.name = 'rank';
+  for (const side of [1, -1]) box(stole, color, 0.1, 0.62, 0.02, side * 0.15 * wide, 0.2, 0.212);
+  box(stole, color, 0.4 * wide, 0.07, 0.02, 0, 0.52, 0.29);
+  fuse(stole);
+  if (rank !== 'high') return;
+  const band = group(m.rig.head);
+  band.name = 'rank';
+  box(band, GOLD, 0.75, 0.07, 0.79, 0, 0.5, 0.02);
+  box(band, GOLD, 0.2, 0.2, 0.2, 0, 1.24, -0.4);
+  fuse(band);
+  const staff = group(m.rig.armR);
+  staff.name = 'rank';
+  box(staff, GOLD, 0.05, 1.7, 0.05, 0, -0.1, 0.16);
+  box(staff, RED, 0.2, 0.2, 0.2, 0, 0.86, 0.16);
+  fuse(staff);
+}
+
+/** The hall itself: a dark, pillared block on a stepped base, with the cube on the roof. */
+function buildTemple(): { hall: THREE.Group; idol: THREE.Mesh; flames: THREE.Mesh[] } {
+  const hall = new THREE.Group();
+  const still = group(hall);
+  box(still, STONE_DARK, 3.0, 0.18, 3.0, 0, 0.09, 0);
+  box(still, STONE, 2.7, 0.18, 2.7, 0, 0.27, 0);
+  box(still, ROBE, 2.1, 2.2, 2.1, 0, 1.46, 0);
+  for (const [x, z] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    box(still, STONE, 0.34, 2.3, 0.34, x * 1.14, 1.5, z * 1.14);
+    box(still, STONE_DARK, 0.44, 0.12, 0.44, x * 1.14, 2.7, z * 1.14);
+  }
+  // Doorways on the two sides the camera can see, each flanked by banners.
+  box(still, VOID, 0.8, 1.5, 0.04, 0, 1.11, 1.06);
+  box(still, VOID, 0.04, 1.5, 0.8, 1.06, 1.11, 0);
+  for (const s of [1, -1]) {
+    box(still, RED, 0.34, 1.3, 0.03, s * 0.74, 1.5, 1.07);
+    box(still, INK, 0.12, 0.12, 0.035, s * 0.74, 1.72, 1.075);
+    box(still, RED, 0.03, 1.3, 0.34, 1.07, 1.5, s * 0.74);
+    box(still, INK, 0.035, 0.12, 0.12, 1.075, 1.72, s * 0.74);
+  }
+  box(still, STONE_DARK, 3.1, 0.22, 3.1, 0, 2.87, 0);
+  box(still, STONE, 2.3, 0.24, 2.3, 0, 3.1, 0);
+  box(still, STONE_DARK, 1.4, 0.26, 1.4, 0, 3.35, 0);
+  // Braziers on the front corners of the steps.
+  const flames: THREE.Mesh[] = [];
+  for (const [x, z] of [[1.25, 1.25], [1.25, -0.2], [-0.2, 1.25]]) {
+    box(still, STONE_DARK, 0.26, 0.36, 0.26, x, 0.54, z);
+    box(still, INK, 0.34, 0.08, 0.34, x, 0.76, z);
+  }
+  fuse(still);
+  for (const [x, z] of [[1.25, 1.25], [1.25, -0.2], [-0.2, 1.25]]) {
+    const f = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.26, 0.2),
+      new THREE.MeshStandardMaterial({ color: FLAME, emissive: '#ff7a1a', emissiveIntensity: 1.1 }),
+    );
+    f.position.set(x, 0.93, z);
+    hall.add(f);
+    flames.push(f);
+  }
+  // The cube, larger than life, turning slowly on the roof.
+  const idol = box(hall, RED, 0.7, 0.7, 0.7, 0, 3.95, 0);
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.1, 24), mat(INK));
+  dot.rotation.x = -Math.PI / 2;
+  dot.position.y = 0.352;
+  idol.add(dot);
+  return { hall, idol, flames };
+}
+
 export const cubeCult: Feature = {
   meta: {
     id: '003-cube-cult',
@@ -154,6 +236,11 @@ export const cubeCult: Feature = {
         const n = m.n;
         if (state.charms <= 0 || n.cult) return false;
         if (['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'riding'].includes(n.mode)) return false;
+        if (n.persona.kind === 'leader') {
+          // He cannot be recruited. He reacts the way he reacts to everything: by pointing.
+          tip('He answers to no one. Least of all a cube.');
+          return false;
+        }
         const cost = COST[n.persona.kind] ?? 1;
         if (state.charms < cost) {
           // Not enough. They react the way they always did, and you learn the price.
@@ -162,13 +249,6 @@ export const cubeCult: Feature = {
         }
         state.charms -= cost;
         enlist(m);
-        if (n.persona.kind === 'leader') {
-          // Recruit the leader and his whole army comes with him. That is called a coup.
-          const army = everyone(ctx).filter((e) => e.n.persona.kind === 'soldier' && !e.n.cult && e.n.mode !== 'riding');
-          for (const soldier of army) enlist(soldier);
-          if (army.length) tip(`A coup. ${army.length} soldier${army.length > 1 ? 's' : ''} joined for free.`);
-          ctx.events.emit('cult:coup', { soldiers: army.length });
-        }
         ctx.bump(0.1);
         refresh(true);
         return true;
@@ -226,7 +306,7 @@ export const cubeCult: Feature = {
     dot.rotation.x = -Math.PI / 2;
     dot.position.y = 0.152;
     idol.add(dot);
-    addLandmark(ctx, 'Shrine', SHRINE.x, SHRINE.z);
+    addLandmark(ctx, 'Temple', SHRINE.x - 1.5, SHRINE.z - 1.5);
     let refill = SHRINE_REFILL - 4;
     let ready = false;
     ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {
@@ -236,10 +316,11 @@ export const cubeCult: Feature = {
       if (!ready) return tip('The shrine is not ready yet.');
       ready = false;
       refill = 0;
-      // A bigger congregation gives more: one charm, plus one for every three members.
-      const tithe = 1 + Math.floor(members.length / 3);
+      // The shrine gives one charm, plus one for every ordained priest (the high priest counts).
+      const clergy = [...ranks.values()].filter((r) => r !== 'acolyte').length;
+      const tithe = 1 + Math.min(3, clergy);
       gain(tithe);
-      if (tithe > 1) tip(`The congregation gives ✦${tithe}.`);
+      tip(tithe > 1 ? `Your priests add to the offering: ✦${tithe}.` : 'The shrine gives ✦1. Ordained priests would make it give more.');
     });
 
     // ---- What a growing cult earns the cube -------------------------------------
@@ -286,14 +367,52 @@ export const cubeCult: Feature = {
       }
     }
     refresh(false);
-    const hint = document.getElementById('hint');
-    let tipFor = 0;
-    function tip(text: string) {
-      if (!hint) return;
-      hint.textContent = text;
-      hint.classList.remove('gone');
-      tipFor = 5;
+    // ---- The temple: where members are ordained -----------------------------------
+    const temple: Occupant = { kind: 'temple', id: 'temple' };
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) ctx.grid.claim(TEMPLE.x + dx, TEMPLE.z + dz, temple);
+    const { hall, idol: roofIdol, flames } = buildTemple();
+    hall.position.set(TEMPLE.x, 0, TEMPLE.z);
+    ctx.scene.add(hall);
+    // A ring of candles round the shrine, on the corners between cells.
+    const candles: THREE.Mesh[] = [];
+    for (const [cx, cz] of [[1.5, 0.5], [1.5, -0.5], [-1.5, 0.5], [-1.5, -0.5], [0.5, 1.5], [-0.5, 1.5], [0.5, -1.5], [-0.5, -1.5]]) {
+      box(ctx.scene, '#fbf6ee', 0.09, 0.22, 0.09, SHRINE.x + cx, 0.11, SHRINE.z + cz).castShadow = false;
+      const f = box(ctx.scene, FLAME, 0.06, 0.1, 0.06, SHRINE.x + cx, 0.27, SHRINE.z + cz);
+      f.castShadow = false;
+      candles.push(f);
     }
+
+    const ranks = new Map<Npc, Rank>();
+    const memberOf = (n: Npc) => everyone(ctx).find((e) => e.n === n);
+    /** Seniority decides: the longest-serving member leads, the next two are priests. */
+    const ordain = (): { high: number; priest: number; acolyte: number } => {
+      const tally = { high: 0, priest: 0, acolyte: 0 };
+      members.forEach((n, i) => {
+        const rank: Rank = i === 0 && members.length >= 3 ? 'high' : i <= 2 && members.length >= 2 ? 'priest' : 'acolyte';
+        tally[rank] += 1;
+        if (ranks.get(n) === rank) return;
+        ranks.set(n, rank);
+        const m = memberOf(n);
+        if (m) dress(m, rank);
+      });
+      return tally;
+    };
+    Object.assign(state, { ranks, ordain });
+    ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {
+      if (occupant !== temple) return;
+      if (members.length === 0) return tip('The hall is empty. Recruit someone, then bring them here.');
+      for (const n of members) if (n.mode === 'march') Object.assign(n, { mode: 'revere', t: 0, timer: 1.6 });
+      const t = ordain();
+      const parts = [t.high ? '1 high priest' : '', t.priest ? `${t.priest} priest${t.priest > 1 ? 's' : ''}` : '', t.acolyte ? `${t.acolyte} acolyte${t.acolyte > 1 ? 's' : ''}` : ''];
+      tip(
+        t.high
+          ? `Ordained: ${parts.filter(Boolean).join(', ')}. The high priest will recruit for you.`
+          : `Ordained: ${parts.filter(Boolean).join(', ')}. Three members and one becomes high priest.`,
+        6,
+      );
+      ctx.bump(0.1);
+    });
+    let sincePreach = 0;
 
     ctx.onUpdate((dt, time) => {
       clock += dt;
@@ -340,7 +459,31 @@ export const cubeCult: Feature = {
         aura.scale.setScalar(1 + (Math.sin(time * 2.6) * 0.5 + 0.5) * 0.7);
       }
 
-      if (tipFor > 0 && (tipFor -= dt) <= 0) hint?.classList.add('gone');
+      // The temple breathes: the cube on the roof turns, the fires flicker.
+      roofIdol.rotation.y += dt * 0.5;
+      roofIdol.position.y = 3.95 + Math.sin(time * 1.4) * 0.06;
+      [...flames, ...candles].forEach((f, i) => f.scale.set(1, 0.8 + Math.sin(time * 11 + i * 2.3) * 0.25, 1));
+
+      // Anyone no longer a member loses their rank.
+      for (const n of ranks.keys()) if (!members.includes(n)) ranks.delete(n);
+
+      // The high priest goes out and brings someone back, now and then, for free.
+      sincePreach += dt;
+      const high = members.find((n) => ranks.get(n) === 'high');
+      if (high && sincePreach > PREACH_EVERY) {
+        const near = everyone(ctx).find(
+          (e) =>
+            !e.world.staged && !e.n.cult && e.n.persona.kind !== 'leader' && !e.n.post && e.n.nx === null &&
+            ['idle', 'walk', 'march'].includes(e.n.mode) && Math.abs(e.n.x - high.x) + Math.abs(e.n.z - high.z) <= 5,
+        );
+        if (near) {
+          sincePreach = 0;
+          enlist(near);
+          high.emote = { kind: 'sparkle', t: 0 };
+          refresh(true);
+          tip('The high priest brought someone in.');
+        }
+      }
     });
   },
 };
