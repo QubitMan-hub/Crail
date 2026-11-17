@@ -297,11 +297,13 @@ export const supremeLeader: Feature = {
       army.blasts += 1;
       ctx.bump(0.5);
       for (const m of everyone(ctx)) {
+        if (m.rig.identity.kind === 'tank') continue; // it rocks, but it does not fall over
         if (Math.max(Math.abs(m.n.x - x), Math.abs(m.n.z - z)) <= radius) floor(m.n, m.world);
       }
       if (monument.built && Math.abs(monument.x - x) + Math.abs(monument.z - z) <= radius + 1) monument.wobble = 0;
       const c = ctx.state.cube;
-      const hit = !!c && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) <= radius - 1; // inside the warning ring
+      // A cube on a ride, or with someone sitting on it, cannot be thrown: it is not hit.
+      const hit = !!c && !c.carried && !c.pinned && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) <= radius - 1; // inside the warning ring
       if (hit) ctx.events.emit('cube:blast', { x, z });
       ctx.events.emit('army:blast', { x, z, radius, hit });
       return hit;

@@ -198,7 +198,9 @@ export const cube: Feature = {
         mesh.quaternion.setFromAxisAngle(fling.spin, k * Math.PI * 4);
         ctx.focus.set(mesh.position.x, 0, mesh.position.z);
         if (k < 1) return;
-        ctx.grid.release(state.x, state.z, me);
+        // Let go of everything, including a cell it was halfway into when the blast hit.
+        ctx.grid.releaseAll(me);
+        ctx.grid.claim(fling.to.x, fling.to.z, me);
         state.x = fling.to.x;
         state.z = fling.to.z;
         state.rolls += 1;

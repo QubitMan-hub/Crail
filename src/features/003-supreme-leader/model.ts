@@ -30,7 +30,12 @@ export function buildLeader(_v: unknown, emote: THREE.Sprite): Rig {
   box(torso, SUIT_TRIM, 0.3, 0.08, 0.3, 0, 0.61, 0); // closed collar
   for (let i = 0; i < 4; i++) box(torso, SUIT_TRIM, 0.04, 0.04, 0.012, 0, 0.14 + i * 0.12, 0.183);
   for (const s of [1, -1]) box(torso, SUIT_TRIM, 0.15, 0.03, 0.012, s * 0.16, 0.42, 0.183);
-  box(torso, RED, 0.045, 0.045, 0.014, 0.17, 0.49, 0.184);
+  // A medal on the chest: his own piece, so it can be stolen. Under it, plain lapel.
+  const medal = group(torso);
+  medal.name = 'medal';
+  box(medal, RED, 0.07, 0.09, 0.016, 0.17, 0.49, 0.186);
+  box(medal, GOLD, 0.09, 0.09, 0.02, 0.17, 0.4, 0.188);
+  box(medal, '#f1d77a', 0.04, 0.04, 0.024, 0.17, 0.4, 0.19);
   box(torso, SKIN, 0.2, 0.08, 0.2, 0, 0.63, 0);
 
   const makeLeg = (side: 1 | -1) => {
@@ -67,7 +72,7 @@ export function buildLeader(_v: unknown, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.76, identity: { kind: 'leader', trim: SUIT_TRIM, hair: HAIR } });
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.76, identity: { kind: 'leader', trim: SUIT_TRIM, hair: HAIR }, loot: { item: torso.getObjectByName('medal')! } });
 }
 
 /** Soldiers are three-quarters his size, so the column reads as "his army", not his equals. */
@@ -107,19 +112,25 @@ export function buildSoldier(_v: unknown, emote: THREE.Sprite): Rig {
   const head = group(body, 0, 1.4, 0);
   box(head, SKIN, 0.5, 0.5, 0.48, 0, 0.27, 0);
   box(head, HAIR, 0.52, 0.12, 0.5, 0, 0.46, -0.01);
-  // Peaked cap, far too big, as is traditional.
-  box(head, OLIVE, 0.54, 0.1, 0.52, 0, 0.56, 0);
-  box(head, RED, 0.55, 0.05, 0.53, 0, 0.555, 0);
-  box(head, OLIVE, 0.7, 0.09, 0.66, 0, 0.66, -0.02);
-  box(head, INK, 0.44, 0.035, 0.16, 0, 0.535, 0.3);
-  box(head, GOLD, 0.07, 0.07, 0.014, 0, 0.61, 0.268);
+  // Peaked cap, far too big, as is traditional. Its own piece: it can be stolen.
+  const cap = group(head);
+  cap.name = 'cap';
+  box(cap, OLIVE, 0.54, 0.1, 0.52, 0, 0.56, 0);
+  box(cap, RED, 0.55, 0.05, 0.53, 0, 0.555, 0);
+  box(cap, OLIVE, 0.7, 0.09, 0.66, 0, 0.66, -0.02);
+  box(cap, INK, 0.44, 0.035, 0.16, 0, 0.535, 0.3);
+  box(cap, GOLD, 0.07, 0.07, 0.014, 0, 0.61, 0.268);
+  // Under it: a short back-and-sides, with a little more on top.
+  const crop = group(head);
+  crop.name = 'crop';
+  box(crop, HAIR, 0.5, 0.06, 0.46, 0, 0.54, -0.02);
   const face = buildFace(head, {
     white: '#fbf7ef', pupil: INK, lid: '#3a2f2a', brow: HAIR, mouth: '#a96c60', mouthWidth: 0.08,
   });
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.72, identity: { kind: 'soldier', trim: OLIVE, hair: RED } });
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway: [], hang: [], emote, stride: 1, headTop: 0.72, identity: { kind: 'soldier', trim: OLIVE, hair: RED }, loot: { item: head.getObjectByName('cap')!, bare: head.getObjectByName('crop')! } });
 }
 
 /** The launch pad and the rocket on it. The rocket is its own group so it can go up. And come back. */

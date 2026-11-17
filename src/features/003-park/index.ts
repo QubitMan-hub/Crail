@@ -169,8 +169,8 @@ function balloonCart(p: THREE.Object3D, x: number, z: number): THREE.Group {
   }
   box(c, '#4a4039', 0.05, 0.05, 0.6, 0.14, 0.22, 0); // axle
   box(c, WOOD, 0.06, 0.4, 0.06, -0.3, 0.2, 0); // the leg it rests on
-  for (const s of [1, -1]) box(c, WOOD, 0.34, 0.05, 0.05, -0.55, 0.62, s * 0.22);
-  box(c, WOOD, 0.05, 0.05, 0.5, -0.72, 0.62, 0);
+  for (const s of [1, -1]) box(c, WOOD, 0.14, 0.05, 0.05, -0.46, 0.62, s * 0.22);
+  box(c, WOOD, 0.05, 0.05, 0.5, -0.52, 0.62, 0);
   // A striped skirt round the top.
   [RED, CREAM, RED, CREAM, RED].forEach((col, i) => box(c, col, 0.165, 0.1, 0.66, -0.33 + i * 0.165, 0.76, 0));
   return c;

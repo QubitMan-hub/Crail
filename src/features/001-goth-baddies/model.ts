@@ -42,10 +42,17 @@ function buildLeg(parent: THREE.Object3D, side: 1 | -1, v: Variant): THREE.Group
   } else {
     box(leg, v.legs === 'sheer' ? '#3c3644' : INK, 0.2, 0.58, 0.2, 0, -0.29, 0);
   }
-  // Chunky boots: tall sole, buckle strap.
-  box(leg, INK, 0.25, 0.2, 0.31, 0, -0.64, 0.035);
-  box(leg, CHARCOAL, 0.27, 0.07, 0.33, 0, -0.745, 0.035);
-  box(leg, SILVER, 0.26, 0.035, 0.32, 0, -0.6, 0.035);
+  // Chunky boots: tall sole, buckle strap. Each boot is its own piece: one can be stolen.
+  const boot = group(leg);
+  boot.name = 'boot';
+  box(boot, INK, 0.25, 0.2, 0.31, 0, -0.64, 0.035);
+  box(boot, CHARCOAL, 0.27, 0.07, 0.33, 0, -0.745, 0.035);
+  box(boot, SILVER, 0.26, 0.035, 0.32, 0, -0.6, 0.035);
+  // Under the boot: a stockinged foot, shown only once the boot has gone.
+  const foot = group(leg);
+  foot.name = 'foot';
+  box(foot, v.legs === 'sheer' ? '#3c3644' : v.legs === 'stripes' ? PURPLE : INK, 0.19, 0.2, 0.19, 0, -0.68, 0);
+  box(foot, v.legs === 'sheer' ? '#3c3644' : v.legs === 'stripes' ? PURPLE : INK, 0.19, 0.08, 0.27, 0, -0.74, 0.04);
   return leg;
 }
 
@@ -217,5 +224,8 @@ export function buildGoth(v: Variant, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride, headTop, identity: { kind: 'goth', trim: PURPLE, hair: PURPLE } });
+  // Only the left boot can be taken; the right one stays fused with its leg.
+  legR.getObjectByName('foot')?.removeFromParent();
+  const loot = { item: legL.getObjectByName('boot')!, bare: legL.getObjectByName('foot')! };
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang, emote, stride, headTop, identity: { kind: 'goth', trim: PURPLE, hair: PURPLE }, loot });
 }

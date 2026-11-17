@@ -33,6 +33,18 @@ export interface Rig {
    * the colour of the hair that peeks out, and what kind they were.
    */
   identity: { kind: string; trim: string; hair: string };
+  /**
+   * The thing a thief would take (a boot, a sock, a cap, a medal), kept as its own
+   * piece so it can disappear, and what shows in its place when it has gone.
+   */
+  loot?: { item: THREE.Object3D; bare?: THREE.Object3D };
+}
+
+/** Hand over the loot: it goes, and what was under it shows. */
+export function setLoot(rig: Rig, on: boolean): void {
+  if (!rig.loot) return;
+  rig.loot.item.visible = on;
+  if (rig.loot.bare) rig.loot.bare.visible = !on;
 }
 
 export const HIP = 0.78;
@@ -171,8 +183,11 @@ function mergeUnder(parent: THREE.Object3D, live: Set<THREE.Object3D>): void {
 export function bake(rig: Rig): Rig {
   const face = [...rig.lids, ...rig.brows, ...rig.pupils, rig.mouth];
   for (const f of face) f.castShadow = false;
-  const live = new Set<THREE.Object3D>([...face, ...rig.sway, ...rig.hang, rig.emote]);
+  const loose = rig.loot ? [rig.loot.item, ...(rig.loot.bare ? [rig.loot.bare] : [])] : [];
+  const live = new Set<THREE.Object3D>([...face, ...rig.sway, ...rig.hang, rig.emote, ...loose]);
   for (const part of [rig.torso, rig.head, rig.armL, rig.armR, rig.legL, rig.legR]) mergeUnder(part, live);
   for (const s of new Set([...rig.sway, ...rig.hang])) mergeUnder(s, live);
+  for (const l of loose) mergeUnder(l, new Set());
+  if (rig.loot?.bare) rig.loot.bare.visible = false;
   return rig;
 }

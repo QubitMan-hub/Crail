@@ -50,7 +50,13 @@ function buildLeg(parent: THREE.Object3D, side: 1 | -1, v: Variant): THREE.Group
   const leg = group(parent, side * 0.12, HIP, 0);
   // A little skin, then striped thigh-highs.
   box(leg, v.bottom === 'shorts' ? v.bottomColor : v.skin, v.bottom === 'shorts' ? 0.215 : 0.19, 0.14, v.bottom === 'shorts' ? 0.215 : 0.19, 0, -0.07, 0);
-  for (let i = 0; i < 5; i++) box(leg, v.socks[i % 2], 0.205, 0.092, 0.205, 0, -0.184 - i * 0.088, 0);
+  // The thigh-high is its own piece: one can be stolen. Under it, a bare leg.
+  const sock = group(leg);
+  sock.name = 'sock';
+  for (let i = 0; i < 5; i++) box(sock, v.socks[i % 2], 0.205, 0.092, 0.205, 0, -0.184 - i * 0.088, 0);
+  const bare = group(leg);
+  bare.name = 'bare';
+  box(bare, v.skin, 0.18, 0.44, 0.18, 0, -0.36, 0);
   // Big soft sneakers.
   box(leg, CREAM, 0.25, 0.14, 0.32, 0, -0.665, 0.04);
   box(leg, v.accent === CREAM ? v.topColor : v.accent, 0.255, 0.05, 0.325, 0, -0.64, 0.04);
@@ -167,5 +173,7 @@ export function buildFemboy(v: Variant, emote: THREE.Sprite): Rig {
 
   emote.position.set(0, 2.5, 0);
   root.add(emote);
-  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang: [], emote, stride: 1, headTop, identity: { kind: 'femboy', trim: v.socks[1], hair: v.hair } });
+  legR.getObjectByName('bare')?.removeFromParent();
+  const loot = { item: legL.getObjectByName('sock')!, bare: legL.getObjectByName('bare')! };
+  return bake({ root, body, torso, head, armL, armR, legL, legR, ...face, sway, hang: [], emote, stride: 1, headTop, identity: { kind: 'femboy', trim: v.socks[1], hair: v.hair }, loot });
 }

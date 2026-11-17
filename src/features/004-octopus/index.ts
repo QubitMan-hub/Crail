@@ -6,6 +6,7 @@ import { stealables, type Stealable } from '../../core/loot';
 import { seededRandom } from '../../core/rng';
 import { tip } from '../../core/tip';
 import { everyone, type Member } from '../../characters/cast';
+import { setLoot } from '../../characters/rig';
 import { buildOctopus, buildPool, buildToken } from './model';
 
 /**
@@ -23,6 +24,8 @@ export const POOL = { x: 3, z: 14 };
 const SHELF = { x: POOL.x + 2, z: POOL.z };
 const SPEED = 3.4; // cells a second: quicker than anyone it robs
 const CARRY = 3;
+/** A full rock: it stays home to guard it until someone empties it. */
+const STASH_MAX = 9;
 const FIRST_OUTING = 18;
 /** What it takes from someone who has nothing better on them. */
 const POCKETS: Record<string, [Stealable['token'], string]> = {
@@ -97,25 +100,31 @@ export const octopus: Feature = {
     // ---- Pockets: everyone has something on them ---------------------------------
     // Characters come and go, so what they carry is listed on the fly.
     const robbed = new Set<Member>();
+    // Robed cult members have nothing on show to take, and a tank has no pockets.
     const pockets = (): Stealable[] =>
       everyone(ctx)
-        .filter((m) => !robbed.has(m) && POCKETS[m.n.persona.kind] && m.n.carry === null)
+        .filter((m) => !robbed.has(m) && !m.n.cult && POCKETS[m.n.persona.kind] && m.n.carry === null)
+        .filter((m) => m.rig.loot || m.rig.head.getObjectByName('bow'))
         .map((m) => {
           const bow = m.rig.head.getObjectByName('bow');
           const [token, name] = bow ? (['bow', `a ${m.n.persona.kind}’s bow`] as const) : POCKETS[m.n.persona.kind];
-          const party = m.n.cult ? 'cult' : m.n.persona.kind === 'leader' || m.n.persona.kind === 'soldier' ? 'army' : m.n.persona.kind;
+          const party = m.n.persona.kind === 'leader' || m.n.persona.kind === 'soldier' ? 'army' : m.n.persona.kind;
           return {
             party, name, token,
-            where: () => (everyone(ctx).includes(m) ? { x: m.n.x, z: m.n.z } : null),
+            where: () => (everyone(ctx).includes(m) && !m.n.cult ? { x: m.n.x, z: m.n.z } : null),
             take() {
               robbed.add(m);
-              bow?.removeFromParent();
+              // What it took is gone from them: the bow off the head, or the boot, sock, cap or medal.
+              if (bow) bow.removeFromParent();
+              else setLoot(m.rig, false);
               m.n.emote = { kind: 'bang', t: 0 };
-              if (!m.n.cult) m.n.order = 'fume';
+              m.n.order = 'fume';
             },
             putBack() {
               robbed.delete(m);
               if (bow) m.rig.head.add(bow);
+              // A robe covers everything, so only put it back on show if they are not wearing one.
+              else if (!m.n.cult) setLoot(m.rig, true);
               if (everyone(ctx).includes(m)) m.n.emote = { kind: 'heart', t: 0 };
             },
           };
@@ -191,8 +200,10 @@ export const octopus: Feature = {
     };
 
     // ---- The cube gets involved ----------------------------------------------------
-    ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {
-      if (occupant === occ) {
+    ctx.events.on<{ occupant?: Occupant; tx: number; tz: number }>('cube:bonk', ({ occupant, tx, tz }) => {
+      // On the stones round its pool it owns no cell of its own, so go by where it is.
+      const onIt = occupant === occ || (tx === state.x && tz === state.z) || (tx === state.nx && tz === state.nz);
+      if (onIt) {
         if (state.mode === 'lurk' && !held.length) return tip('It pretends to be a rock. Its loot is on the rock next door.');
         const dropped = startle();
         tip(dropped ? `It dropped ${dropped === 1 ? 'what it took' : `all ${dropped} things`}. They are back with their owners.` : 'Ink. It had nothing on it yet.');
@@ -201,8 +212,9 @@ export const octopus: Feature = {
       } else if (occupant === shelfOcc) {
         if (!stashed.length) return tip('Its rock is empty. For now.');
         const n = giveBack(stashed);
+        tip(`You gave back ${n === 1 ? 'the one thing' : `all ${n} things`} it stole.`);
+        // After the tip, so a reward for it can have the last word.
         ctx.events.emit('octopus:raided', { count: n });
-        tip(`You gave back ${n === 1 ? 'the thing' : `all ${n} things`} it stole.`);
       }
     });
     // Anything that goes off next to it has the same effect as being bumped.
@@ -296,7 +308,8 @@ export const octopus: Feature = {
 
       if (state.mode === 'lurk') {
         state.timer -= dt;
-        if (!state.staged && state.timer <= 0) {
+        if (!state.staged && state.timer <= 0 && stashed.length >= STASH_MAX) state.timer = 5;
+        else if (!state.staged && state.timer <= 0) {
           target = choose();
           if (target) setMode('hunt');
           else state.timer = 6;
@@ -324,7 +337,7 @@ export const octopus: Feature = {
             lastParty = target.party;
             names();
             ctx.events.emit('octopus:stole', { party: target.party, name: target.name, x: state.x, z: state.z });
-            if (seen) tip(`The octopus took ${target.name}. Roll into it to get it back.`);
+            if (seen && target.party !== 'cube') tip(`The octopus took ${target.name}. Roll into it to get it back.`);
           } else target = null; // they stepped away in time
         }
         if (state.t >= 0.7) {

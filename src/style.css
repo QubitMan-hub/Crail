@@ -79,8 +79,11 @@ html, body {
 }
 #map[hidden] { display: none; }
 #map canvas {
-  background: #fffdf8; border-radius: 22px; box-shadow: 0 18px 50px rgba(29, 27, 25, 0.18);
+  border-radius: 24px; box-shadow: 0 2px 6px rgba(29, 27, 25, 0.08), 0 22px 48px rgba(29, 27, 25, 0.2);
+  animation: map-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
+@keyframes map-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+@media (prefers-reduced-motion: reduce) { #map canvas { animation: none; } }
 #map p {
   margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.6;
 }

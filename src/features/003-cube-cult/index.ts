@@ -295,19 +295,30 @@ export const cubeCult: Feature = {
       }
     };
 
-    // A charm can be lifted off the cube, but only when it has one to spare.
+    // A charm can be lifted off the cube, but only one it can spare: never its last.
+    // It is the same charm coming back, not a new one, so it returns without fuss.
     addStealable(ctx, {
       party: 'cube', name: 'one of your charms', token: 'charm',
       where: () => (state.charms >= 2 && ctx.state.cube ? { x: ctx.state.cube.x, z: ctx.state.cube.z } : null),
       take() {
+        const before = state.charms;
         state.charms -= 1;
         refresh(true);
+        tip(`The octopus stole one of your charms (✦${before} → ✦${state.charms}). Roll into it to get it back.`);
       },
-      putBack: () => gain(),
+      putBack() {
+        if (state.charms >= MAX_CHARMS) return;
+        state.charms += 1;
+        refresh(true);
+        tip(`Your stolen charm is back (✦${state.charms}).`);
+      },
     });
-    // Emptying the thief's rock is a good deed, and good deeds are charming.
+    // Emptying the thief's rock of two or more things earns a charm, and says so.
     ctx.events.on<{ count: number }>('octopus:raided', ({ count }) => {
-      if (count >= 2) gain();
+      if (count < 2 || state.charms >= MAX_CHARMS) return;
+      state.charms += 1;
+      refresh(true);
+      tip(`You gave back all ${count} things it stole: +1 ✦ for that (✦${state.charms}).`);
     });
 
     // A blast that catches the cube knocks a charm out of it.

@@ -648,3 +648,40 @@ test('startle the octopus and it drops what it is carrying, and the owner gets i
   // And it goes home to sulk.
   await page.waitForFunction(() => (window as any).__crail.state.octopus.mode === 'lurk', null, { timeout: 60_000 });
 });
+
+test('what the octopus takes is gone from the person, and comes back with them', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'leader.spawn', 0, 2, 8, 1, { idle: 999 });
+  await direct(page, 'leader.soldier');
+  const cap = () => page.evaluate(() => {
+    const m = (window as any).__crail.state.everyone.find((e: any) => e.n.persona.kind === 'soldier');
+    return { cap: m.rig.loot.item.visible, crop: m.rig.loot.bare.visible };
+  });
+  expect(await cap()).toEqual({ cap: true, crop: false });
+  await direct(page, 'octopus.staged', false);
+  await direct(page, 'octopus.steal', '', 'cap');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.carrying.length >= 1);
+  expect(await page.evaluate(() => (window as any).__crail.state.octopus.carrying[0])).toContain('cap');
+  expect(await cap()).toEqual({ cap: false, crop: true });
+  await page.evaluate(() => {
+    const c = (window as any).__crail;
+    c.direct('leader.blast', c.state.octopus.x, c.state.octopus.z, 1);
+  });
+  expect(await cap()).toEqual({ cap: true, crop: false });
+});
+
+test('the octopus never takes the cube’s last charm', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'cult.charms', 1);
+  await direct(page, 'octopus.staged', false);
+  await direct(page, 'octopus.steal', 'cube');
+  await page.waitForTimeout(1500);
+  const o = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return { mode: s.octopus.mode, charms: s.cult.charms };
+  });
+  expect(o).toEqual({ mode: 'lurk', charms: 1 });
+});

@@ -28,7 +28,6 @@ const REST: Pose = {
 };
 const CROSSED = { armLx: -0.95, armLz: -0.75, armRx: -0.8, armRz: 0.75 };
 const SEAT_Y = 1 - (HIP - 0.1) * SCALE;
-const FLOOR_SEAT_Y = (0.1 - HIP) * SCALE;
 const SEATED_LEGS = -1.45;
 
 export const newMotion = (n: Npc): Motion => ({ yaw: dirYaw(n.dir), yawVel: 0, phase: 0, pose: { ...REST } });
@@ -323,7 +322,8 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
       p.y = Math.sin(Math.PI * Math.min(1, n.t / 0.9)) * 0.12;
       break;
   }
-  if (n.cult && n.mode === 'march' && !walking && w.cube.idleFor > 2 && !w.cube.pinned) {
+  const nearCube = Math.abs(n.x - w.cube.x) + Math.abs(n.z - w.cube.z) <= 8;
+  if (n.cult && n.mode === 'march' && !walking && w.cube.idleFor > 2 && !w.cube.pinned && (n.lead || nearCube)) {
     // Worship: arms up, bowing in slow waves around the circle.
     lookAtCube(0.25);
     const wave = Math.sin(time * 2.4 + n.slot * 0.8);
@@ -347,6 +347,8 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
     px += (n.nx - n.x) * n.p;
     pz += (n.nz - n.z) * n.p;
   }
+  // Sitting on the floor puts the hips on the ground, so how far down depends on their size.
+  const floorY = (0.1 - HIP) * rig.root.scale.y;
   const back = 0.1;
   const seatX = n.sx - DIRS[n.sitDir][0] * back;
   const seatZ = n.sz - DIRS[n.sitDir][1] * back;
@@ -364,13 +366,13 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
     // Blown off their feet: straight down onto the floor, with a bounce.
     const fall = Math.min(1, n.t / 0.14);
     const bounce = n.t > 0.14 ? Math.exp(-(n.t - 0.14) * 8) * Math.abs(Math.sin((n.t - 0.14) * 15)) * 0.14 : 0;
-    py = FLOOR_SEAT_Y * fall + bounce;
+    py = floorY * fall + bounce;
   } else if (n.mode === 'plop') {
     const fall = Math.min(1, n.t / 0.17);
     const bounce = n.t > 0.17 ? Math.exp(-(n.t - 0.17) * 9) * Math.abs(Math.sin((n.t - 0.17) * 16)) * 0.09 : 0;
-    py = SEAT_Y + (FLOOR_SEAT_Y - SEAT_Y) * fall * fall + bounce;
+    py = SEAT_Y + (floorY - SEAT_Y) * fall * fall + bounce;
   } else if (n.mode === 'rise') {
-    py = FLOOR_SEAT_Y * (1 - smooth(n.t / 0.4));
+    py = floorY * (1 - smooth(n.t / 0.4));
   }
 
   if (n.carry) {
