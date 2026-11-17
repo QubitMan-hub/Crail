@@ -155,7 +155,9 @@ export const octopus: Feature = {
 
     /** What to take next: something from a different party than last time, nearest first. */
     const choose = (party?: string): Stealable | null => {
-      const all = [...stealables(ctx), ...pockets()].filter((s) => s.where() && (!party || s.party === party));
+      // One of each thing at a time: what it already has is not there to take again.
+      const has = (s: Stealable) => held.some((h) => h.item === s) || stashed.some((h) => h.item === s);
+      const all = [...stealables(ctx), ...pockets()].filter((s) => !has(s) && s.where() && (!party || s.party === party));
       if (!all.length) return null;
       const fresh = all.filter((s) => s.party !== lastParty);
       const pool = fresh.length ? fresh : all;

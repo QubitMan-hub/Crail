@@ -68,7 +68,7 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus']);
   await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
