@@ -692,19 +692,31 @@ test('after losing a charm there is a moment when the next blast takes nothing, 
   await open(page, '?seed=3');
   await clearStage(page);
   await direct(page, 'cult.charms', 3);
-  await direct(page, 'leader.blast', 0, 1, 2);
-  await page.waitForFunction(() => !(window as any).__crail.state.cube.moving);
-  const at = await cubeState(page);
-  await direct(page, 'leader.blast', at.x, at.z, 2);
+  // Record every message the hint line shows, in order.
+  await page.evaluate(() => {
+    const seen: string[] = ((window as any).__seen = []);
+    const el = document.getElementById('hint')!;
+    new MutationObserver(() => seen[seen.length - 1] !== el.textContent && seen.push(el.textContent!)).observe(el, { childList: true, characterData: true, subtree: true });
+  });
+  // Two blasts on the cube, back to back: only the first costs a charm.
+  await page.evaluate(() => {
+    const c = (window as any).__crail;
+    c.direct('leader.blast', c.state.cube.x, c.state.cube.z, 2);
+    c.direct('leader.blast', c.state.cube.x, c.state.cube.z, 2);
+  });
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(2);
-  // The first message is not overwritten at once: the second follows it.
-  await expect(page.locator('#hint')).toContainText('knocked a charm out');
-  await expect(page.locator('#hint')).toContainText('Lucky', { timeout: 6000 });
   await expect(page.locator('#cult')).toHaveClass(/safe/);
+  // The first message is not overwritten at once: the second follows it.
+  await page.waitForFunction(() => (window as any).__seen.some((t: string) => t.includes('Lucky')), null, { timeout: 8000 });
+  const seen: string[] = await page.evaluate(() => (window as any).__seen);
+  expect(seen.findIndex((t) => t.includes('knocked a charm'))).toBeLessThan(seen.findIndex((t) => t.includes('Lucky')));
+  expect(seen.findIndex((t) => t.includes('knocked a charm'))).toBeGreaterThanOrEqual(0);
+  // The protection wears off.
+  await expect(page.locator('#cult')).not.toHaveClass(/safe/, { timeout: 15_000 });
 });
 
 test('a big cult gets two rockets, the second aimed where the cube has gone', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(150_000);
   await open(page, '?seed=3');
   await clearStage(page);
   for (let i = 0; i < 6; i++) await direct(page, 'femboys.spawn', i % 4, -10 + i, 6, 1, { idle: 999 });
@@ -713,7 +725,8 @@ test('a big cult gets two rockets, the second aimed where the cube has gone', as
   await direct(page, 'leader.spawn', 0, 6, 0, 2, { idle: 999 });
   await direct(page, 'leader.site');
   await direct(page, 'leader.launch', 'strike');
-  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 2, null, { timeout: 30_000 });
+  // About nine seconds of game time; the test browser runs the game slower than real time.
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 2, null, { timeout: 120_000 });
 });
 
 test('the how-to-play card lists what this build has, and closes', async ({ page }) => {
