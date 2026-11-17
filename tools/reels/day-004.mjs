@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { esc, keyframes, pop, smooth } from './kit.mjs';
 
 const ASSETS = 'captures/day-004-assets';
-const T = { comment: 3.6, goth: 6.6, femboy: 10.0, army: 13.0, cube: 18.5, rock: 22.0, out: 27.0, black: 30.7 };
+const T = { comment: 3.6, goth: 6.6, femboy: 10.3, army: 13.0, cube: 18.5, rock: 21.9, out: 26.9, black: 30.7 };
 const seconds = 31;
 const POOL = { x: 3, z: 14 };
 /** Empty floor, far from everything, for the scenes that need a clean background. */
@@ -26,7 +26,7 @@ function prepare() {
 }
 
 // W = up-right.
-const keys = [[23.2, 23.3, 'W'], [24.0, 24.1, 'W']];
+const keys = [[23.9, 24.0, 'W'], [24.7, 24.8, 'W']];
 
 const CASTS = ['goths', 'femboys', 'soldiers', 'leader'];
 const clearAll = (t) => CASTS.map((c) => [t, `${c}.clear`]);
@@ -36,16 +36,16 @@ const actions = [
   [0, 'cult.charms', 0], [0, 'cube.teleport', -70, 30],
   // She has a bow. Not for long.
   [0, 'goths.spawn', 1, POOL.x, POOL.z + 4, 0, { idle: 99 }], [0, 'goths.bow', 0], [0, 'cut'],
-  [5.3, 'octopus.steal', 'goth'],
+  [6.6, 'octopus.steal', 'goth'],
   // One femboy, a long way from anywhere. The army sets up off screen while this plays.
   ...clearAll(T.femboy),
   [T.femboy, 'femboys.spawn', 0, F.x, F.z, 0, { idle: 99 }],
   [T.femboy, 'octopus.stashNow'], [T.femboy + 0.05, 'octopus.near', 'sock', 0, -4], [T.femboy + 0.05, 'cut'],
   [T.femboy, 'leader.spawn', 0, A.x, A.z, 0, { idle: 99 }], [T.femboy, 'leader.statue'], [T.femboy, 'leader.flag'], [T.femboy, 'leader.tank'],
-  [10.6, 'octopus.steal', '', 'sock'],
+  [10.4, 'octopus.steal', '', 'sock'],
   // The flag.
   [T.army, 'octopus.stashNow'], [T.army + 0.05, 'octopus.near', 'flag', 0, 4], [T.army + 0.05, 'cut'],
-  [13.5, 'octopus.steal', '', 'flag'],
+  [13.3, 'octopus.steal', '', 'flag'],
   // You.
   [T.cube, 'octopus.stashNow'], [T.cube, 'cube.teleport', C.x, C.z], [T.cube, 'cult.charms', 3],
   [T.cube + 0.05, 'octopus.near', 'charm', -4, 0], [T.cube + 0.05, 'cut'],
@@ -56,7 +56,7 @@ const actions = [
 ];
 
 const zoom = [
-  [0, 1.9], [T.comment, 1.6], [5.2, 1.3], [T.femboy - 0.01, 1.4],
+  [0, 1.9], [T.comment, 1.6], [6.5, 1.3], [T.femboy - 0.01, 1.4],
   [T.femboy, 1.35], [T.army - 0.01, 1.5],
   [T.army, 0.95], [T.cube - 0.01, 0.85],
   [T.cube, 1.2], [T.rock - 0.01, 1.35],
@@ -65,9 +65,9 @@ const zoom = [
 ];
 function camera(t) {
   const cam = { zoom: keyframes(zoom, t) };
-  if (t < 5.3) cam.focus = [POOL.x, POOL.z];
-  else if (t < T.femboy) cam.focus = [POOL.x + 0.3, keyframes([[5.3, POOL.z], [6.2, POOL.z + 3.2], [8.0, POOL.z + 3.2], [9.2, POOL.z + 1], [T.femboy, POOL.z + 0.8]], t)];
-  else if (t < T.army) cam.focus = [F.x, keyframes([[T.femboy, F.z - 2], [11.4, F.z - 0.8], [T.army, F.z - 0.8]], t)];
+  if (t < 6.6) cam.focus = [POOL.x, POOL.z];
+  else if (t < T.femboy) cam.focus = [POOL.x + 0.3, keyframes([[6.6, POOL.z], [7.5, POOL.z + 3.2], [9.0, POOL.z + 3.2], [9.8, POOL.z + 1], [T.femboy, POOL.z + 0.8]], t)];
+  else if (t < T.army) cam.focus = [F.x, keyframes([[T.femboy, F.z - 2], [11.5, F.z - 0.8], [T.army, F.z - 0.8]], t)];
   else if (t < T.cube) cam.at = 'army.flag';
   else if (t < T.rock) return cam; // on the cube
   else if (t < T.out) cam.focus = [POOL.x + 1.2, POOL.z + 0.6];
@@ -75,34 +75,53 @@ function camera(t) {
   return cam;
 }
 
-// Voice-over, as estimated. Retimed to the real recording afterwards.
+// Voice-over: [from, to] in the recording, and where that line starts in the Reel.
+const voice = [
+  [1.37, 4.16, 0.17], //    Day four of letting Instagram comments build my game.
+  [4.73, 8.48, 3.72], //    The top comment was an octopus that steals from everyone.
+  [9.45, 10.73, 7.57], //   It takes a goth's bow,
+  [11.26, 12.08, 9.07], //  she noticed.
+  [12.69, 13.84, 10.47], // A femboy sock,
+  [14.59, 15.27, 11.97], // just the one.
+  [15.84, 17.06, 13.17], // The dictator's flag.
+  [17.55, 18.62, 14.87], // The tank fires back.
+  [19.2, 20.61, 16.77], //  And misses, as usual.
+  [21.34, 22.54, 18.67], // It can even rob you.
+  [23.15, 24.33, 20.32], // That was your charm.
+  [25.02, 26.7, 22.07], //  It keeps everything on a rock,
+  [27.01, 27.9, 23.97], //  bump the rock.
+  [28.26, 29.65, 25.07], // Everyone gets their stuff back.
+  [30.33, 32.15, 27.07], // Day five, the top comment wins.
+  [32.9, 34.04, 29.27], //  It's still watching.
+];
+// Captions follow the actual words in the recording.
 const captions = [
-  [0.2, 0.9, 'Day four'], [0.9, 1.4, 'of letting'], [1.4, 2.0, 'Instagram comments'], [2.0, 2.8, 'build this game.'],
-  [3.8, 4.5, 'Top comment:'], [4.5, 5.2, 'an octopus'], [5.2, 6.3, 'that steals from everyone.'],
-  [6.8, 7.9, 'It takes a goth’s bow.'], [8.4, 9.4, 'She noticed.'],
-  [10.2, 11.2, 'A femboy’s sock.'], [11.8, 12.7, 'Just the one.'],
-  [13.2, 14.4, 'The dictator’s flag.'], [15.0, 16.2, 'The tank fires back.'], [17.2, 18.1, 'And misses.'],
-  [18.7, 19.8, 'It even robs you.'], [20.4, 21.6, 'That was your charm.'],
-  [22.2, 23.0, 'It keeps everything'], [23.0, 23.7, 'on a rock.'], [24.3, 25.1, 'Bump the rock.'], [25.3, 26.0, 'Everyone gets'], [26.0, 26.7, 'their stuff back.'],
-  [27.2, 27.9, 'Day five.'], [27.9, 28.9, 'Top comment wins.'], [29.3, 30.5, 'It’s still watching.'],
+  [0.2, 0.72, 'Day four'], [0.72, 1.24, 'of letting'], [1.24, 2.12, 'Instagram comments'], [2.12, 2.93, 'build my game.'],
+  [3.75, 4.41, 'The top comment'], [4.41, 5.65, 'was an octopus'], [6.07, 6.53, 'that steals'], [6.53, 7.44, 'from everyone.'],
+  [7.6, 8.82, 'It takes a goth’s bow.'], [9.1, 9.86, 'She noticed.'],
+  [10.5, 11.59, 'A femboy sock.'], [12.0, 12.62, 'Just the one.'],
+  [13.2, 14.36, 'The dictator’s flag.'], [14.9, 15.91, 'The tank fires back.'], [16.8, 17.35, 'And misses,'], [17.35, 18.15, 'as usual.'],
+  [18.7, 19.84, 'It can even rob you.'], [20.35, 21.47, 'That was your charm.'],
+  [22.1, 22.93, 'It keeps everything'], [22.93, 23.72, 'on a rock.'], [24.0, 24.83, 'Bump the rock.'], [25.1, 25.65, 'Everyone gets'], [25.65, 26.43, 'their stuff back.'],
+  [27.1, 27.6, 'Day five.'], [27.9, 28.86, 'The top comment wins.'], [29.3, 30.38, 'It’s still watching.'],
 ];
 // Short written asides, popped on like a reply.
 const asides = [
-  [6.9, 8.3, 'bow: gone'],
-  [11.9, 12.9, 'sock: gone'],
-  [14.9, 16.6, 'flag: gone'],
-  [17.0, 18.4, 'tank accuracy: still 0%'],
-  [20.3, 21.9, '✦3 → ✦2'],
-  [24.3, 26.8, 'all returned · +1 ✦'],
+  [8.0, 9.0, 'bow: gone'],
+  [11.7, 12.9, 'sock: gone'],
+  [14.6, 16.4, 'flag: gone'],
+  [16.8, 18.4, 'tank accuracy: still 0%'],
+  [20.2, 21.8, '✦3 → ✦2'],
+  [24.9, 26.8, 'all returned · +1 ✦'],
 ];
 
 const sfx = [
-  [T.comment, 'pop'], [6.5, 'pop'], [T.femboy, 'pop'], [11.8, 'pop'], [T.army, 'pop'], [14.8, 'pop'],
-  [15.6, 'tick'], [16.9, 'boom'], [T.cube, 'pop'], [20.2, 'pop'], [T.rock, 'pop'], [24.3, 'boom'], [30.2, 'dun'],
+  [T.comment, 'pop'], [7.8, 'pop'], [T.femboy, 'pop'], [11.6, 'pop'], [T.army, 'pop'], [14.5, 'pop'],
+  [15.3, 'tick'], [16.6, 'boom'], [T.cube, 'pop'], [20.1, 'pop'], [T.rock, 'pop'], [24.9, 'boom'], [30.3, 'dun'],
 ];
 const music = {
   sections: [[0, 29.3]],
-  duck: [[0.2, 2.8], [3.8, 6.3], [6.8, 7.9], [8.4, 9.4], [10.2, 12.7], [13.2, 14.4], [15.0, 16.2], [17.2, 18.1], [18.7, 21.6], [22.2, 23.7], [24.3, 26.7], [27.2, 28.9], [29.3, 30.5]],
+  duck: voice.map(([from, to, at]) => [at, at + (to - from)]),
 };
 
 const css = `
@@ -135,8 +154,8 @@ function html(t) {
     h += `<div class="hook"><div>THE COMMENTS ADDED<br>A <b>THIEF.</b></div></div>`;
     h += `<div class="sub" style="top:23%"><span class="tag">DAY 4</span></div>`;
   }
-  if (within(t, T.comment, 6.5)) {
-    const leaving = 1 - smooth((t - 6.25) / 0.25);
+  if (within(t, T.comment, 7.3)) {
+    const leaving = 1 - smooth((t - 7.05) / 0.25);
     const s = pop(t, T.comment, 0.22) * leaving;
     h += `<div class="comment" ${scaled(s, `transform:rotate(-2deg) scale(${s.toFixed(3)})`)}>
       <span class="tag">TOP COMMENT</span><img src="/reelasset/top.png"></div>`;
@@ -150,4 +169,4 @@ function html(t) {
   return h;
 }
 
-export default { seconds, prepare, assets: { dir: ASSETS }, keys, actions, camera, html, css, sfx, music };
+export default { seconds, prepare, assets: { dir: ASSETS }, keys, actions, camera, html, css, sfx, music, voice };
