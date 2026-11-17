@@ -26,6 +26,8 @@ export const POOL = { x: 3, z: 14 };
 const SHELF = { x: POOL.x + 2, z: POOL.z };
 const SPEED = 3.4; // cells a second: quicker than anyone it robs
 const CARRY = 3;
+/** Cells the route search may look at per step: enough to get round a building, cheap on a phone. */
+const MAX_SEARCH = 2500;
 /** A full rock: it stays home to guard it until someone empties it. */
 const STASH_MAX = 9;
 /** How long it fumes when its rock is raided, and how soon it goes out again after. */
@@ -146,14 +148,14 @@ export const octopus: Feature = {
     /** The first step of the shortest free route to a cell next to (or onto) the goal. */
     const stepToward = (goal: { x: number; z: number }, onto: boolean): [number, number] | null => {
       // Search the box that holds both ends, with room to go round things.
-      const MARGIN = 9;
+      const MARGIN = 6;
       const [x0, x1] = [Math.min(state.x, goal.x) - MARGIN, Math.max(state.x, goal.x) + MARGIN];
       const [z0, z1] = [Math.min(state.z, goal.z) - MARGIN, Math.max(state.z, goal.z) + MARGIN];
       const key = (x: number, z: number) => `${x},${z}`;
       const from = new Map<string, string | null>([[key(state.x, state.z), null]]);
       const queue: [number, number][] = [[state.x, state.z]];
       const done = (x: number, z: number) => (onto ? x === goal.x && z === goal.z : near({ x, z }, goal));
-      for (let i = 0; i < queue.length && i < 9000; i++) {
+      for (let i = 0; i < queue.length && i < MAX_SEARCH; i++) {
         const [x, z] = queue[i];
         if (done(x, z)) {
           let k = key(x, z);
@@ -169,7 +171,12 @@ export const octopus: Feature = {
           queue.push([qx, qz]);
         }
       }
-      return null;
+      // No route found within the search: take any free step that gets closer, if there is one.
+      const dist = (x: number, z: number) => Math.abs(goal.x - x) + Math.abs(goal.z - z);
+      const steps = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
+        .map(([dx, dz]) => [state.x + dx, state.z + dz] as [number, number])
+        .filter(([x, z]) => dist(x, z) < dist(state.x, state.z) && (isRim(x, z) || ctx.grid.isFree(x, z, occ)));
+      return steps[0] ?? null;
     };
     const setMode = (mode: Mode, timer = 0) => Object.assign(state, { mode, t: 0, timer });
 

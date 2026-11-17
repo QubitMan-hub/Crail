@@ -38,7 +38,7 @@ html, body {
   padding: 5px 9px 4px; border: 1.5px solid var(--ink); border-radius: 999px;
 }
 #hint {
-  left: 0; right: 0; bottom: max(34px, env(safe-area-inset-bottom));
+  left: 0; right: 0; bottom: max(34px, env(safe-area-inset-bottom)); padding: 0 64px;
   text-align: center; font-size: 13px; font-weight: 600; letter-spacing: 0.08em;
   opacity: 0.6; transition: opacity 0.6s;
 }
@@ -64,6 +64,29 @@ html, body {
 #credits li + li { border-top: 1px solid rgba(29, 27, 25, 0.1); }
 #credits b { display: block; font-weight: 800; letter-spacing: 0.02em; }
 #credits span { opacity: 0.7; }
+#help-btn {
+  position: fixed; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 4;
+  width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--ink);
+  background: rgba(255, 253, 248, 0.85); color: var(--ink); font: inherit; font-size: 15px; font-weight: 800;
+  cursor: pointer; opacity: 0.7;
+}
+#help-btn:hover, #help-btn:focus-visible, #help-btn[aria-expanded='true'] { opacity: 1; }
+#help {
+  position: fixed; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(233, 227, 214, 0.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); cursor: pointer;
+}
+#help[hidden] { display: none; }
+#help .card {
+  width: min(440px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 22px 24px 16px;
+  background: #f7f2e7; border-radius: 22px; box-shadow: 0 2px 6px rgba(29, 27, 25, 0.08), 0 22px 48px rgba(29, 27, 25, 0.2);
+  animation: map-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#help h2 { margin: 0 0 12px; font-size: 13px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+#help dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 9px 14px; font-size: 14px; line-height: 1.4; }
+#help dt { font-weight: 800; }
+#help dd { margin: 0; opacity: 0.8; }
+#help .foot { margin: 16px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.5; }
+@media (max-width: 420px) { #help dl { grid-template-columns: 1fr; gap: 2px; } #help dd { margin-bottom: 8px; } }
 #map-btn {
   position: fixed; top: max(18px, env(safe-area-inset-top)); right: 104px;
   font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
@@ -93,5 +116,7 @@ html, body {
   font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
 }
 #cult b { color: var(--red); }
+#cult.safe b { animation: safe 0.25s steps(2) infinite; }
+@keyframes safe { 50% { opacity: 0.25; } }
 #cult .bump { animation: bump 0.4s; }
 @keyframes bump { 40% { transform: scale(1.5); } }

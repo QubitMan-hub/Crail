@@ -33,8 +33,110 @@ dayBtn.addEventListener('click', () => {
 
 const map = setupMap(game.ctx, document.getElementById('map-btn') as HTMLButtonElement);
 
+// The opening instructions go once you have rolled. Later messages manage themselves.
 const hint = document.getElementById('hint')!;
-game.ctx.events.on('cube:rolled', () => hint.classList.add('gone'));
+game.ctx.events.on('cube:rolled', () => {
+  if (hint.querySelector('.keys, .touch')) hint.classList.add('gone');
+});
+
+// How to play: one line per thing you can do, only for the features in this build.
+const HELP: [string, string, string][] = [
+  ['000-cube', 'Roll', 'WASD or arrow keys, or tap where to go. Scroll or pinch to zoom. M opens the map.'],
+  ['001-goth-baddies', 'Goths', 'They judge you. Bump one three times and find out.'],
+  ['002-femboys', 'Femboys', 'Friendlier. Bump one three times and you may get a bow.'],
+  ['003-park', 'Rides', 'Roll into a ride to get on. Each one gives a charm ✦, then needs a rest. Press a direction to get off early (no charm before halfway).'],
+  ['003-cube-cult', 'Preach', 'With a charm, stop next to someone and stay still. A ring fills and they join. Goths cost ✦2.'],
+  ['003-cube-cult', 'Your cult', 'Four followers walk with you; the rest wait at the temple. Bump the shrine for charms, and the temple door to give out ranks.'],
+  ['003-supreme-leader', 'The leader', 'Cannot be recruited. Bump his statue, flag or launch pad and his soldiers react.'],
+  ['003-supreme-leader', 'Danger', 'Once your cult has three members, his rockets aim at you: get out of the red ring. A hit costs a charm.'],
+  ['004-octopus', 'Octopus', 'Steals from everyone. Roll into it to make it drop things. Bump the rock by its pool to give everything back.'],
+];
+const helpBtn = document.getElementById('help-btn') as HTMLButtonElement;
+const help = document.getElementById('help')!;
+const ids = new Set(features.map((f) => f.meta.id));
+for (const [id, term, text] of HELP) {
+  if (!ids.has(id)) continue;
+  const dt = document.createElement('dt');
+  dt.textContent = term;
+  const dd = document.createElement('dd');
+  dd.textContent = text;
+  help.querySelector('dl')!.append(dt, dd);
+}
+const toggleHelp = (open = help.hidden) => {
+  help.hidden = !open;
+  helpBtn.setAttribute('aria-expanded', String(open));
+};
+helpBtn.addEventListener('click', () => {
+  toggleHelp();
+  helpBtn.blur();
+});
+help.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  toggleHelp(false);
+});
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape' && !help.hidden) toggleHelp(false);
+});
+
+// Zoom: scroll, pinch, or + and -. Remembered between visits. Video capture sets its own.
+if (!manual) {
+  const camera = game.ctx.camera;
+  const canvas = game.ctx.renderer.domElement;
+  let zoom = 1;
+  try {
+    zoom = Number(localStorage.getItem('crail.zoom')) || 1;
+  } catch {
+    /* storage can be blocked; start at the default */
+  }
+  const setZoom = (z: number) => {
+    zoom = Math.min(1.7, Math.max(0.6, z));
+    camera.zoom = zoom;
+    camera.updateProjectionMatrix();
+    try {
+      localStorage.setItem('crail.zoom', String(zoom));
+    } catch {
+      /* ignore */
+    }
+  };
+  setZoom(zoom);
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      setZoom(zoom * Math.exp(-e.deltaY * 0.0015));
+    },
+    { passive: false },
+  );
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Equal' || e.code === 'NumpadAdd') setZoom(zoom * 1.15);
+    else if (e.code === 'Minus' || e.code === 'NumpadSubtract') setZoom(zoom / 1.15);
+  });
+  const fingers = new Map<number, { x: number; y: number }>();
+  let pinchFrom = 0;
+  let zoomFrom = 1;
+  const spread = () => {
+    const [a, b] = [...fingers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (fingers.size === 2) {
+      pinchFrom = spread();
+      zoomFrom = zoom;
+    }
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!fingers.has(e.pointerId)) return;
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (fingers.size === 2 && pinchFrom > 0) setZoom(zoomFrom * (spread() / pinchFrom));
+  });
+  const lift = (e: PointerEvent) => {
+    fingers.delete(e.pointerId);
+    if (fingers.size < 2) pinchFrom = 0;
+  };
+  canvas.addEventListener('pointerup', lift);
+  canvas.addEventListener('pointercancel', lift);
+}
 
 const soundBtn = document.getElementById('sound') as HTMLButtonElement;
 let soundOn = true;

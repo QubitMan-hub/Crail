@@ -43,6 +43,10 @@ const PEWS: { x: number; z: number; dir: DirIndex }[] = [0, 1, 2, 3, 4].flatMap(
 type Rank = 'acolyte' | 'priest' | 'high';
 /** How often the high priest goes out and brings someone back, in seconds. */
 const PREACH_EVERY = 45;
+/** The high priest stops bringing people in for free once the cult is this big. */
+const FREE_RECRUITS_UP_TO = 8;
+/** After losing a charm, this many seconds when nothing can take another. */
+const GRACE = 4;
 const GOLD = '#d6b24a';
 /** How long the cube must hold still beside someone to win them over, per charm they cost. */
 const PREACH_SECONDS = 1.6;
@@ -299,10 +303,11 @@ export const cubeCult: Feature = {
     // It is the same charm coming back, not a new one, so it returns without fuss.
     addStealable(ctx, {
       party: 'cube', name: 'one of your charms', token: 'charm',
-      where: () => (state.charms >= 2 && ctx.state.cube ? { x: ctx.state.cube.x, z: ctx.state.cube.z } : null),
+      where: () => (state.charms >= 2 && grace <= 0 && ctx.state.cube ? { x: ctx.state.cube.x, z: ctx.state.cube.z } : null),
       take() {
         const before = state.charms;
         state.charms -= 1;
+        grace = GRACE;
         refresh(true);
         tip(`The octopus stole one of your charms (✦${before} → ✦${state.charms}). Roll into it to get it back.`);
       },
@@ -322,9 +327,13 @@ export const cubeCult: Feature = {
     });
 
     // A blast that catches the cube knocks a charm out of it.
+    // After losing one, a few seconds when nothing else can take a charm: no double losses.
+    let grace = 0;
     ctx.events.on('cube:blast', () => {
       if (state.charms <= 0) return;
+      if (grace > 0) return tip('The blast missed your charms. Lucky.');
       state.charms -= 1;
+      grace = GRACE;
       refresh(true);
       tip('The blast knocked a charm out of you.');
     });
@@ -598,9 +607,12 @@ export const cubeCult: Feature = {
         if (on) marker.position.y += Math.sin(time * 2.2) * 0.004;
       });
 
+      // While protected, the halo flickers, and so does the charm count.
+      grace = Math.max(0, grace - dt);
       if (cubeMesh) {
         cubeMesh.getWorldPosition(at);
-        halo.visible = members.length >= 3;
+        halo.visible = members.length >= 3 && (grace <= 0 || Math.sin(time * 22) > 0);
+        hud.classList.toggle('safe', grace > 0);
         halo.position.set(at.x, at.y + 0.86 + Math.sin(time * 2.4) * 0.03, at.z);
         halo.rotation.z = time * 0.8;
         // The glow only comes when they are actually worshipping.
@@ -622,7 +634,7 @@ export const cubeCult: Feature = {
       // The high priest goes out and brings someone back, now and then, for free.
       sincePreach += dt;
       const high = members.find((n) => ranks.get(n) === 'high');
-      if (high && sincePreach > PREACH_EVERY) {
+      if (high && sincePreach > PREACH_EVERY && members.length < FREE_RECRUITS_UP_TO) {
         const near = everyone(ctx).find(
           (e) =>
             !e.world.staged && !e.n.cult && e.n.persona.kind !== 'leader' && !e.n.post && e.n.nx === null &&

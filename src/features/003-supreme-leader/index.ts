@@ -107,7 +107,7 @@ export const supremeLeader: Feature = {
     const statueMark = addLandmark(ctx, { name: 'Statue', x: 0, z: 0, color: '#d6b24a', hidden: true });
     const rocketMark = addLandmark(ctx, { name: 'Rocket', x: 0, z: 0, color: '#8d8a96', hidden: true });
     const rocketSite = {
-      built: false, x: 0, z: 0, age: 0, sinceLaunch: 0, launches: 0, successes: 0, strikes: 0, hits: 0,
+      built: false, x: 0, z: 0, age: 0, sinceLaunch: 0, launches: 0, successes: 0, strikes: 0, hits: 0, second: false,
       /** idle, counting down, or in flight. `t` is seconds into the current phase. */
       phase: 'idle' as 'idle' | 'countdown' | 'flight',
       t: 0,
@@ -469,8 +469,10 @@ export const supremeLeader: Feature = {
       for (const m of everyone(ctx)) {
         if (m.n.drafted && m.n.cult) m.n.drafted = false;
       }
+      // A big cult worries him: he drafts twice as often, from further away.
+      const worried = cultSize() >= INTIMIDATING;
       sinceConscript += dt;
-      if (!staged && sinceConscript > CONSCRIPT_EVERY && conscript(3)) sinceConscript = 0;
+      if (!staged && sinceConscript > CONSCRIPT_EVERY / (worried ? 2 : 1) && conscript(worried ? 5 : 3)) sinceConscript = 0;
 
       // The tank's shell: it takes aim, the ring appears, and then it arrives.
       if (shot) {
@@ -481,7 +483,7 @@ export const supremeLeader: Feature = {
         if (!shot.aimed && shot.t >= AIM && aim) {
           shot.aimed = true;
           Object.assign(shellMark, { x: aim.x, z: aim.z, on: true });
-          if (!shot.at) tip('The tank is aiming at you. Move.');
+          if (!shot.at) tip('The tank is aiming at you. Move.', 3, { urgent: true });
         }
         if (shot.aimed) {
           const k = Math.min(1, (shot.t - AIM) / SHELL_WARNING);
@@ -613,13 +615,18 @@ export const supremeLeader: Feature = {
         flame.visible = true;
         flame.scale.y = 1.3 + Math.sin(t * 60) * 0.2;
         const c = ctx.state.cube;
+        // A big cult is a real rival: the rockets come in pairs, the second aimed
+        // wherever the cube has rolled to by the time the first lands.
+        const paired = cultSize() >= INTIMIDATING;
         if (crossed(LOCK) && c) {
           Object.assign(strikeMark, { x: c.x, z: c.z, on: true });
-          tip('That one is aimed at you. Get out of the ring.');
+          tip(paired ? 'Two rockets. The first is aimed at you: get out of the ring.' : 'That one is aimed at you. Get out of the ring.', 3, { urgent: true });
         }
         const down = (t - (land - 0.45)) / 0.45;
-        warhead.visible = down > 0 && down < 1;
-        warhead.position.set(strikeMark.x, 12 * (1 - Math.min(1, Math.max(0, down))) ** 2, strikeMark.z);
+        if (t < land + 0.2) {
+          warhead.visible = down > 0 && down < 1;
+          warhead.position.set(strikeMark.x, 12 * (1 - Math.min(1, Math.max(0, down))) ** 2, strikeMark.z);
+        }
         warhead.rotation.z = Math.PI;
         if (crossed(land)) {
           strikeMark.on = false;
@@ -629,9 +636,33 @@ export const supremeLeader: Feature = {
           if (hit) rocketSite.hits += 1;
           n.order = hit ? 'cheer' : 'fume';
           everyoneSalutes();
-          if (!hit) tip('It missed. He is not happy.');
+          if (!hit && !paired) tip('It missed. He is not happy.');
+          if (paired) rocketSite.second = true;
         }
-        if (t > land + 2.5) rocketSite.phase = 'idle';
+        // The second rocket of a pair: a fresh ring where the cube is now, the same fair warning.
+        const land2 = land + 0.4 + STRIKE_WARNING;
+        if (rocketSite.second) {
+          if (crossed(land + 0.4) && c) {
+            Object.assign(strikeMark, { x: c.x, z: c.z, on: true });
+            tip('Second rocket. Move again.', 3, { urgent: true });
+          }
+          const down2 = (t - (land2 - 0.45)) / 0.45;
+          warhead.visible = down2 > 0 && down2 < 1;
+          if (down2 > 0) warhead.position.set(strikeMark.x, 12 * (1 - Math.min(1, down2)) ** 2, strikeMark.z);
+          if (crossed(land2)) {
+            strikeMark.on = false;
+            warhead.visible = false;
+            rocketSite.strikes += 1;
+            const hit = blast(strikeMark.x, strikeMark.z, 2);
+            if (hit) rocketSite.hits += 1;
+            n.order = hit ? 'cheer' : 'fume';
+            if (!hit) tip('Both missed. He is not happy.');
+          }
+        }
+        if (t > (rocketSite.second ? land2 : land) + 2.5) {
+          rocketSite.phase = 'idle';
+          rocketSite.second = false;
+        }
       } else if (rocketSite.outcome === 'success') {
         // It works. Nobody is more surprised than he is.
         const k = (t - 0.6) / 2.2;

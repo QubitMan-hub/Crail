@@ -28,15 +28,19 @@ export class Input {
     });
     window.addEventListener('blur', () => (this.held = []));
 
-    let down: { x: number; y: number; id: number } | null = null;
+    let down: { x: number; y: number; id: number; multi: boolean } | null = null;
     target.addEventListener('pointerdown', (e) => {
-      down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      // A second finger while the first is down: that is a pinch, not a tap.
+      if (down) return void (down.multi = true);
+      down = { x: e.clientX, y: e.clientY, id: e.pointerId, multi: false };
     });
+    target.addEventListener('pointercancel', () => (down = null));
     target.addEventListener('pointerup', (e) => {
       if (!down || down.id !== e.pointerId) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      const multi = down.multi;
       down = null;
-      if (moved > 12) return;
+      if (moved > 12 || multi) return;
       this.gesture();
       this.tapHandlers.forEach((fn) => fn(e.clientX, e.clientY));
     });

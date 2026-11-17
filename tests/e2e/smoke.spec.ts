@@ -685,3 +685,59 @@ test('the octopus never takes the cube’s last charm', async ({ page }) => {
   });
   expect(o).toEqual({ mode: 'lurk', charms: 1 });
 });
+
+// ---- Quality of life and balance -------------------------------------------------
+
+test('after losing a charm there is a moment when the next blast takes nothing, and both messages are seen', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'cult.charms', 3);
+  await direct(page, 'leader.blast', 0, 1, 2);
+  await page.waitForFunction(() => !(window as any).__crail.state.cube.moving);
+  const at = await cubeState(page);
+  await direct(page, 'leader.blast', at.x, at.z, 2);
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(2);
+  // The first message is not overwritten at once: the second follows it.
+  await expect(page.locator('#hint')).toContainText('knocked a charm out');
+  await expect(page.locator('#hint')).toContainText('Lucky', { timeout: 6000 });
+  await expect(page.locator('#cult')).toHaveClass(/safe/);
+});
+
+test('a big cult gets two rockets, the second aimed where the cube has gone', async ({ page }) => {
+  test.setTimeout(60_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  for (let i = 0; i < 6; i++) await direct(page, 'femboys.spawn', i % 4, -10 + i, 6, 1, { idle: 999 });
+  for (let i = 0; i < 6; i++) await direct(page, 'cult.recruit', 'femboys', i);
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.members.length)).toBe(6);
+  await direct(page, 'leader.spawn', 0, 6, 0, 2, { idle: 999 });
+  await direct(page, 'leader.site');
+  await direct(page, 'leader.launch', 'strike');
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 2, null, { timeout: 30_000 });
+});
+
+test('the how-to-play card lists what this build has, and closes', async ({ page }) => {
+  await open(page, '?seed=3');
+  await page.locator('#help-btn').click();
+  await expect(page.locator('#help')).toBeVisible();
+  await expect(page.locator('#help dl')).toContainText('Octopus');
+  await expect(page.locator('#help dl')).toContainText('Preach');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#help')).toBeHidden();
+  // Day 2 had no octopus and no cult.
+  await open(page, '?day=2');
+  await page.locator('#help-btn').click();
+  await expect(page.locator('#help dl')).toContainText('Femboys');
+  await expect(page.locator('#help dl')).not.toContainText('Octopus');
+  await page.locator('#help').click();
+  await expect(page.locator('#help')).toBeHidden();
+  expect(await cubeState(page)).toMatchObject({ rolls: 0 });
+});
+
+test('+ and - zoom the view, within limits, and it is remembered', async ({ page }) => {
+  await open(page, '?seed=3');
+  for (let i = 0; i < 10; i++) await page.keyboard.press('Equal');
+  expect(Number(await page.evaluate(() => localStorage.getItem('crail.zoom')))).toBeCloseTo(1.7, 2);
+  for (let i = 0; i < 20; i++) await page.keyboard.press('Minus');
+  expect(Number(await page.evaluate(() => localStorage.getItem('crail.zoom')))).toBeCloseTo(0.6, 2);
+});
