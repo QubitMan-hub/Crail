@@ -52,7 +52,7 @@ const actions = [
   [18.9, 'octopus.steal', '', 'charm'],
   // The rock.
   [T.rock, 'octopus.stashNow'], [T.rock, 'cube.teleport', POOL.x + 2, POOL.z + 2], [T.rock + 0.05, 'cut'],
-  [T.out, 'cut'],
+  [T.out, 'cube.teleport', -70, 30], [T.out, 'cut'],
 ];
 
 const zoom = [
@@ -66,7 +66,7 @@ const zoom = [
 function camera(t) {
   const cam = { zoom: keyframes(zoom, t) };
   if (t < 5.3) cam.focus = [POOL.x, POOL.z];
-  else if (t < T.femboy) cam.focus = [POOL.x + 0.3, keyframes([[5.3, POOL.z], [6.4, POOL.z + 2.4], [8.0, POOL.z + 2.4], [9.2, POOL.z + 0.6], [T.femboy, POOL.z + 0.4]], t)];
+  else if (t < T.femboy) cam.focus = [POOL.x + 0.3, keyframes([[5.3, POOL.z], [6.2, POOL.z + 3.2], [8.0, POOL.z + 3.2], [9.2, POOL.z + 1], [T.femboy, POOL.z + 0.8]], t)];
   else if (t < T.army) cam.focus = [F.x, keyframes([[T.femboy, F.z - 2], [11.4, F.z - 0.8], [T.army, F.z - 0.8]], t)];
   else if (t < T.cube) cam.at = 'army.flag';
   else if (t < T.rock) return cam; // on the cube
@@ -77,13 +77,13 @@ function camera(t) {
 
 // Voice-over, as estimated. Retimed to the real recording afterwards.
 const captions = [
-  [0.2, 0.9, 'Day four'], [0.9, 2.0, 'of letting Instagram comments'], [2.0, 2.8, 'build this game.'],
+  [0.2, 0.9, 'Day four'], [0.9, 1.4, 'of letting'], [1.4, 2.0, 'Instagram comments'], [2.0, 2.8, 'build this game.'],
   [3.8, 4.5, 'Top comment:'], [4.5, 5.2, 'an octopus'], [5.2, 6.3, 'that steals from everyone.'],
   [6.8, 7.9, 'It takes a goth’s bow.'], [8.4, 9.4, 'She noticed.'],
   [10.2, 11.2, 'A femboy’s sock.'], [11.8, 12.7, 'Just the one.'],
   [13.2, 14.4, 'The dictator’s flag.'], [15.0, 16.2, 'The tank fires back.'], [17.2, 18.1, 'And misses.'],
   [18.7, 19.8, 'It even robs you.'], [20.4, 21.6, 'That was your charm.'],
-  [22.2, 23.0, 'It keeps everything'], [23.0, 23.7, 'on a rock.'], [24.3, 25.1, 'Bump the rock.'], [25.3, 26.7, 'Everyone gets their stuff back.'],
+  [22.2, 23.0, 'It keeps everything'], [23.0, 23.7, 'on a rock.'], [24.3, 25.1, 'Bump the rock.'], [25.3, 26.0, 'Everyone gets'], [26.0, 26.7, 'their stuff back.'],
   [27.2, 27.9, 'Day five.'], [27.9, 28.9, 'Top comment wins.'], [29.3, 30.5, 'It’s still watching.'],
 ];
 // Short written asides, popped on like a reply.

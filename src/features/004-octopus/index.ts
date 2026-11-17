@@ -360,7 +360,7 @@ export const octopus: Feature = {
       const home = state.mode === 'lurk' && state.x === POOL.x && state.z === POOL.z;
       if (home) facing = Math.PI / 4; // watching the camera from the water
       // In its pool it sinks to the eyes.
-      const sink = home ? -0.3 + Math.sin(time * 0.8) * 0.03 : 0;
+      const sink = home ? -0.24 + Math.sin(time * 0.8) * 0.03 : 0;
       const moving = state.nx !== null;
       // It pulses along: a squash and a stretch with every cell.
       const pulse = moving ? Math.sin(k * Math.PI) : 0;
@@ -373,7 +373,9 @@ export const octopus: Feature = {
       rig.body.scale.set(1 + pulse * 0.08, 1 - pulse * 0.12 + Math.sin(time * 2.2) * 0.02, 1 + pulse * 0.08);
       rig.body.rotation.x = lunge * 0.3 + (moving ? 0.12 : 0);
       const sneaky = state.mode === 'hunt' || state.mode === 'snatch';
-      for (const lid of rig.lids) lid.scale.y = home ? 1.9 : sneaky ? 1.3 : state.mode === 'flee' ? 0.2 : 0.8;
+      // At home it watches, half-lidded, and narrows its eyes now and then.
+      const peer = Math.sin(time * 0.9) > 0.86 ? 1.5 : 0.7;
+      for (const lid of rig.lids) lid.scale.y = home ? peer : sneaky ? 1.3 : state.mode === 'flee' ? 0.2 : 0.8;
       rig.arms.forEach((arm, i) => {
         const carrying = [0, 2, 6].indexOf(i) > -1 && [0, 2, 6].indexOf(i) < held.length;
         const reach = i === 0 || i === 7 ? lunge : 0;
