@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
+import { addStealable } from '../../core/loot';
 import { tip } from '../../core/tip';
 import { DIRS, floor, LEADER, relocate, SOLDIER, type DirIndex, type Npc } from '../../characters/brain';
 import { createCast, everyone, type Member } from '../../characters/cast';
@@ -49,6 +50,8 @@ type Project = 'soldier' | 'pad' | 'statue' | 'flag' | 'guard' | 'tank';
  * column. Once the cube's cult is big enough to be a rival, his rockets stop falling
  * over and start being aimed at it. A blast throws the cube, flattens everyone nearby
  * and costs a charm. There is always a warning ring first.
+ *
+ * His flag can be stolen (see the octopus). The tank fires at whoever took it.
  */
 export const supremeLeader: Feature = {
   meta: {
@@ -122,7 +125,7 @@ export const supremeLeader: Feature = {
     const { pole, banner, top: flagTop } = buildFlag();
     pole.visible = false;
     ctx.scene.add(pole);
-    const flag = { built: false, x: 0, z: 0, age: 0, lowered: 0 };
+    const flag = { built: false, x: 0, z: 0, age: 0, lowered: 0, stolen: false };
     const army = { monument, flag, tank: false, followers: 0, guards: 0, conscripts: 0, blasts: 0 };
     ctx.state.army = army;
 
@@ -305,12 +308,27 @@ export const supremeLeader: Feature = {
     };
 
     // The tank's shot: fired once per alarm, at wherever the cube was when it took aim.
-    let shot: { t: number; from: THREE.Vector3; aimed: boolean } | null = null;
-    const fireShell = () => {
+    let shot: { t: number; from: THREE.Vector3; aimed: boolean; at?: { x: number; z: number } } | null = null;
+    /** Fire at the cube, or at a spot on the floor if one is given. */
+    const fireShell = (at?: { x: number; z: number }) => {
       const tank = tanks()[0];
       if (!tank || shot) return;
-      shot = { t: 0, from: new THREE.Vector3(tank.n.x, 0.8, tank.n.z), aimed: false };
+      shot = { t: 0, from: new THREE.Vector3(tank.n.x, 0.8, tank.n.z), aimed: false, at };
     };
+
+    // The flag can be carried off. He takes it personally, and the tank answers.
+    addStealable(ctx, {
+      party: 'army', name: 'the leader’s flag', token: 'flag',
+      where: () => (flag.built && !flag.stolen ? { x: flag.x, z: flag.z } : null),
+      take: () => (flag.stolen = true),
+      putBack: () => (flag.stolen = false),
+    });
+    ctx.events.on<{ party: string; x: number; z: number }>('octopus:stole', ({ party, x, z }) => {
+      if (party !== 'army' || soldiers.world.staged) return;
+      const n = boss();
+      if (n) n.order = 'fume';
+      fireShell({ x, z });
+    });
 
     // Conscription: anyone who is not in the cult and wanders too close gets a helmet.
     const drafted = () => everyone(ctx).filter((m) => m.n.drafted && !m.n.cult);
@@ -364,7 +382,7 @@ export const supremeLeader: Feature = {
     ctx.events.on('direct:leader.build', () => (leaders.world.wantBuild = true));
     ctx.events.on<[Outcome?]>('direct:leader.launch', ([outcome]) => void launch(outcome));
     ctx.events.on('direct:leader.alarm', () => (soldiers.world.alarm = ALARM_SECONDS));
-    ctx.events.on('direct:leader.shell', fireShell);
+    ctx.events.on('direct:leader.shell', () => fireShell());
     ctx.events.on('direct:leader.conscript', () => void conscript(8));
     ctx.events.on<[number, number, number]>('direct:leader.blast', ([x, z, radius]) => void blast(x, z, radius));
     ctx.events.on('direct:leader.drill', drill);
@@ -383,6 +401,7 @@ export const supremeLeader: Feature = {
       rocketSite.phase = 'idle';
       rocketMark.hidden = true;
       statueMark.hidden = true;
+      flag.stolen = false;
       strikeMark.on = shellMark.on = false;
       shot = null;
       warhead.visible = shell.visible = false;
@@ -456,10 +475,11 @@ export const supremeLeader: Feature = {
         shot.t += dt;
         const AIM = 0.8;
         const c = ctx.state.cube;
-        if (!shot.aimed && shot.t >= AIM && c) {
+        const aim = shot.at ?? c;
+        if (!shot.aimed && shot.t >= AIM && aim) {
           shot.aimed = true;
-          Object.assign(shellMark, { x: c.x, z: c.z, on: true });
-          tip('The tank is aiming at you. Move.');
+          Object.assign(shellMark, { x: aim.x, z: aim.z, on: true });
+          if (!shot.at) tip('The tank is aiming at you. Move.');
         }
         if (shot.aimed) {
           const k = Math.min(1, (shot.t - AIM) / SHELL_WARNING);
@@ -523,6 +543,7 @@ export const supremeLeader: Feature = {
         // Lowered flags creep back up on their own. Somebody is always watching the flag.
         flag.lowered = Math.max(0, flag.lowered - dt / 7);
         banner.position.y = flagTop - 0.3 - flag.lowered * 1.5;
+        banner.visible = !flag.stolen;
         banner.rotation.y = -0.5 + Math.sin(time * 2.3) * 0.22 + Math.sin(time * 5.1) * 0.06;
       }
 

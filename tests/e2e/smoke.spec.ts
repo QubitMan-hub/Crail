@@ -92,6 +92,7 @@ const holdUntil = async (page: import('@playwright/test').Page, key: string, con
   await page.keyboard.up(key);
 };
 const clearStage = async (page: import('@playwright/test').Page) => {
+  await direct(page, 'octopus.staged', true);
   for (const cast of ['goths', 'femboys', 'soldiers', 'leader']) {
     await direct(page, `${cast}.staged`, true);
     await direct(page, `${cast}.clear`);
@@ -105,7 +106,7 @@ const goth = (page: import('@playwright/test').Page, i = 0) =>
 
 test('boots with every feature on: day 3, goths, femboys, a leader, credits name the winners', async ({ page }) => {
   await open(page);
-  await expect(page.locator('#day')).toHaveText('Day 3');
+  await expect(page.locator('#day')).toHaveText('Day 4');
   expect(await page.evaluate(() => (window as any).__crail.state.leader.npcs.length)).toBe(1);
   await expect(page.locator('#credits')).toContainText('@gyarados117');
   await expect(page.locator('#credits')).toContainText('@megamouse173');
@@ -587,4 +588,63 @@ test('he conscripts a passer-by, and preaching wins them back', async ({ page })
   await page.waitForFunction(() => (window as any).__crail.state.army.conscripts === 1);
   await direct(page, 'cult.recruit', 'femboys', 0);
   expect(await drafted()).toEqual({ drafted: false, helmet: false, cult: true });
+});
+
+// ---- Day 4: the octopus ---------------------------------------------------------
+
+test('the octopus robs people, keeps it on its rock, and the cube can give it all back', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, 2, 8, 1, { idle: 999 });
+  await direct(page, 'octopus.staged', false);
+  await direct(page, 'octopus.steal', 'goth');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.carrying.length >= 1);
+  expect(await page.evaluate(() => (window as any).__crail.state.octopus.carrying[0])).toContain('goth');
+  // It takes its haul home and puts it on the rock.
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.stash.length >= 1, null, { timeout: 60_000 });
+  await direct(page, 'octopus.staged', true);
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.mode === 'lurk', null, { timeout: 30_000 });
+  // Bumping it at home gets a hint; bumping the rock gets everything back.
+  await direct(page, 'cube.teleport', 3, 16);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1 || s.cube.z === 15');
+  await direct(page, 'cube.teleport', 5, 15);
+  const before = await page.evaluate(() => (window as any).__crail.state.cube.bonks);
+  await holdUntil(page, 'KeyW', `s.cube.bonks > ${before}`);
+  const after = await page.evaluate(() => {
+    const o = (window as any).__crail.state.octopus;
+    return { stash: o.stash.length, returned: o.returned };
+  });
+  expect(after.stash).toBe(0);
+  expect(after.returned).toBeGreaterThanOrEqual(1);
+  await expect(page.locator('#hint')).toContainText('gave back');
+});
+
+test('startle the octopus and it drops what it is carrying, and the owner gets it back', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, -3, 8, 1, { idle: 999 });
+  await direct(page, 'goths.bow', 0);
+  const hasBow = () => page.evaluate(() => !!(window as any).__crail.state.everyone[0].rig.head.getObjectByName('bow'));
+  expect(await hasBow()).toBe(true);
+  await direct(page, 'octopus.staged', false);
+  await direct(page, 'octopus.steal', 'goth');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.carrying.length >= 1);
+  // It took the bow itself, not a copy.
+  expect(await page.evaluate(() => (window as any).__crail.state.octopus.carrying[0])).toContain('bow');
+  expect(await hasBow()).toBe(false);
+  // Something goes off next to it (a bump from the cube does the same).
+  await page.evaluate(() => {
+    const c = (window as any).__crail;
+    c.direct('leader.blast', c.state.octopus.x, c.state.octopus.z, 1);
+  });
+  const o = await page.evaluate(() => {
+    const s = (window as any).__crail.state.octopus;
+    return { carrying: s.carrying.length, returned: s.returned, mode: s.mode };
+  });
+  expect(o).toEqual({ carrying: 0, returned: 1, mode: 'flee' });
+  expect(await hasBow()).toBe(true);
+  // And it goes home to sulk.
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.mode === 'lurk', null, { timeout: 60_000 });
 });

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
+import { addStealable } from '../../core/loot';
 import { tip } from '../../core/tip';
 import { seededRandom } from '../../core/rng';
 import { everyone, type Member } from '../../characters/cast';
@@ -464,6 +465,14 @@ export const park: Feature = {
       string.castShadow = false;
       balloons.push({ mesh, string, base: mesh.position.clone(), phase: i * 1.7 });
     });
+    // Balloons can go missing, one at a time, from the top of the bunch.
+    let balloonsGone = 0;
+    addStealable(ctx, {
+      party: 'park', name: 'a balloon', token: 'balloon',
+      where: () => (balloonsGone < balloons.length - 1 ? { x: 11, z: 3 } : null),
+      take: () => void balloonsGone++,
+      putBack: () => void (balloonsGone = Math.max(0, balloonsGone - 1)),
+    });
     const drops: THREE.Mesh[] = [];
     for (let i = 0; i < 10; i++) {
       const d = box(root, WATER, 0.09, 0.09, 0.09, PLAZA.x, 1.9, PLAZA.z);
@@ -651,7 +660,8 @@ export const park: Feature = {
       // The crown leans as it turns, so the chairs rise and dip in a wave.
       spin.rotation.set(Math.sin(time * 0.9) * 0.075, swingAngle, Math.cos(time * 0.9) * 0.075);
       spin.updateMatrixWorld(true);
-      balloons.forEach((b) => {
+      balloons.forEach((b, i) => {
+        b.mesh.visible = b.string.visible = i < balloons.length - balloonsGone;
         b.mesh.position.set(
           b.base.x + Math.sin(time * 1.3 + b.phase) * 0.06,
           b.base.y + Math.sin(time * 1.9 + b.phase) * 0.07,

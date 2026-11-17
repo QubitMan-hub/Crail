@@ -1,0 +1,14 @@
+{
+  "day": 4,
+  "method": "top-comment",
+  "reel": "Day 3 Reel on @qubitman_ftw",
+  "source": "Screenshot of the comment taken by the creator about 9 hours after posting. The automated snapshot was not run for this round because the Instagram API token is not set up yet.",
+  "final": false,
+  "note": "Recorded before the 24-hour deadline. The comment had 13 likes at the time of the screenshot.",
+  "winner": {
+    "username": "ump.619",
+    "text": "Add an octopus that steals stuff from all parties",
+    "likes": 13
+  },
+  "decision_note": "Built as an octopus that lives in a tide pool and robs each group in turn: boots, socks and bows from goths and femboys, caps and the leader's medal and flag from the army, balloons from the park, a charm from the cube. It keeps the loot on a rock by its pool. The cube can bump it to make it drop what it holds, or bump the rock to return everything. The tank fires at it when it robs the army."
+}

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
+import { addStealable } from '../../core/loot';
 import { tip } from '../../core/tip';
 import { DIRS, type DirIndex, type Lead, type Npc } from '../../characters/brain';
 import { everyone, type Member } from '../../characters/cast';
@@ -286,6 +287,21 @@ export const cubeCult: Feature = {
         if (members.length === 0) tip('Stop next to someone and stay still to preach. Goths cost ✦2.');
       }
     };
+
+    // A charm can be lifted off the cube, but only when it has one to spare.
+    addStealable(ctx, {
+      party: 'cube', name: 'one of your charms', token: 'charm',
+      where: () => (state.charms >= 2 && ctx.state.cube ? { x: ctx.state.cube.x, z: ctx.state.cube.z } : null),
+      take() {
+        state.charms -= 1;
+        refresh(true);
+      },
+      putBack: () => gain(),
+    });
+    // Emptying the thief's rock is a good deed, and good deeds are charming.
+    ctx.events.on<{ count: number }>('octopus:raided', ({ count }) => {
+      if (count >= 2) gain();
+    });
 
     // A blast that catches the cube knocks a charm out of it.
     ctx.events.on('cube:blast', () => {
