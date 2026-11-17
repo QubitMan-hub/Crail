@@ -7,6 +7,7 @@ import { seededRandom } from '../../core/rng';
 import { tip } from '../../core/tip';
 import { everyone, type Member } from '../../characters/cast';
 import { setLoot } from '../../characters/rig';
+import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
 import { buildOctopus, buildPool, buildToken } from './model';
 
 /**
@@ -16,7 +17,8 @@ import { buildOctopus, buildPool, buildToken } from './model';
  * It carries up to three things home and keeps them on the rock beside its pool.
  *
  * Roll into it and it drops what it is holding, squirts ink and bolts. Roll into the
- * rock and everything on it goes back to whoever it belonged to.
+ * rock and everything on it flies back to whoever it belonged to, and the octopus
+ * comes up out of its pool, furious, and goes out again sooner than it would have.
  */
 
 /** The middle of the pool. The rock with the loot is two cells along from it. */
@@ -26,6 +28,11 @@ const SPEED = 3.4; // cells a second: quicker than anyone it robs
 const CARRY = 3;
 /** A full rock: it stays home to guard it until someone empties it. */
 const STASH_MAX = 9;
+/** How long it fumes when its rock is raided, and how soon it goes out again after. */
+const ANGER = 2.6;
+const REVENGE = 3;
+/** Seconds for a returned thing to fly home. */
+const FLIGHT = 0.9;
 const FIRST_OUTING = 18;
 /** What it takes from someone who has nothing better on them. */
 const POCKETS: Record<string, [Stealable['token'], string]> = {
@@ -66,6 +73,10 @@ export const octopus: Feature = {
 
     const rig = buildOctopus();
     rig.root.scale.setScalar(1.15);
+    const fury = makeSymbolSprite();
+    fury.position.set(0, 1.85, 0);
+    rig.root.add(fury);
+    let angry = 0;
     ctx.scene.add(rig.root);
     // Ink: a dark puddle where it was startled, fading.
     const ink = new THREE.Mesh(
@@ -177,15 +188,27 @@ export const octopus: Feature = {
       return pool.filter((s) => s.party === pick).sort((a, b) => far(a) - far(b))[0] ?? null;
     };
 
+    // Things on their way home: each flies in an arc to its owner and is handed back on landing.
+    const flying: { h: Held; from: THREE.Vector3; t: number }[] = [];
     const giveBack = (list: Held[]): number => {
       const n = list.length;
-      for (const h of list.splice(0)) {
-        h.item.putBack();
+      list.splice(0).forEach((h, i) => {
+        const from = new THREE.Vector3();
+        h.mesh.getWorldPosition(from);
         h.mesh.removeFromParent();
-      }
-      state.returned += n;
+        h.mesh.position.copy(from);
+        h.mesh.scale.setScalar(1.3);
+        ctx.scene.add(h.mesh);
+        flying.push({ h, from, t: -i * 0.15 }); // one after another, not all at once
+      });
       names();
       return n;
+    };
+    const land = (f: (typeof flying)[number]) => {
+      f.h.item.putBack();
+      f.h.mesh.removeFromParent();
+      state.returned += 1;
+      ctx.events.emit('octopus:returned', { name: f.h.item.name });
     };
     /** Startled: drop everything, leave a puddle of ink, and go home fast. */
     const startle = () => {
@@ -212,6 +235,9 @@ export const octopus: Feature = {
       } else if (occupant === shelfOcc) {
         if (!stashed.length) return tip('Its rock is empty. For now.');
         const n = giveBack(stashed);
+        // That was its hoard. It comes up out of the water, and it is not pleased.
+        angry = ANGER;
+        if (state.mode === 'lurk') state.timer = ANGER + REVENGE;
         tip(`You gave back ${n === 1 ? 'the one thing' : `all ${n} things`} it stole.`);
         // After the tip, so a reward for it can have the last word.
         ctx.events.emit('octopus:raided', { count: n });
@@ -230,6 +256,8 @@ export const octopus: Feature = {
         target = null;
         setMode('flee', 0);
       }
+      // Scripted scenes start clean: anything mid-air lands now.
+      if (on) flying.splice(0).forEach(land);
     });
     ctx.events.on<[string?, string?]>('direct:octopus.steal', ([party, token]) => {
       target = token ? ([...stealables(ctx), ...pockets()].find((s) => s.token === token && s.where()) ?? null) : choose(party);
@@ -366,19 +394,48 @@ export const octopus: Feature = {
         }
       }
 
+      // Returned things in flight.
+      for (let i = flying.length - 1; i >= 0; i--) {
+        const f = flying[i];
+        f.t += dt / FLIGHT;
+        const to = f.h.item.where();
+        if (!to) {
+          // Whoever it belonged to has gone: it lands where they were.
+          flying.splice(i, 1);
+          land(f);
+          continue;
+        }
+        const k = Math.max(0, Math.min(1, f.t));
+        f.h.mesh.position.set(
+          f.from.x + (to.x - f.from.x) * k,
+          f.from.y + (1.2 - f.from.y) * k + Math.sin(Math.PI * k) * 2.6,
+          f.from.z + (to.z - f.from.z) * k,
+        );
+        f.h.mesh.rotation.y += dt * 9;
+        if (f.t >= 1) {
+          flying.splice(i, 1);
+          land(f);
+        }
+      }
+      angry = Math.max(0, angry - dt);
+      showSymbol(fury, angry > 0 ? 'anger' : null, ANGER - angry, ANGER, 0.7);
+
       // ---- How it looks ----------------------------------------------------------
       const k = state.nx === null ? 0 : state.p;
       const px = state.x + ((state.nx ?? state.x) - state.x) * k;
       const pz = state.z + ((state.nz ?? state.z) - state.z) * k;
       const home = state.mode === 'lurk' && state.x === POOL.x && state.z === POOL.z;
-      if (home) facing = Math.PI / 4; // watching the camera from the water
+      if (angry > 0 && cube) facing = Math.atan2(cube.x - state.x, cube.z - state.z); // glaring at you
+      else if (home) facing = Math.PI / 4; // watching the camera from the water
       // In its pool it sinks to the eyes.
-      const sink = home ? -0.24 + Math.sin(time * 0.8) * 0.03 : 0;
+      // Angry, it rears up out of the water and shakes.
+      const sink = home && angry <= 0 ? -0.24 + Math.sin(time * 0.8) * 0.03 : angry > 0 ? 0.25 + Math.abs(Math.sin(time * 9)) * 0.12 : 0;
       const moving = state.nx !== null;
       // It pulses along: a squash and a stretch with every cell.
       const pulse = moving ? Math.sin(k * Math.PI) : 0;
       const lunge = state.mode === 'snatch' ? Math.sin(Math.min(1, state.t / 0.5) * Math.PI) : 0;
-      rig.root.position.set(px + Math.sin(facing) * lunge * 0.3, 0, pz + Math.cos(facing) * lunge * 0.3);
+      const shake = angry > 0 ? Math.sin(time * 38) * 0.05 : 0;
+      rig.root.position.set(px + Math.sin(facing) * lunge * 0.3 + shake, 0, pz + Math.cos(facing) * lunge * 0.3 - shake);
       let turn = facing - rig.root.rotation.y;
       turn = Math.atan2(Math.sin(turn), Math.cos(turn));
       rig.root.rotation.y += turn * Math.min(1, dt * 14);
@@ -388,11 +445,11 @@ export const octopus: Feature = {
       const sneaky = state.mode === 'hunt' || state.mode === 'snatch';
       // At home it watches, half-lidded, and narrows its eyes now and then.
       const peer = Math.sin(time * 0.9) > 0.86 ? 1.5 : 0.7;
-      for (const lid of rig.lids) lid.scale.y = home ? peer : sneaky ? 1.3 : state.mode === 'flee' ? 0.2 : 0.8;
+      for (const lid of rig.lids) lid.scale.y = angry > 0 ? 1.7 : home ? peer : sneaky ? 1.3 : state.mode === 'flee' ? 0.2 : 0.8;
       rig.arms.forEach((arm, i) => {
         const carrying = [0, 2, 6].indexOf(i) > -1 && [0, 2, 6].indexOf(i) < held.length;
         const reach = i === 0 || i === 7 ? lunge : 0;
-        const speed = moving ? 8 : 1.8;
+        const speed = angry > 0 ? 16 : moving ? 8 : 1.8;
         arm.joints.forEach((joint, j) => {
           // A ripple runs out along each arm, sideways, so it snakes across the floor.
           const ripple = Math.sin(time * speed - j * 1.1 + i * 1.7);
@@ -404,7 +461,8 @@ export const octopus: Feature = {
             joint.rotation.x = [-0.35, -0.1, 0, 0.1, 0.2][j] * reach + (1 - reach) * [0.1, 0.02, 0, -0.25, -0.6][j];
           } else {
             // At rest it lies flat, with the tip curled up; when it swims the arms trail and flick.
-            const flick = moving ? Math.sin(k * Math.PI * 2 - j * 0.8) * 0.18 : 0;
+            // Angry, the arms thrash up and down; swimming, they trail and flick.
+            const flick = angry > 0 ? Math.sin(time * 14 + i * 1.3 - j) * 0.35 - 0.25 : moving ? Math.sin(k * Math.PI * 2 - j * 0.8) * 0.18 : 0;
             joint.rotation.x = [0.1, 0.02, 0, -0.25, -0.6][j] + flick + Math.sin(time * 1.3 + i + j) * 0.05 * j;
           }
         });

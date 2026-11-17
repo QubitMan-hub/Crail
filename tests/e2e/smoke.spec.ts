@@ -611,13 +611,10 @@ test('the octopus robs people, keeps it on its rock, and the cube can give it al
   await direct(page, 'cube.teleport', 5, 15);
   const before = await page.evaluate(() => (window as any).__crail.state.cube.bonks);
   await holdUntil(page, 'KeyW', `s.cube.bonks > ${before}`);
-  const after = await page.evaluate(() => {
-    const o = (window as any).__crail.state.octopus;
-    return { stash: o.stash.length, returned: o.returned };
-  });
-  expect(after.stash).toBe(0);
-  expect(after.returned).toBeGreaterThanOrEqual(1);
+  // The rock is empty at once; the things fly home, and the octopus is furious.
+  expect(await page.evaluate(() => (window as any).__crail.state.octopus.stash.length)).toBe(0);
   await expect(page.locator('#hint')).toContainText('gave back');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.returned >= 1);
 });
 
 test('startle the octopus and it drops what it is carrying, and the owner gets it back', async ({ page }) => {
@@ -641,9 +638,11 @@ test('startle the octopus and it drops what it is carrying, and the owner gets i
   });
   const o = await page.evaluate(() => {
     const s = (window as any).__crail.state.octopus;
-    return { carrying: s.carrying.length, returned: s.returned, mode: s.mode };
+    return { carrying: s.carrying.length, mode: s.mode };
   });
-  expect(o).toEqual({ carrying: 0, returned: 1, mode: 'flee' });
+  expect(o).toEqual({ carrying: 0, mode: 'flee' });
+  // The bow flies back to her and goes back on her head.
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.returned === 1);
   expect(await hasBow()).toBe(true);
   // And it goes home to sulk.
   await page.waitForFunction(() => (window as any).__crail.state.octopus.mode === 'lurk', null, { timeout: 60_000 });
@@ -669,6 +668,7 @@ test('what the octopus takes is gone from the person, and comes back with them',
     const c = (window as any).__crail;
     c.direct('leader.blast', c.state.octopus.x, c.state.octopus.z, 1);
   });
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.returned === 1);
   expect(await cap()).toEqual({ cap: true, crop: false });
 });
 
