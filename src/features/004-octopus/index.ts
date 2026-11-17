@@ -217,9 +217,35 @@ export const octopus: Feature = {
         setMode('flee', 0);
       }
     });
-    ctx.events.on<[string?]>('direct:octopus.steal', ([party]) => {
-      target = choose(party);
+    ctx.events.on<[string?, string?]>('direct:octopus.steal', ([party, token]) => {
+      target = token ? ([...stealables(ctx), ...pockets()].find((s) => s.token === token && s.where()) ?? null) : choose(party);
       if (target) setMode('hunt');
+    });
+    /** Put it a few cells from something worth taking (video shots). */
+    ctx.events.on<[string, number, number]>('direct:octopus.near', ([token, dx, dz]) => {
+      const at = [...stealables(ctx), ...pockets()].find((s) => s.token === token && s.where())?.where();
+      if (!at || state.nx !== null) return;
+      for (const [ox, oz] of [[dx, dz], [dx + 1, dz], [dx, dz + 1], [dx - 1, dz], [dx, dz - 1]]) {
+        if (!ctx.grid.claim(at.x + ox, at.z + oz, occ)) continue;
+        ctx.grid.release(state.x, state.z, occ);
+        Object.assign(state, { x: at.x + ox, z: at.z + oz });
+        facing = Math.atan2(-ox, -oz);
+        setMode('lurk', 99);
+        return;
+      }
+    });
+    /** Whatever it is holding goes straight onto the rock, and it is back in its pool. */
+    ctx.events.on('direct:octopus.stashNow', () => {
+      if (state.nx !== null) {
+        ctx.grid.release(state.nx, state.nz!, occ);
+        state.nx = state.nz = null;
+      }
+      ctx.grid.release(state.x, state.z, occ);
+      Object.assign(state, { x: POOL.x, z: POOL.z, p: 0 });
+      ctx.grid.claim(state.x, state.z, occ);
+      target = null;
+      setMode('stash');
+      state.t = 1;
     });
     ctx.events.on<[number, number]>('direct:octopus.teleport', ([x, z]) => {
       if (state.nx !== null || !ctx.grid.claim(x, z, occ)) return;
@@ -300,7 +326,8 @@ export const octopus: Feature = {
           } else target = null; // they stepped away in time
         }
         if (state.t >= 0.7) {
-          target = held.length < CARRY && target ? choose() : null;
+          // Left to itself it goes on to the next victim. Under direction it takes one thing and goes.
+          target = held.length < CARRY && target && !state.staged ? choose() : null;
           setMode(target ? 'hunt' : held.length ? 'haul' : 'flee');
         }
       } else if (state.mode === 'haul' || state.mode === 'flee') {

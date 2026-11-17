@@ -324,7 +324,7 @@ export const supremeLeader: Feature = {
       putBack: () => (flag.stolen = false),
     });
     ctx.events.on<{ party: string; x: number; z: number }>('octopus:stole', ({ party, x, z }) => {
-      if (party !== 'army' || soldiers.world.staged) return;
+      if (party !== 'army') return;
       const n = boss();
       if (n) n.order = 'fume';
       fireShell({ x, z });

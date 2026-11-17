@@ -50,7 +50,7 @@ await rm(dir, { recursive: true, force: true });
 await mkdir(dir, { recursive: true });
 
 const OVERLAY_CSS = `
-  .hud, #sound, .landmark { display: none !important; }
+  .hud, #sound, #map-btn, #cult, .landmark { display: none !important; }
   /* Shot lists draw into this layer. Keep clear of Instagram's own buttons:
      nothing important in the top 11% or the bottom 22%. */
   #reel { position: fixed; inset: 0; overflow: hidden; pointer-events: none; color: #1d1b19;
@@ -123,8 +123,11 @@ try {
           }
         } else if (cam.at) {
           // at: the name of something in the game state with an x and z, e.g. 'rocket'.
-          const o = ctx.state[cam.at];
-          ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(o.x, 0, o.z);
+          // 'rocket', or a path into the state such as 'army.flag'.
+          const o = cam.at.split('.').reduce((v, k) => v[k], ctx.state);
+          // If it is between two cells, follow it there rather than jumping a cell at a time.
+          const k = o.nx == null ? 0 : (o.p ?? 0);
+          ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(o.x + ((o.nx ?? o.x) - o.x) * k, 0, o.z + ((o.nz ?? o.z) - o.z) * k);
         } else if (cam.focus) ctx.focusOverride = (ctx.focusOverride ?? ctx.focus.clone()).set(cam.focus[0], 0, cam.focus[1]);
         else ctx.focusOverride = null;
         if (cubeY !== undefined && !ctx.state.cube.moving) window.__cube.position.y = cubeY;
