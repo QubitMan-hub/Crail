@@ -379,13 +379,22 @@ export const octopus: Feature = {
       rig.arms.forEach((arm, i) => {
         const carrying = [0, 2, 6].indexOf(i) > -1 && [0, 2, 6].indexOf(i) < held.length;
         const reach = i === 0 || i === 7 ? lunge : 0;
-        const wave = Math.sin(time * (moving ? 9 : 2.4) + i * 0.9);
-        // Arms holding loot go straight up; the front pair reaches for whatever it is taking.
-        const lift = carrying ? -1.15 : reach ? -0.5 * reach : 0.42 + wave * 0.12;
-        arm.joints[0].rotation.x = lift;
-        arm.joints[1].rotation.x = carrying ? -0.25 : 0.5 + wave * 0.22 - reach * 0.6;
-        arm.joints[2].rotation.x = carrying ? -0.2 : 0.55 + Math.sin(time * 3.1 + i) * 0.3 - reach * 0.5;
-        arm.joints[0].rotation.y = Math.sin(time * 1.7 + i * 2.1) * 0.12;
+        const speed = moving ? 8 : 1.8;
+        arm.joints.forEach((joint, j) => {
+          // A ripple runs out along each arm, sideways, so it snakes across the floor.
+          const ripple = Math.sin(time * speed - j * 1.1 + i * 1.7);
+          joint.rotation.y = ripple * (0.1 + j * 0.09) * (carrying ? 0.3 : 1);
+          if (carrying) {
+            // Holding something: the arm rears up and curls over, loot at the tip.
+            joint.rotation.x = [-1.0, -0.45, -0.1, 0.25, 0.35][j];
+          } else if (reach) {
+            joint.rotation.x = [-0.35, -0.1, 0, 0.1, 0.2][j] * reach + (1 - reach) * [0.1, 0.02, 0, -0.25, -0.6][j];
+          } else {
+            // At rest it lies flat, with the tip curled up; when it swims the arms trail and flick.
+            const flick = moving ? Math.sin(k * Math.PI * 2 - j * 0.8) * 0.18 : 0;
+            joint.rotation.x = [0.1, 0.02, 0, -0.25, -0.6][j] + flick + Math.sin(time * 1.3 + i + j) * 0.05 * j;
+          }
+        });
       });
       for (const h of held) h.mesh.rotation.y = time * 1.5;
       // Ripples in the pool, and the puddle it left behind.

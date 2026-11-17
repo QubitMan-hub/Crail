@@ -13,7 +13,7 @@ export interface OctopusRig {
   /** Everything above the floor: bobs, squashes and leans. */
   body: THREE.Group;
   lids: THREE.Mesh[];
-  /** Eight arms, each a chain of three joints from the body outward. */
+  /** Eight arms, each a chain of joints from the body outward. */
   arms: { joints: THREE.Group[]; angle: number }[];
   /** Where things it is carrying sit, one per raised arm. */
   hands: THREE.Group[];
@@ -23,43 +23,51 @@ export interface OctopusRig {
 export function buildOctopus(): OctopusRig {
   const root = new THREE.Group();
   const body = group(root);
-  const head = group(body, 0, 0.34, 0);
-  box(head, TEAL, 0.78, 0.5, 0.74, 0, 0.25, 0);
-  box(head, TEAL, 0.66, 0.26, 0.62, 0, 0.61, -0.02);
-  box(head, TEAL_DARK, 0.46, 0.12, 0.44, 0, 0.8, -0.04);
-  box(head, BELLY, 0.5, 0.1, 0.02, 0, 0.07, 0.371);
-  // Spots on top.
-  box(head, TEAL_DARK, 0.14, 0.02, 0.14, -0.2, 0.745, 0.12);
-  box(head, TEAL_DARK, 0.1, 0.02, 0.1, 0.22, 0.745, -0.18);
+  // The mantle: a big soft dome that sags backward, sitting on a skirt of webbing.
+  const head = group(body, 0, 0.2, 0);
+  box(head, TEAL, 1.0, 0.16, 1.0, 0, 0.04, 0); // the web between the arms
+  box(head, TEAL, 0.84, 0.5, 0.8, 0, 0.33, 0);
+  box(head, TEAL, 0.8, 0.3, 0.78, 0, 0.7, -0.07);
+  box(head, TEAL, 0.64, 0.2, 0.64, 0, 0.93, -0.13);
+  box(head, TEAL_DARK, 0.42, 0.1, 0.44, 0, 1.06, -0.18);
+  box(head, BELLY, 0.5, 0.08, 0.02, 0, 0.14, 0.401);
+  // Spots.
+  box(head, TEAL_DARK, 0.16, 0.02, 0.16, -0.2, 1.035, 0.04);
+  box(head, TEAL_DARK, 0.1, 0.1, 0.02, 0.26, 0.74, 0.322);
+  box(head, TEAL_DARK, 0.12, 0.02, 0.12, 0.2, 1.035, -0.3);
   // The mask: a dark band right round, with the eyes showing through.
-  box(head, INK, 0.8, 0.2, 0.76, 0, 0.36, 0);
+  box(head, INK, 0.86, 0.2, 0.82, 0, 0.42, 0);
   fuse(head);
   const lids: THREE.Mesh[] = [];
   for (const side of [-1, 1]) {
-    box(head, WHITE, 0.2, 0.17, 0.02, side * 0.19, 0.36, 0.386).castShadow = false;
-    box(head, INK, 0.12, 0.07, 0.02, side * 0.19, 0.35, 0.398).castShadow = false; // a sideways slot of a pupil
-    const lid = box(head, INK, 0.21, 0.08, 0.025, side * 0.19, 0.42, 0.4);
+    box(head, WHITE, 0.22, 0.17, 0.02, side * 0.2, 0.42, 0.416).castShadow = false;
+    box(head, INK, 0.13, 0.07, 0.02, side * 0.2, 0.41, 0.428).castShadow = false; // a sideways slot of a pupil
+    const lid = box(head, INK, 0.23, 0.08, 0.025, side * 0.2, 0.48, 0.43);
     lid.castShadow = false;
     lids.push(lid);
   }
 
+  // Eight arms. Thick where they leave the body, tapering to a tip that curls, and
+  // they lie along the floor instead of standing on it: tentacles, not legs.
+  const SEGMENTS: [number, number][] = [[0.26, 0.26], [0.22, 0.24], [0.17, 0.22], [0.12, 0.2], [0.08, 0.16]];
   const arms: OctopusRig['arms'] = [];
   const hands: THREE.Group[] = [];
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    const base = group(body, Math.sin(angle) * 0.3, 0.36, Math.cos(angle) * 0.3);
+    const base = group(body, Math.sin(angle) * 0.34, 0.14, Math.cos(angle) * 0.34);
     base.rotation.y = angle;
     const joints: THREE.Group[] = [];
     let parent: THREE.Object3D = base;
-    [[0.17, 0.3], [0.14, 0.28], [0.1, 0.24]].forEach(([thick, long], j) => {
-      const joint = group(parent, 0, 0, j === 0 ? 0 : [0.3, 0.28][j - 1]);
-      box(joint, j === 2 ? TEAL_DARK : TEAL, thick, thick, long, 0, 0, long / 2);
-      box(joint, BELLY, thick * 0.6, 0.02, long * 0.8, 0, -thick / 2 - 0.005, long / 2).castShadow = false;
+    SEGMENTS.forEach(([thick, long], j) => {
+      const joint = group(parent, 0, 0, j === 0 ? 0 : SEGMENTS[j - 1][1] - 0.02);
+      box(joint, j >= 3 ? TEAL_DARK : TEAL, thick, thick, long, 0, 0, long / 2);
+      // Suckers underneath.
+      box(joint, BELLY, thick * 0.55, 0.02, long * 0.7, 0, -thick / 2 - 0.004, long / 2).castShadow = false;
       joints.push(joint);
       parent = joint;
     });
     arms.push({ joints, angle });
-    hands.push(group(joints[2], 0, 0.1, 0.24));
+    hands.push(group(joints[joints.length - 1], 0, 0.06, 0.16));
   }
   return { root, body, lids, arms, hands };
 }
