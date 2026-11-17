@@ -770,8 +770,9 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
   },
 
   march(n, w) {
-    if (n.post && !n.cult) {
-      // A guard: stay on the post unless something has set them off.
+    if (n.post && (!n.cult || !n.lead)) {
+      // A guard, or a cult member with a place in the congregation: stay on the post
+      // unless something has set them off.
       if (n.alert > 0) return surround(n, w);
       if (n.x === n.post.x && n.z === n.post.z) return void (n.dir = n.post.dir);
       if (!w.grid.isFree(n.post.x, n.post.z, n.occ) && manhattan(n, n.post) <= 1) return;

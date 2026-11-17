@@ -45,7 +45,8 @@ const SWING_SEAT_Y = SWING.crown - Math.cos(SWING.tilt) * SWING.chain + 0.05;
 const TRAMPOLINE_SPOTS = [[0, 0], [0.75, 0.7], [-0.75, 0.7], [0.75, -0.7], [-0.75, -0.7]];
 
 /** Benches count as the gentlest ride in the park: you sit, and nothing happens. */
-const BENCHES: [number, number][] = [[19, -4], [25, -4], [19, 4], [25, 4], [34, -2]];
+/** Benches: the cell each one is on, and which way it faces. They all look in at the fountain. */
+const BENCHES: [number, number, number, number][] = [[19, -4, 0, 1], [25, -4, 0, 1], [19, 4, 0, -1], [25, 4, 0, -1], [34, -2, -1, 0]];
 const BENCH_SECONDS = 7;
 
 type RideKind = 'wheel' | 'carousel' | 'trampoline' | 'swing' | 'bench';
@@ -107,13 +108,24 @@ function lamp(p: THREE.Object3D, x: number, z: number, bulbs: THREE.Mesh[]): voi
 
 /** Every bench faces the same way: toward the camera's left (+z), back rest behind. */
 const BENCH_SEAT = 0.5;
-function bench(p: THREE.Object3D, x: number, z: number): void {
+/** A park bench: wooden slats on a slim iron frame. `fx, fz` is the way it faces. */
+function bench(p: THREE.Object3D, x: number, z: number, fx: number, fz: number): void {
   const b = group(p, x, 0, z);
-  box(b, WOOD, 0.96, 0.08, 0.42, 0, BENCH_SEAT - 0.04, 0.06);
-  box(b, WOOD, 0.96, 0.4, 0.07, 0, BENCH_SEAT + 0.3, -0.16);
+  b.rotation.y = Math.atan2(fx, fz);
+  const IRON = '#5b564f';
+  const SLAT = '#c98f5f';
+  // Seat: three slats with gaps between them.
+  for (const dz of [-0.07, 0.07, 0.21]) box(b, dz === 0.07 ? WOOD : SLAT, 0.92, 0.045, 0.115, 0, BENCH_SEAT - 0.022, dz);
+  // Back: two slats.
+  box(b, SLAT, 0.92, 0.12, 0.045, 0, BENCH_SEAT + 0.18, -0.18);
+  box(b, WOOD, 0.92, 0.12, 0.045, 0, BENCH_SEAT + 0.36, -0.18);
   for (const s of [1, -1]) {
-    box(b, INK, 0.07, BENCH_SEAT - 0.06, 0.4, s * 0.42, (BENCH_SEAT - 0.06) / 2, 0.06);
-    box(b, INK, 0.07, 0.3, 0.07, s * 0.42, BENCH_SEAT + 0.12, 0.2); // arm rest
+    box(b, IRON, 0.05, 0.44, 0.05, s * 0.38, BENCH_SEAT + 0.22, -0.22); // back upright
+    box(b, IRON, 0.05, BENCH_SEAT - 0.04, 0.05, s * 0.38, (BENCH_SEAT - 0.04) / 2, 0.24); // front leg
+    box(b, IRON, 0.05, BENCH_SEAT - 0.04, 0.05, s * 0.38, (BENCH_SEAT - 0.04) / 2, -0.12); // back leg
+    box(b, IRON, 0.05, 0.04, 0.42, s * 0.38, 0.09, 0.06); // foot rail
+    box(b, IRON, 0.05, 0.16, 0.05, s * 0.44, BENCH_SEAT + 0.08, 0.22); // arm post
+    box(b, SLAT, 0.07, 0.04, 0.4, s * 0.44, BENCH_SEAT + 0.18, 0.05); // arm rest
   }
 }
 
@@ -145,7 +157,22 @@ function balloonCart(p: THREE.Object3D, x: number, z: number): THREE.Group {
   const c = group(p, x, 0, z);
   box(c, WOOD, 0.8, 0.4, 0.56, 0, 0.6, 0);
   box(c, CREAM, 0.88, 0.06, 0.64, 0, 0.83, 0);
-  for (const s of [1, -1]) box(c, INK, 0.36, 0.36, 0.06, s * 0.24, 0.2, 0.3);
+  // Two spoked wheels, one each side, a leg to stand on and a handle to push it by.
+  for (const s of [1, -1]) {
+    const wheel = group(c, 0.14, 0.22, s * 0.33);
+    // Three squares turned against each other make a twelve-sided wheel: round enough.
+    for (const turn of [0, Math.PI / 6, Math.PI / 3]) {
+      box(wheel, '#4a4039', 0.38, 0.38, 0.06, 0, 0, 0).rotation.z = turn;
+      box(wheel, CREAM, 0.26, 0.26, 0.066, 0, 0, 0).rotation.z = turn;
+    }
+    box(wheel, RED, 0.09, 0.09, 0.08, 0, 0, 0);
+  }
+  box(c, '#4a4039', 0.05, 0.05, 0.6, 0.14, 0.22, 0); // axle
+  box(c, WOOD, 0.06, 0.4, 0.06, -0.3, 0.2, 0); // the leg it rests on
+  for (const s of [1, -1]) box(c, WOOD, 0.34, 0.05, 0.05, -0.55, 0.62, s * 0.22);
+  box(c, WOOD, 0.05, 0.05, 0.5, -0.72, 0.62, 0);
+  // A striped skirt round the top.
+  [RED, CREAM, RED, CREAM, RED].forEach((col, i) => box(c, col, 0.165, 0.1, 0.66, -0.33 + i * 0.165, 0.76, 0));
   return c;
 }
 
@@ -409,7 +436,7 @@ export const park: Feature = {
     balloonCart(scenery, 11, 3);
     solid.push([11, 3]);
     // Benches round the plaza and one at the far end of the walk. They are seats, not scenery.
-    for (const [x, z] of BENCHES) bench(scenery, x, z);
+    for (const [x, z, fx, fz] of BENCHES) bench(scenery, x, z, fx, fz);
     // Lamps at the plaza corners and along the main walk.
     const lamps = [[20, -2], [24, -2], [24, 2], [20, 2], [15, -2], [15, 2], [30, -2], [30, 2]] as const;
     for (const [x, z] of lamps) {
@@ -489,7 +516,7 @@ export const park: Feature = {
     });
 
     // ---- Everything solid claims its cells ---------------------------------------
-    const cellsOf: Record<RideKind, [number, number][]> = { wheel: [], carousel: [], trampoline: [], swing: [], bench: [...BENCHES] };
+    const cellsOf: Record<RideKind, [number, number][]> = { wheel: [], carousel: [], trampoline: [], swing: [], bench: BENCHES.map(([x, z]) => [x, z] as [number, number]) };
     for (let dx = -2; dx <= 2; dx++) cellsOf.wheel.push([WHEEL.x + dx, WHEEL.z]);
     for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) cellsOf.carousel.push([CAROUSEL.x + dx, CAROUSEL.z + dz]);
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) cellsOf.trampoline.push([TRAMPOLINE.x + dx, TRAMPOLINE.z + dz]);
@@ -518,7 +545,7 @@ export const park: Feature = {
       carousel: boardingCells('carousel'),
       trampoline: boardingCells('trampoline'),
       swing: boardingCells('swing'),
-      bench: BENCHES.map(([x, z]) => [x, z + 1] as [number, number]), // you sit down from the front
+      bench: BENCHES.map(([x, z, fx, fz]) => [x + fx, z + fz] as [number, number]), // you sit down from the front
     };
     const nextTo = (kind: RideKind, x: number, z: number) => boarding[kind].some(([bx, bz]) => bx === x && bz === z);
 
@@ -552,7 +579,7 @@ export const park: Feature = {
       let seat = freeSeat(kind);
       if (kind === 'bench') {
         // Sit on the bench you are standing in front of, if it has room.
-        const b = BENCHES.findIndex(([bx, bz]) => bx === x && bz === z - 1);
+        const b = BENCHES.findIndex(([bx, bz, fx, fz]) => bx + fx === x && bz + fz === z);
         const taken = new Set(riders.filter((r) => r.kind === 'bench').map((r) => r.seat));
         seat = b < 0 ? -1 : [b * 2, b * 2 + 1].find((sidx) => !taken.has(sidx)) ?? -1;
       }
@@ -621,9 +648,10 @@ export const park: Feature = {
         return swingAngle + a0; // facing outward
       }
       if (r.kind === 'bench') {
-        const [bx, bz] = BENCHES[Math.floor(r.seat / 2)];
-        seatAt.set(bx + (r.seat % 2 ? 0.24 : -0.24), BENCH_SEAT, bz + 0.06);
-        return 0;
+        const [bx, bz, fx, fz] = BENCHES[Math.floor(r.seat / 2)];
+        const side = r.seat % 2 ? 0.24 : -0.24;
+        seatAt.set(bx + fz * side + fx * 0.06, BENCH_SEAT, bz - fx * side + fz * 0.06);
+        return Math.atan2(fx, fz);
       }
       // Trampoline: everyone bounces to their own beat, a little higher each time.
       const [ox, oz] = TRAMPOLINE_SPOTS[r.seat];
