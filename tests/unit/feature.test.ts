@@ -34,7 +34,8 @@ describe('feature registry', () => {
       seen.add(meta.id);
       expect(meta.id).toMatch(/^\d{3}-[a-z0-9-]+$/);
       expect(Number(meta.id.slice(0, 3))).toBe(meta.day);
-      expect(meta.credit.username).not.toBe('');
+      // Every feature names who asked for it, except a secret one whose request was withdrawn.
+      if (!meta.secret) expect(meta.credit.username).not.toBe('');
     }
   });
 });
