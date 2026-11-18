@@ -4,12 +4,23 @@
   "reel": "Day 4 Reel on @qubitman_ftw",
   "source": "Screenshot of the comment and its reply, taken by the creator about 2 hours after they were posted. The automated snapshot was not run for this round because the Instagram API token is not set up yet.",
   "final": false,
-  "note": "Recorded before the 24-hour deadline. The comment had 10 likes and the reply 4 at the time of the screenshot. The reply is by the same person and adds to the comment, so the two were built together.",
+  "note": "Recorded before the 24-hour deadline. The comment had 10 likes and the reply 4 at the time of the screenshot. The reply is by the same person and adds to the comment, so the two were built together. A third comment, 'Add picachu' by ancientpro_gamer with 11 likes, was built the same day.",
   "winner": {
     "username": "ump.619",
     "text": "Yaaaay gåmson 🐙 btw can you make him immortal",
     "likes": 10,
-    "reply": { "text": "and give him a squid friend named Tåhgong who is nice", "likes": 4 }
+    "reply": {
+      "text": "and give him a squid friend named Tåhgong who is nice",
+      "likes": 4
+    }
   },
-  "decision_note": "Gåmson is immortal: tank shells and rockets flatten him for a moment and he pops back up holding everything, so the army can no longer win his loot back; he wears a pale gold halo. Only a bump from the cube makes him let go. Tåhgong is a coral squid who lives beside his pool and is nice: while Gåmson is out, he takes things back off the rock to their owners, waves at the cube, hugs it when bumped, and gives it a charm now and then."
+  "decision_note": "Gåmson is immortal: tank shells and rockets flatten him for a moment and he pops back up holding everything, so the army can no longer win his loot back; he wears a pale gold halo. Only a bump from the cube makes him let go. Tåhgong is a coral squid who lives beside his pool and is nice: while Gåmson is out, he takes things back off the rock to their owners, waves at the cube, hugs it when bumped, and gives it a charm now and then.",
+  "also_built": [
+    {
+      "username": "ancientpro_gamer",
+      "text": "Add picachu",
+      "likes": 11,
+      "note": "Built as an original off-brand electric critter named 'Picachu' (the comment's spelling), not a copy of the trademarked character: round ears, a battery gauge on its belly, a plug for a tail. It zaps people when charged, overcharges the park rides, gives the cube a burst of speed, keeps out of the water, and its battery can be stolen by Gåmson."
+    }
+  ]
 }

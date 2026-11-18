@@ -110,6 +110,11 @@ export function buildToken(kind: Stealable['token']): THREE.Group {
       box(g, '#c8452f', 0.3, 0.05, 0.3, 0, 0.07, 0);
       box(g, INK, 0.24, 0.03, 0.12, 0, 0.05, 0.2);
       break;
+    case 'battery':
+      box(g, '#2b2a2e', 0.2, 0.3, 0.2, 0, 0.17, 0);
+      box(g, '#f6c445', 0.21, 0.12, 0.21, 0, 0.26, 0);
+      box(g, '#c9ccd2', 0.08, 0.05, 0.08, 0, 0.345, 0);
+      break;
     case 'medal':
       box(g, '#c8452f', 0.1, 0.16, 0.03, 0, 0.26, 0);
       box(g, '#d6b24a', 0.2, 0.2, 0.04, 0, 0.1, 0);
@@ -123,7 +128,7 @@ export function buildToken(kind: Stealable['token']): THREE.Group {
  * the edge, seaweed and a couple of shells, and a flat rock beside it for the loot.
  * `cells` are relative to the den (his own spot, the deepest part); `shelf` likewise.
  */
-export function buildPool(cells: [number, number][], shelf: [number, number]): { root: THREE.Group; water: THREE.Mesh; shelf: THREE.Group } {
+export function buildPool(cells: [number, number][], shelf: [number, number], deep: (x: number, z: number) => boolean): { root: THREE.Group; shelf: THREE.Group } {
   const root = new THREE.Group();
   const inPool = new Set(cells.map(([x, z]) => `${x},${z}`));
   const wet = (x: number, z: number) => inPool.has(`${x},${z}`);
@@ -137,7 +142,9 @@ export function buildPool(cells: [number, number][], shelf: [number, number]): {
     const [x, z] = key.split(',').map(Number);
     box(sand, '#ddd3bf', 1, 0.03, 1, x, 0.015, z);
   }
-  for (const [x, z] of cells) box(sand, '#b9ad96', 1, 0.05, 1, x, 0.025, z);
+  // The bed: sand in the shallows, darker and lower where it is deep.
+  for (const [x, z] of cells) box(sand, deep(x, z) ? '#7f9590' : '#c9bba0', 1, 0.05, 1, x, deep(x, z) ? 0.0 : 0.025, z);
+  for (const [x, z] of cells) if (!deep(x, z) && (x * 3 + z) % 4 === 0) box(sand, '#a89a83', 0.14, 0.06, 0.12, x + 0.2, 0.06, z - 0.15); // pebbles
   // Stones where the water meets the shore, on the water side, uneven on purpose.
   let n = 0;
   for (const [x, z] of cells) {
@@ -153,24 +160,9 @@ export function buildPool(cells: [number, number][], shelf: [number, number]): {
   box(sand, '#f3d8c7', 0.16, 0.06, 0.12, 2.6, 0.06, 1.3);
   box(sand, '#e9b7a3', 0.12, 0.05, 0.1, -4.6, 0.055, 0.6);
   fuse(sand);
-  // The water: one surface over every pool cell, a shade deeper over the den.
-  const geo = new THREE.BufferGeometry();
-  const verts: number[] = [];
-  for (const [x, z] of cells) {
-    const [a, b, c, d] = [[x - 0.5, z - 0.5], [x + 0.5, z - 0.5], [x + 0.5, z + 0.5], [x - 0.5, z + 0.5]];
-    for (const [px, pz] of [a, c, b, a, d, c]) verts.push(px, 0, pz);
-  }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  geo.computeVertexNormals();
-  const water = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#6fc3d6', roughness: 0.25, transparent: true, opacity: 0.85 }));
-  water.position.y = 0.085;
-  water.receiveShadow = true;
-  root.add(water);
-  const deep = box(root, '#4fa8c2', 1.3, 0.01, 1.3, 0, 0.08, 0);
-  deep.castShadow = false;
   // The shelf: a flat rock on the shore, where he keeps what he took.
   const rock = group(root, shelf[0], 0, shelf[1]);
   box(rock, '#8d8a96', 0.92, 0.3, 0.92, 0, 0.15, 0);
   box(rock, '#a59f96', 0.7, 0.1, 0.7, 0, 0.35, 0);
-  return { root, water, shelf: rock };
+  return { root, shelf: rock };
 }

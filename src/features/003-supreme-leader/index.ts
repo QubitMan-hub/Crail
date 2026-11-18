@@ -325,6 +325,12 @@ export const supremeLeader: Feature = {
       take: () => (flag.stolen = true),
       putBack: () => (flag.stolen = false),
     });
+    ctx.events.on<{ party: string; x: number; z: number }>('picachu:zapped', ({ party, x, z }) => {
+      if (party !== 'army') return;
+      const n = boss();
+      if (n) n.order = 'fume';
+      fireShell({ x, z });
+    });
     ctx.events.on<{ party: string; x: number; z: number }>('octopus:stole', ({ party, x, z }) => {
       if (party !== 'army') return;
       const n = boss();

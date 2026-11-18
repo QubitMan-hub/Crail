@@ -10,6 +10,7 @@ import { everyone, type Member } from '../../characters/cast';
 import { setLoot } from '../../characters/rig';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
 import { buildOctopus, buildPool, buildToken } from './model';
+import { createWater, WATER_LEVEL } from './water';
 
 /**
  * Gåmson the octopus (named by @ump.619, who asked for him). He lives in a tide pool and steals from everybody, one party after
@@ -37,26 +38,34 @@ export const WATER: [number, number][] = SHAPE.flatMap(([dz, a, b]) =>
 );
 const wet = new Set(WATER.map(([x, z]) => `${x},${z}`));
 export const isWater = (x: number, z: number) => wet.has(`${x},${z}`);
+/**
+ * The deep middle (his den and round it, and the top row) is for swimmers only. The rest
+ * is shallow: anyone can wade in, up to their shins, and the cube can roll through it.
+ */
+export const isDeep = (x: number, z: number) =>
+  isWater(x, z) && (Math.max(Math.abs(x - POOL.x), Math.abs(z - POOL.z)) <= 1 || z === POOL.z - 2);
 /** Who holds a water cell when no swimmer is in it. */
 export const POOL_OCC: Occupant = { kind: 'pool', id: 'octopus-pool' };
-/** Can a swimmer go here: an empty cell, or water nobody is swimming in. */
+/** Can a swimmer go here: an empty cell, or deep water nobody is swimming in. */
 export const swimmable = (grid: Grid, x: number, z: number, who: Occupant) =>
   grid.isFree(x, z, who) || (isWater(x, z) && grid.at(x, z) === POOL_OCC);
 /** A swimmer takes a cell. Water is handed over from the pool to them. */
 export function occupy(grid: Grid, x: number, z: number, who: Occupant): boolean {
-  if (isWater(x, z) && grid.at(x, z) === POOL_OCC) grid.release(x, z, POOL_OCC);
+  if (isDeep(x, z) && grid.at(x, z) === POOL_OCC) grid.release(x, z, POOL_OCC);
   return grid.claim(x, z, who);
 }
 /** A swimmer leaves a cell. Water goes back to the pool. */
 export function vacate(grid: Grid, x: number, z: number, who: Occupant): void {
   if (grid.at(x, z) !== who) return;
   grid.release(x, z, who);
-  if (isWater(x, z)) grid.claim(x, z, POOL_OCC);
+  if (isDeep(x, z)) grid.claim(x, z, POOL_OCC);
 }
 /** The flat rock on the shore where the loot piles up. */
 export const SHELF = { x: POOL.x + 3, z: POOL.z };
 const SPEED = 3.4; // cells a second: quicker than anyone it robs
 const CARRY = 3;
+/** Seconds he will chase one thing before giving up on it. */
+const HUNT_LIMIT = 25;
 /** Cells the route search may look at per step: enough to get round a building, cheap on a phone. */
 const MAX_SEARCH = 2500;
 /** A full rock: it stays home to guard it until someone empties it. */
@@ -95,7 +104,20 @@ export const octopus: Feature = {
     const occ: Occupant = { kind: 'octopus', id: 'octopus' };
     const shelfOcc: Occupant = { kind: 'stash', id: 'octopus-stash' };
 
-    const pool = buildPool(WATER.map(([x, z]) => [x - POOL.x, z - POOL.z]), [SHELF.x - POOL.x, SHELF.z - POOL.z]);
+    const pool = buildPool(WATER.map(([x, z]) => [x - POOL.x, z - POOL.z]), [SHELF.x - POOL.x, SHELF.z - POOL.z], (x, z) => isDeep(x + POOL.x, z + POOL.z));
+    const water = createWater(WATER, isDeep);
+    ctx.scene.add(water.group);
+    ctx.state.water = { splash: water.splash, ripple: water.ripple, level: WATER_LEVEL };
+    const wading = new Map<Member, number>();
+    let octoRipple = 0;
+    // The cube rolls into the shallows with a splash, and makes ripples as it goes.
+    let cubeWasWet = false;
+    ctx.events.on<{ x: number; z: number }>('cube:rolled', ({ x, z }) => {
+      const wetNow = isWater(x, z);
+      if (wetNow && !cubeWasWet) water.splash(x, z, 1);
+      else if (wetNow) water.ripple(x, z, 1);
+      cubeWasWet = wetNow;
+    });
     pool.root.position.set(POOL.x, 0, POOL.z);
     ctx.scene.add(pool.root);
     // Anyone already standing where the water goes steps out of it first.
@@ -108,10 +130,10 @@ export const octopus: Feature = {
         }
       }
     };
-    for (const [x, z] of [...WATER, [SHELF.x, SHELF.z] as [number, number]]) clearOut(x, z);
+    for (const [x, z] of [...WATER.filter(([x, z]) => isDeep(x, z)), [SHELF.x, SHELF.z] as [number, number]]) clearOut(x, z);
     ctx.grid.claim(SHELF.x, SHELF.z, shelfOcc);
-    // The water is solid to everyone but swimmers. He starts in his den.
-    for (const [x, z] of WATER) if (x !== POOL.x || z !== POOL.z) ctx.grid.claim(x, z, POOL_OCC);
+    // The deep water is solid to everyone but swimmers. He starts in his den.
+    for (const [x, z] of WATER) if (isDeep(x, z) && (x !== POOL.x || z !== POOL.z)) ctx.grid.claim(x, z, POOL_OCC);
     addLandmark(ctx, { name: `${NAME}’s pool`, x: POOL.x - 1, z: POOL.z + 2, cells: WATER, color: '#a9dbe6' });
     const mark = addLandmark(ctx, { name: NAME, x: POOL.x, z: POOL.z, color: '#2f9c95', hidden: true });
 
@@ -444,8 +466,9 @@ export const octopus: Feature = {
         }
       } else if (state.mode === 'hunt') {
         const at = target?.where();
-        if (!target || !at || stuck > 3) {
-          // Gone, or out of reach: take home what it has.
+        // A target that keeps moving (a rolling cube) is not worth chasing for ever.
+        if (!target || !at || stuck > 3 || state.t > HUNT_LIMIT) {
+          // Gone, out of reach, or not worth it: take home what it has.
           target = null;
           stuck = 0;
           setMode(held.length ? 'haul' : 'flee');
@@ -587,7 +610,24 @@ export const octopus: Feature = {
       });
       for (const h of held) h.mesh.rotation.y = time * 1.5;
       // Ripples in the pool, and the puddle it left behind.
-      pool.water.position.y = 0.075 + Math.sin(time * 1.6) * 0.008;
+      // The water, and everyone in it: waders sink to their shins and leave ripples.
+      water.update(dt, time);
+      for (const m of everyone(ctx)) {
+        if (m.n.carry) continue;
+        const wx = Math.round(m.rig.root.position.x);
+        const wz = Math.round(m.rig.root.position.z);
+        if (!isWater(wx, wz)) continue;
+        m.rig.root.position.y -= 0.14;
+        const last = wading.get(m) ?? 0;
+        if (m.n.nx !== null && time - last > 0.45) {
+          wading.set(m, time);
+          water.ripple(m.rig.root.position.x, m.rig.root.position.z, 0.7);
+        }
+      }
+      if (state.nx !== null && isWater(Math.round(px), Math.round(pz)) && time - octoRipple > 0.4) {
+        octoRipple = time;
+        water.ripple(px, pz, 0.8);
+      }
       inkAge += dt;
       ink.scale.setScalar(0.5 + Math.min(1, inkAge / 0.25) * 0.75);
       (ink.material as THREE.MeshBasicMaterial).opacity = inkAge < 9 ? 0.72 * (1 - inkAge / 9) : 0;

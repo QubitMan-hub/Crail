@@ -16,7 +16,7 @@ export interface SquidRig {
   /** The arrowhead fin at the top: it flaps. */
   fins: THREE.Group[];
   lids: THREE.Mesh[];
-  /** Eight short arms round the bottom, each two joints. */
+  /** Eight arms round the bottom, each three joints. */
   arms: THREE.Group[][];
   /** Two long feeding tentacles with club tips: one waves, and carries things. */
   tentacles: THREE.Group[][];
@@ -98,14 +98,14 @@ export function buildSquid(): SquidRig {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     const base = group(body, Math.sin(a) * 0.2, 0.1, Math.cos(a) * 0.2);
     base.rotation.y = a;
-    arms.push(limb(base, [[0.1, 0.16], [0.08, 0.14]]));
+    arms.push(limb(base, [[0.16, 0.24], [0.13, 0.22], [0.1, 0.18]]));
   }
   const tentacles: THREE.Group[][] = [];
   for (const s of [1, -1]) {
-    const base = group(body, s * 0.1, 0.1, 0.2);
-    base.rotation.y = s * 0.18;
-    tentacles.push(limb(base, [[0.07, 0.24], [0.06, 0.24], [0.06, 0.22], [0.055, 0.2]], [0.13, 0.16]));
+    const base = group(body, s * 0.12, 0.12, 0.2);
+    base.rotation.y = s * 0.2;
+    tentacles.push(limb(base, [[0.13, 0.32], [0.12, 0.3], [0.11, 0.28], [0.1, 0.24]], [0.22, 0.22]));
   }
-  const hand = group(tentacles[0][3], 0, 0.08, 0.3);
+  const hand = group(tentacles[0][3], 0, 0.12, 0.38);
   return { root, body, mantle, fins, lids, arms, tentacles, hand };
 }

@@ -68,7 +68,7 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong', '005-picachu']);
   await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
@@ -94,6 +94,7 @@ const holdUntil = async (page: import('@playwright/test').Page, key: string, con
 const clearStage = async (page: import('@playwright/test').Page) => {
   await direct(page, 'octopus.staged', true);
   await direct(page, 'tahgong.staged', true);
+  await direct(page, 'picachu.staged', true);
   for (const cast of ['goths', 'femboys', 'soldiers', 'leader']) {
     await direct(page, `${cast}.staged`, true);
     await direct(page, `${cast}.clear`);
@@ -845,4 +846,54 @@ test('Tåhgong takes things back off the rock while Gåmson is out, and hugs the
   await holdUntil(page, 'KeyW', 's.cube.bonks >= 2');
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
   expect(await page.evaluate(() => (window as any).__crail.state.tahgong.hugs)).toBe(2);
+});
+
+test('the shallows can be waded into (the cube included); the deep middle cannot', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  const { den } = await page.evaluate(() => (window as any).__crail.state.octopus);
+  // From the sand south of the pool's west end, roll north into the shallows.
+  await direct(page, 'cube.teleport', den.x - 3, den.z + 3);
+  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 2));
+  await page.waitForFunction(() => !(window as any).__crail.state.cube.moving);
+  expect(await cubeState(page)).toMatchObject({ x: den.x - 3, z: den.z + 2 });
+  // Next to the den the water is deep: the cube bumps instead.
+  await direct(page, 'cube.teleport', den.x, den.z + 3);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1 || s.cube.z === ' + (den.z + 1));
+  expect((await cubeState(page)).z).toBeGreaterThanOrEqual(den.z + 2);
+});
+
+test('Picachu zaps whoever is near when charged, and gives the cube a burst of speed', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'picachu.teleport', 30, 30);
+  await direct(page, 'goths.spawn', 0, 32, 30, 1, { idle: 999 });
+  await direct(page, 'picachu.staged', false);
+  await direct(page, 'picachu.charge', 1);
+  await page.waitForFunction(() => (window as any).__crail.state.picachu.zaps === 1, null, { timeout: 30_000 });
+  expect(await page.evaluate(() => (window as any).__crail.state.goths.npcs[0].mode)).toBe('floored');
+  expect(await page.evaluate(() => (window as any).__crail.state.picachu.charge)).toBeLessThan(0.2);
+  // Roll into it: zapped, and quicker for a while.
+  await direct(page, 'picachu.staged', true);
+  const p = await page.evaluate(() => {
+    const s = (window as any).__crail.state.picachu;
+    return { x: s.x, z: s.z };
+  });
+  await direct(page, 'cube.teleport', p.x, p.z + 1);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
+  expect(await page.evaluate(() => (window as any).__crail.state.cube.boost)).toBeGreaterThan(3);
+  await expect(page.locator('#hint')).toContainText('faster');
+});
+
+test('Gåmson can steal Picachu’s battery, and then it cannot charge', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'picachu.teleport', 4, 20);
+  await direct(page, 'octopus.staged', false);
+  await direct(page, 'octopus.steal', '', 'battery');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.carrying.some((n: string) => n.includes('battery')), null, { timeout: 30_000 });
+  const p = await page.evaluate(() => (window as any).__crail.state.picachu);
+  expect({ battery: p.battery, charge: p.charge }).toEqual({ battery: false, charge: 0 });
 });

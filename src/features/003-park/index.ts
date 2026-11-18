@@ -551,7 +551,7 @@ export const park: Feature = {
 
     // ---- Riding ------------------------------------------------------------------
     const state = {
-      rides: 0, riding: null as RideKind | null, riders: 0, npcRides: 0,
+      rides: 0, riding: null as RideKind | null, riders: 0, npcRides: 0, surges: 0,
       /** Where each real ride is, for anything that wants to put a marker over it. */
       spots: { wheel: [WHEEL.x, 9.2, WHEEL.z], carousel: [CAROUSEL.x, 5.6, CAROUSEL.z], trampoline: [TRAMPOLINE.x, 3.2, TRAMPOLINE.z], swing: [SWING.x, 6.6, SWING.z] },
     };
@@ -679,12 +679,20 @@ export const park: Feature = {
     };
 
     let sinceInvite = 0;
+    let power = 0;
+    ctx.events.on<{ seconds: number }>('park:power', ({ seconds }) => {
+      power = Math.max(power, seconds);
+      state.surges += 1;
+    });
     let sinceBoarding = 0;
     ctx.onUpdate((dt, time) => {
       clock += dt;
-      wheelAngle += dt * WHEEL.speed;
-      turnAngle += dt * CAROUSEL.speed;
-      swingAngle += dt * SWING.speed;
+      // A power surge (something electric touched the park) runs everything faster for a while.
+      power = Math.max(0, power - dt);
+      const surge = power > 0 ? 2.4 : 1;
+      wheelAngle += dt * WHEEL.speed * surge;
+      turnAngle += dt * CAROUSEL.speed * surge;
+      swingAngle += dt * SWING.speed * surge;
       // The crown leans as it turns, so the chairs rise and dip in a wave.
       spin.rotation.set(Math.sin(time * 0.9) * 0.075, swingAngle, Math.cos(time * 0.9) * 0.075);
       spin.updateMatrixWorld(true);

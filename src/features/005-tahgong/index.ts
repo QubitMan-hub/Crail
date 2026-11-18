@@ -91,6 +91,7 @@ export const tahgong: Feature = {
     let waving = 9;
     let wavedAt = -99;
     let clock = 0;
+    let lastRipple = 0;
 
     const octopus = () => ctx.state.octopus as OctopusView | undefined;
     const gamsonHome = () => {
@@ -328,8 +329,9 @@ export const tahgong: Feature = {
       rig.arms.forEach((joints, i) => {
         const ripple = Math.sin(time * (moving ? 10 : 2.4) + i * 0.8);
         // Swimming, the arms trail behind; still, they splay round him and curl up.
-        joints[0].rotation.x = (moving ? -0.5 : 0.1) + ripple * 0.08 - hug * 0.3;
-        joints[1].rotation.x = -0.3 + ripple * 0.14;
+        joints[0].rotation.x = (moving ? -0.5 : 0.12) + ripple * 0.08 - hug * 0.3;
+        joints[1].rotation.x = (moving ? 0.1 : -0.15) + ripple * 0.14;
+        joints[2].rotation.x = (moving ? 0.15 : -0.45) + Math.sin(time * 2.6 + i) * 0.16;
       });
       const wave = waving < WAVE_TIME ? Math.sin(waving * 16) : 0;
       rig.tentacles.forEach((joints, s) => {
@@ -345,6 +347,12 @@ export const tahgong: Feature = {
         });
       });
       if (held) held.mesh.rotation.y = time * 1.5;
+      // Ripples where he swims.
+      const water = ctx.state.water as { ripple: (x: number, z: number, s?: number) => void } | undefined;
+      if (water && moving && swimming && time - lastRipple > 0.4) {
+        lastRipple = time;
+        water.ripple(px, pz, 0.8);
+      }
       emoteAge += dt;
       showSymbol(emote, emoteAge < 1.6 ? emoteKind : null, emoteAge, 1.6, 0.55);
       Object.assign(mark, { x: state.x, z: state.z });

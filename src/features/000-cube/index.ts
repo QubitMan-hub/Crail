@@ -25,6 +25,8 @@ export interface CubeState {
   carried: boolean;
   /** Seconds since it last moved or tried to. */
   idleFor: number;
+  /** Seconds of quicker rolling left (after an electric zap). */
+  boost: number;
 }
 
 /** roll = a real move. bonk = tried to roll into something. struggle = tried to move while pinned. */
@@ -42,7 +44,7 @@ export const cube: Feature = {
   },
   setup(ctx) {
     const me: Occupant = { kind: 'cube', id: 'cube' };
-    const state: CubeState = { x: 0, z: 0, rolls: 0, moving: false, pinned: false, struggles: 0, bonks: 0, carried: false, idleFor: 0 };
+    const state: CubeState = { x: 0, z: 0, rolls: 0, moving: false, pinned: false, struggles: 0, bonks: 0, carried: false, idleFor: 0, boost: 0 };
     ctx.state.cube = state;
     ctx.grid.claim(0, 0, me);
 
@@ -121,6 +123,11 @@ export const cube: Feature = {
 
     // Something exploded next to the cube. It is thrown clear, tumbling, and lands a few cells away.
     let fling: { from: THREE.Vector3; to: Cell; t: number; spin: THREE.Vector3 } | null = null;
+    // Charged up (something electric zapped it): rolls take less time for a while.
+    ctx.events.on<{ seconds: number }>('cube:boost', ({ seconds }) => {
+      state.boost = Math.max(state.boost, seconds);
+    });
+    const duration = (kind: keyof typeof SECONDS) => SECONDS[kind] / (kind === 'roll' && state.boost > 0 ? 1.9 : 1);
     ctx.events.on<{ x: number; z: number }>('cube:blast', (origin) => {
       if (fling || state.carried || state.pinned) return;
       let dx = Math.sign(state.x - origin.x);
@@ -186,6 +193,7 @@ export const cube: Feature = {
     };
 
     ctx.onUpdate((dt) => {
+      state.boost = Math.max(0, state.boost - dt);
       if (fling) {
         // In the air: nothing the player presses matters until it lands.
         fling.t += dt / 0.62;
@@ -232,13 +240,13 @@ export const cube: Feature = {
           begin(dir);
         }
         const a: Anim = anim!;
-        const left = (1 - a.t) * SECONDS[a.kind];
+        const left = (1 - a.t) * duration(a.kind);
         if (remaining >= left) {
           remaining -= left;
           anim = null;
           finish(a);
         } else {
-          a.t += remaining / SECONDS[a.kind];
+          a.t += remaining / duration(a.kind);
           remaining = 0;
           const amount = a.kind === 'roll' ? a.t : Math.sin(Math.PI * a.t) * TILT[a.kind];
           rollPose(startPos, startQuat, a.dir, amount, mesh.position, mesh.quaternion);
