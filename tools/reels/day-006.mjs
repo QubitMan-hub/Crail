@@ -23,10 +23,12 @@ const seconds = 45.0;
 const CASTS = ['goths', 'femboys', 'soldiers', 'leader'];
 const actions = [
   ...CASTS.flatMap((c) => [[0, `${c}.staged`, true], [0, `${c}.clear`]]),
-  [0, 'octopus.staged', true], [0, 'picachu.staged', true],
-  [0, 'cult.charms', 0], [0, 'cube.teleport', 1, 21],
-  // Facing the camera to be introduced.
-  [0, 'fighters.place', 0, M.x - 1, M.z, 99, 1], [0, 'fighters.place', 1, M.x + 1, M.z, 99, 1], [0, 'cut'],
+  [0, 'octopus.staged', true], [0, 'picachu.staged', true], [0, 'fighters.staged', true],
+  [0, 'cult.charms', 0], [0, 'cube.teleport', 1, 21], [0, 'cut'],
+  // The fight is framed close, on the fighters alone (the cube is not in this one).
+  [0, 'rivals.framing', 1.06, false, 1.6],
+  // Facing the camera to be introduced, right before the cut to them.
+  [T.meet - 0.1, 'fighters.place', 0, M.x - 1, M.z, 99, 1], [T.meet - 0.1, 'fighters.place', 1, M.x + 1, M.z, 99, 1], [T.meet, 'cut'],
   [T.glare, 'rivals.standoff', 2.2],
   // The fight, with its moves chosen: a combo, both at once, a beam, then the two of them at it.
   [T.fight, 'rivals.fight', 1, ['punch:Sonny', 'flurry', 'beam:Prinz', 'clash']],

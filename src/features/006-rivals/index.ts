@@ -1305,6 +1305,10 @@ export const rivals: Feature = {
     const DARK = new THREE.Color('#1d1b19');
     const GOLD = new THREE.Color('#e3ad2a');
     const tmp = new THREE.Vector3();
+    /** How the fight is framed. Video shots can frame tighter, and without the cube. */
+    const framing = { margin: 1.2, cube: true, closest: CLOSE_UP };
+    ctx.events.on<[number, boolean, number?]>('direct:rivals.framing', ([margin, cube, closest]) =>
+      Object.assign(framing, { margin, cube, closest: closest ?? CLOSE_UP }));
     // Screen space for the isometric camera: right is (1, 0, -1)/√2, up is (-1, 2, -1)/√6.
     const R2 = Math.SQRT2;
     const R6 = Math.sqrt(6);
@@ -1333,8 +1337,8 @@ export const rivals: Feature = {
       for (const f of both) if (f.rig.root.visible && f.pos.y < 6) add(f.pos.x, f.pos.y, f.pos.z, 0.6, 1.9);
       const hint = beats[current]?.focus?.() ?? null;
       if (hint) add(hint.x, 0, hint.z, 1.2);
-      // And the cube, which must never leave the screen.
-      add(c.x, 0.5, c.z, 0.9);
+      // And the cube, which must never leave the screen (a video shot may leave it out).
+      if (framing.cube) add(c.x, 0.5, c.z, 0.9);
       const cam = ctx.camera;
       const zoom = cam.zoom || 1;
       const barPx = Math.min(72, Math.max(44, window.innerHeight * 0.08));
@@ -1347,7 +1351,7 @@ export const rivals: Feature = {
       // Some room to spare all round: the screen's edges fade into the vignette, and a
       // hit leans the camera in a little further still.
       const widest = hw < hh ? 0.55 : 0.78;
-      const base = Math.max(widest, Math.min(CLOSE_UP, fit / 1.2));
+      const base = Math.max(widest, Math.min(framing.closest, fit / framing.margin));
       ctx.lens = base * (1 + kick * 0.7);
       lensOwned = true;
       // The middle of that box. If it all cannot fit, the cube wins: slide over until it is
@@ -1358,8 +1362,10 @@ export const rivals: Feature = {
       const cubeY = syOf(c.x, 0.5, c.z);
       const roomX = Math.max(0, hw / ctx.lens - 1.1);
       const roomY = Math.max(0, hh / ctx.lens - 1.1);
-      cx = cubeX - Math.max(-roomX, Math.min(roomX, cubeX - cx));
-      cy = cubeY - Math.max(-roomY, Math.min(roomY, cubeY - cy));
+      if (framing.cube) {
+        cx = cubeX - Math.max(-roomX, Math.min(roomX, cubeX - cx));
+        cy = cubeY - Math.max(-roomY, Math.min(roomY, cubeY - cy));
+      }
       const fx = (cx * R2 - cy * R6) / 2;
       const fz = (-cx * R2 - cy * R6) / 2;
       lean = lean ?? new THREE.Vector3(c.x, 0, c.z);
