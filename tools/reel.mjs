@@ -20,6 +20,8 @@
 //   query '&seed=3'                  extra URL parameters for the game
 //   probe '<js expression>'          read from the page every frame; html(t, probe) gets the result
 //   gameSfx [[time, {kind, ...}]]    extra sounds from the game's own sound engine (src/core/sound.ts)
+//   skip '<js expression>'           a jump cut: while it is true, the game runs on silently and
+//                                    nothing is filmed (the music carries on across the cut)
 // The game's own sounds (fights, music) are recorded as they happen and rendered with it.
 import { chromium } from 'playwright';
 import { preview } from 'vite';
@@ -94,7 +96,8 @@ try {
     window.__t = 0;
     window.__sfx = [];
     window.__music = [];
-    game.ctx.events.on('sfx', (e) => window.__sfx.push([window.__t, e]));
+    window.__mute = false;
+    game.ctx.events.on('sfx', (e) => window.__mute || window.__sfx.push([window.__t, e]));
     game.ctx.events.on('sfx:music', (on) => window.__music.push([window.__t, on]));
   });
 
@@ -113,9 +116,16 @@ try {
     const impact = world.impactAt !== undefined && t >= world.impactAt && t - 1 / FPS < world.impactAt;
     while (nextAction < actions.length && actions[nextAction][0] <= t) due.push(actions[nextAction++].slice(1));
     const result = await page.evaluate(
-      async ({ t, dt, cam, html, cubeY, impact, due, gameStyle, probe }) => {
+      async ({ t, dt, cam, html, cubeY, impact, due, gameStyle, probe, skip }) => {
         const { game, direct } = window.__crail;
         window.__t = t;
+        // A jump cut: run the game on, unfilmed and unheard, until the skip condition ends.
+        if (skip) {
+          window.__mute = true;
+          // eslint-disable-next-line no-eval
+          for (let n = 0; n < 3000 && (0, eval)(skip); n++) game.step(1 / 30);
+          window.__mute = false;
+        }
         const { ctx } = game;
         let cut = false;
         for (const [name, ...args] of due) {
@@ -161,6 +171,7 @@ try {
       {
         t,
         probe: shots.probe ?? null,
+        skip: shots.skip ?? null,
         dt: shots.frozen?.(t) ? 0 : 1 / FPS,
         cam: shots.camera(t),
         html: shots.html(t, probed),

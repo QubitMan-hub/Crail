@@ -248,7 +248,7 @@ export const rivals: Feature = {
     const both = [sonny, prinz];
     const say = (f: Fighter, kind: Fighter['emoteKind']) => Object.assign(f, { emoteKind: kind, emoteAge: 0 });
 
-    const state = { fighting: false, fights: 0, cubeHits: 0, beat: '', staged: false, nextIn: FIRST_FIGHT, sounds: 0, music: false };
+    const state = { fighting: false, fights: 0, cubeHits: 0, beat: '', staged: false, nextIn: FIRST_FIGHT, sounds: 0, music: false, beatT: 0, hugged: false };
     ctx.state.rivals = state;
     const mark = addLandmark(ctx, { name: 'Fight!', x: POOL.x, z: POOL.z - 3, color: '#f2542d', hidden: true });
     const octopus = () => ctx.state.octopus as OctopusAPI | undefined;
@@ -974,6 +974,7 @@ export const rivals: Feature = {
           octopus()?.calm?.();
         }
         const h = hugAt < 0 ? Infinity : hugAt;
+        state.hugged = hugAt >= 0;
         if (hugAt >= 0 && !hugged) {
           hugged = true;
           // A hug so big it blows them back.
@@ -1387,6 +1388,7 @@ export const rivals: Feature = {
         const prev = beatT;
         beatT += dt * speed;
         clockT += dt * speed;
+        state.beatT = beatT;
         both.forEach(runLeg);
         beats[current].tick(beatT, prev);
         if (beatT >= beats[current].dur) next();
