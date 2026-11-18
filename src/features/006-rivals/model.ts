@@ -46,18 +46,18 @@ function addHair(head: THREE.Group, look: FighterLook, mat: THREE.Material, top:
   };
   // Over the top, down the back, and over the tops of the ears.
   block(0.48, 0.1, 0.46, 0, 0.0, -0.01);
-  block(0.47, 0.26, 0.1, 0, -0.12, -0.19);
+  block(0.47, 0.26, 0.1, 0, -0.12, -0.22);
   for (const s of [1, -1]) block(0.05, 0.14, 0.34, s * 0.235, -0.08, -0.03);
   if (look.name === 'Sonny') {
     // A little volume, and a fringe swept to one side.
     block(0.44, 0.06, 0.4, 0, 0.07, -0.02);
-    block(0.46, 0.07, 0.07, 0, -0.06, 0.2);
-    block(0.2, 0.08, 0.06, -0.12, -0.12, 0.2);
+    block(0.46, 0.07, 0.07, 0, -0.06, 0.22);
+    block(0.2, 0.08, 0.06, -0.12, -0.12, 0.22);
   } else {
     // Combed straight back: a taller top that rises toward the back, a clean hairline.
     block(0.44, 0.08, 0.36, 0, 0.08, -0.04);
     block(0.4, 0.06, 0.24, 0, 0.14, -0.08);
-    block(0.46, 0.05, 0.06, 0, -0.03, 0.2);
+    block(0.46, 0.05, 0.06, 0, -0.03, 0.22);
   }
   return hair;
 }
@@ -103,7 +103,8 @@ export function buildFighterRig(look: FighterLook, emote: THREE.Sprite): Rig {
     box(leg, look.legs, 0.21, 0.5, 0.22, 0, -0.25, 0);
     box(leg, look.boots, 0.23, 0.22, 0.3, 0, -0.64, 0.03);
     box(leg, look.name === 'Prinz' ? look.trim : look.band, 0.24, 0.04, 0.24, 0, -0.52, 0);
-    const arm = group(torso, side * 0.32, 0.56, 0);
+    // Arms hang off the body (like everyone else's), so they swing as they walk.
+    const arm = group(body, side * 0.32, HIP + 0.56, 0);
     box(arm, look.name === 'Prinz' ? look.top : look.skin, 0.15, 0.5, 0.16, 0, -0.22, 0);
     box(arm, look.name === 'Prinz' ? '#f6f1e6' : look.skin, 0.15, 0.12, 0.15, 0, -0.52, 0);
     return { leg, arm };
@@ -114,8 +115,9 @@ export function buildFighterRig(look: FighterLook, emote: THREE.Sprite): Rig {
   const band = group(L.arm);
   band.name = 'band';
   box(band, look.band, 0.17, 0.08, 0.18, 0, -0.42, 0);
-  const head = group(torso, 0, 0.68, 0);
-  box(head, look.skin, 0.44, 0.44, 0.42, 0, 0.22, 0);
+  // The head too: the shared animation places it relative to the body.
+  const head = group(body, 0, 1.4, 0);
+  box(head, look.skin, 0.44, 0.44, 0.48, 0, 0.22, 0); // the standard depth: the face sits flush on it
   box(head, look.skin, 0.06, 0.1, 0.08, 0.23, 0.2, 0); // ears
   box(head, look.skin, 0.06, 0.1, 0.08, -0.23, 0.2, 0);
   const f = face(head, look);
@@ -175,7 +177,7 @@ export function buildFighter(look: FighterLook): FighterRig {
     return { upper, fore };
   });
   const head = group(torso, 0, 0.68, 0);
-  box(head, look.skin, 0.44, 0.44, 0.42, 0, 0.22, 0);
+  box(head, look.skin, 0.44, 0.44, 0.48, 0, 0.22, 0); // the standard depth: the face sits flush on it
   box(head, look.skin, 0.06, 0.1, 0.08, 0.23, 0.2, 0);
   box(head, look.skin, 0.06, 0.1, 0.08, -0.23, 0.2, 0);
   const f = face(head, look);
