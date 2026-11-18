@@ -27,6 +27,15 @@ export interface GameContext {
   groundPoint(clientX: number, clientY: number): THREE.Vector3 | null;
   /** Small downward camera bump, for impacts. */
   bump(strength?: number): void;
+  /** A short sideways shake of the camera, for the biggest hits. */
+  shake(strength?: number): void;
+  /**
+   * Slow the whole world down for a moment: a near-freeze on a punch landing, slow motion
+   * for a big one. It eases back to normal speed by itself. The camera keeps real time.
+   */
+  slowmo(scale: number, seconds: number): void;
+  /** Extra zoom a feature asks for (a close-up). 1 is none; the camera eases to it. */
+  lens: number;
 }
 
 export interface Game {
@@ -62,6 +71,11 @@ export function createGame(container: HTMLElement, features: Feature[], opts: Ga
   const focus = new THREE.Vector3();
   const eased = new THREE.Vector3();
   let bumpY = 0;
+  let shakeAmp = 0;
+  let timeScale = 1;
+  let slowScale = 1;
+  let slowLeft = 0;
+  let lens = 1;
 
   const resize = () => {
     const w = container.clientWidth || 1;
@@ -106,23 +120,60 @@ export function createGame(container: HTMLElement, features: Feature[], opts: Ga
     bump(strength = 0.06) {
       bumpY = -strength;
     },
+    shake(strength = 0.12) {
+      shakeAmp = Math.max(shakeAmp, strength);
+    },
+    slowmo(scale, seconds) {
+      slowScale = Math.min(slowScale, scale);
+      slowLeft = Math.max(slowLeft, seconds);
+      timeScale = Math.min(timeScale, scale);
+    },
+    lens: 1,
   };
 
   for (const f of features) f.setup(ctx);
 
   let time = 0;
+  let realTime = 0;
   const placeCamera = () => {
+    // The shake moves the camera across the screen (along the view's own right and up).
+    const sx = Math.sin(realTime * 61) * shakeAmp;
+    const sy = Math.cos(realTime * 47) * shakeAmp * 0.6;
+    const ox = sx * 0.707;
+    const oz = -sx * 0.707;
     camera.position.copy(eased).add(CAMERA_OFFSET);
-    camera.position.y += bumpY;
-    camera.lookAt(eased.x, eased.y + bumpY, eased.z);
+    camera.position.x += ox;
+    camera.position.z += oz;
+    camera.position.y += bumpY + sy;
+    camera.lookAt(eased.x + ox, eased.y + bumpY + sy, eased.z + oz);
   };
   const step = (dt: number) => {
-    time += dt;
-    for (const fn of updaters) fn(dt, time);
+    realTime += dt;
+    // Slow motion: hold the slow speed for as long as asked, then ease back up.
+    if (slowLeft > 0) {
+      slowLeft -= dt;
+      timeScale = slowScale;
+    } else {
+      slowScale = 1;
+      timeScale += (1 - timeScale) * (1 - Math.exp(-9 * dt));
+      if (timeScale > 0.995) timeScale = 1;
+    }
+    const sim = dt * timeScale;
+    time += sim;
+    for (const fn of updaters) fn(sim, time);
     eased.lerp(ctx.focusOverride ?? focus, 1 - Math.exp(-6 * dt));
     bumpY *= Math.exp(-18 * dt);
+    shakeAmp *= Math.exp(-11 * dt);
+    if (shakeAmp < 0.002) shakeAmp = 0;
     placeCamera();
+    // The close-up multiplies whatever zoom the player (or a video shot) has set.
+    lens += (ctx.lens - lens) * (1 - Math.exp(-2.6 * dt));
+    if (Math.abs(lens - ctx.lens) < 0.0005) lens = ctx.lens;
+    const base = camera.zoom;
+    camera.zoom = base * lens;
+    camera.updateProjectionMatrix();
     renderer.render(scene, camera);
+    camera.zoom = base;
   };
 
   eased.copy(focus);

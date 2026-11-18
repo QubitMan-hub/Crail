@@ -855,8 +855,9 @@ test('the shallows can be waded into (the cube included); the deep middle cannot
   await clearStage(page);
   const { den } = await page.evaluate(() => (window as any).__crail.state.octopus);
   // From the sand south of the pool's west end, roll north into the shallows.
-  await direct(page, 'cube.teleport', den.x - 3, den.z + 3);
-  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 2));
+  // Roll into the shallows away from Tåhgong's spot (bumping him earns a charm of its own).
+  await direct(page, 'cube.teleport', den.x - 1, den.z + 4);
+  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 3));
   await page.waitForFunction(() => !(window as any).__crail.state.cube.moving);
   expect(await cubeState(page)).toMatchObject({ x: den.x - 3, z: den.z + 2 });
   // Next to the den the water is deep: the cube bumps instead.
@@ -981,6 +982,19 @@ test('Sonny and Prinz live here: they wander, leave for a fight, and come back a
   expect(after.every((f: any) => f.visible && Math.abs(f.z - 16) < 6)).toBe(true);
 });
 
+test('a fight seen up close is shot like a film: bars in, a title card, bars out after', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'tahgong.staged', false);
+  await direct(page, 'cube.teleport', 1, 20);
+  await direct(page, 'rivals.fight', 4);
+  await expect(page.locator('body')).toHaveClass(/cinema-on/);
+  await expect(page.locator('.cinema .vs')).toHaveClass(/show/);
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.fights === 1 && !(window as any).__crail.state.rivals.fighting, null, { timeout: 200_000 });
+  await expect(page.locator('body')).not.toHaveClass(/cinema-on/);
+});
+
 test('an easter egg: the golden cube', async ({ page }) => {
   await open(page, '?seed=3');
   await clearStage(page);
@@ -996,8 +1010,9 @@ test('an easter egg: sit still in Gåmson’s shallows and he waves', async ({ p
   await open(page, '?seed=3');
   await clearStage(page);
   const { den } = await page.evaluate(() => (window as any).__crail.state.octopus);
-  await direct(page, 'cube.teleport', den.x - 3, den.z + 3);
-  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 2));
+  // Roll into the shallows away from Tåhgong's spot (bumping him earns a charm of its own).
+  await direct(page, 'cube.teleport', den.x - 1, den.z + 4);
+  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 3));
   await page.waitForFunction(() => (window as any).__crail.state.secrets.waved === true, null, { timeout: 200_000 });
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
 });

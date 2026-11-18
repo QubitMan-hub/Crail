@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { bake, box, buildFace, fuseOwn, group, HIP, SCALE, type Rig } from '../../characters/rig';
 
 /**
@@ -33,33 +34,50 @@ const INK = '#1d1b19';
 const HAIR = '#1d1b19';
 
 /**
- * Simple hair: a neat short cut over the top, back and sides. Sonny's has a soft fringe
- * falling to one side; Prinz's is combed back, a little taller on top.
+ * Simple hair: a neat short cut, one solid piece with no gaps for skin to show through.
+ * It sits a little proud of the head all round (top, back, sides, hairline), and stops
+ * above the brows so the face stays clear. Sonny's has a soft fringe and a lock at one
+ * temple; Prinz's is combed straight back, rising toward the crown.
+ *
+ * Head space: the skin block spans x ±0.22, y 0 to 0.44, z ±0.24 (front is +z).
  */
-function addHair(head: THREE.Group, look: FighterLook, mat: THREE.Material, top: number): THREE.Group {
-  const hair = group(head, 0, top, 0);
-  const block = (w: number, h: number, d: number, x: number, y: number, z: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
-    m.castShadow = true;
-    hair.add(m);
+function addHair(head: THREE.Group, look: FighterLook, mat: THREE.Material): THREE.Mesh {
+  const parts: THREE.BufferGeometry[] = [];
+  /** A block given by its extents rather than its centre: easier to keep gap-free. */
+  const block = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) => {
+    const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+    g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    parts.push(g);
   };
-  // Over the top, down the back, and over the tops of the ears.
-  block(0.48, 0.1, 0.46, 0, 0.0, -0.01);
-  block(0.47, 0.26, 0.1, 0, -0.12, -0.22);
-  for (const s of [1, -1]) block(0.05, 0.14, 0.34, s * 0.235, -0.08, -0.03);
-  if (look.name === 'Sonny') {
-    // A little volume, and a fringe swept to one side.
-    block(0.44, 0.06, 0.4, 0, 0.07, -0.02);
-    block(0.46, 0.07, 0.07, 0, -0.06, 0.22);
-    block(0.2, 0.08, 0.06, -0.12, -0.12, 0.22);
-  } else {
-    // Combed straight back: a taller top that rises toward the back, a clean hairline.
-    block(0.44, 0.08, 0.36, 0, 0.08, -0.04);
-    block(0.4, 0.06, 0.24, 0, 0.14, -0.08);
-    block(0.46, 0.05, 0.06, 0, -0.03, 0.22);
+  // The cap over the top, overhanging every side.
+  block(-0.25, 0.25, 0.4, 0.5, -0.275, 0.265);
+  // Down the back of the head, to the nape.
+  block(-0.25, 0.25, 0.06, 0.42, -0.275, -0.205);
+  // Over the sides: above the ears at the front, down behind them toward the back.
+  for (const s of [1, -1]) {
+    const [x0, x1] = s > 0 ? [0.212, 0.25] : [-0.25, -0.212];
+    block(x0, x1, 0.27, 0.42, -0.06, 0.13);
+    block(x0, x1, 0.12, 0.42, -0.25, -0.05);
   }
-  return hair;
+  if (look.name === 'Sonny') {
+    // A little volume on top, a soft fringe along the hairline, a lock at the left temple.
+    block(-0.22, 0.22, 0.5, 0.55, -0.24, 0.2);
+    block(-0.24, 0.24, 0.415, 0.47, 0.2, 0.272);
+    block(-0.07, 0.17, 0.4, 0.43, 0.24, 0.275);
+    block(-0.25, -0.185, 0.33, 0.45, 0.16, 0.27);
+  } else {
+    // Combed straight back: a clean hairline, a small peak, and height toward the crown.
+    block(-0.235, 0.235, 0.425, 0.48, 0.2, 0.262);
+    block(-0.045, 0.045, 0.41, 0.44, 0.24, 0.268);
+    block(-0.22, 0.22, 0.5, 0.55, -0.2, 0.16);
+    block(-0.2, 0.2, 0.55, 0.6, -0.26, -0.02);
+  }
+  const mesh = new THREE.Mesh(mergeGeometries(parts), mat);
+  for (const g of parts) g.dispose();
+  mesh.castShadow = true;
+  mesh.name = 'hair';
+  head.add(mesh);
+  return mesh;
 }
 
 /** The outfit on a torso group. Shared by the walking-about body and the fighting one. */
@@ -121,7 +139,7 @@ export function buildFighterRig(look: FighterLook, emote: THREE.Sprite): Rig {
   box(head, look.skin, 0.06, 0.1, 0.08, 0.23, 0.2, 0); // ears
   box(head, look.skin, 0.06, 0.1, 0.08, -0.23, 0.2, 0);
   const f = face(head, look);
-  addHair(head, look, new THREE.MeshStandardMaterial({ color: HAIR, roughness: 0.7 }), 0.44);
+  addHair(head, look, new THREE.MeshStandardMaterial({ color: HAIR, roughness: 0.7 }));
   emote.position.set(0, 2.7, 0);
   root.add(emote);
   return bake({
@@ -140,7 +158,9 @@ export interface FighterRig {
   legs: { upper: THREE.Group; lower: THREE.Group }[];
   hairMat: THREE.MeshStandardMaterial;
   aura: THREE.Group;
-  auraMat: THREE.MeshBasicMaterial;
+  auraMat: THREE.ShaderMaterial;
+  /** Flames that rise off the aura and fade. */
+  flames: THREE.Mesh[];
   ball: THREE.Mesh;
   beam: THREE.Mesh;
   brows: THREE.Mesh[];
@@ -183,15 +203,55 @@ export function buildFighter(look: FighterLook): FighterRig {
   const f = face(head, look);
   // In a fight the hair can glow gold, so it gets a material of its own.
   const hairMat = new THREE.MeshStandardMaterial({ color: HAIR, emissive: '#ffcc33', emissiveIntensity: 0, roughness: 0.7 });
-  addHair(head, look, hairMat, 0.44);
-  const auraMat = new THREE.MeshBasicMaterial({ color: look.aura, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const hair = addHair(head, look, hairMat);
+  // The skin, ears and eyes as one mesh. The brows stay loose (they frown), and so does
+  // the hair (it glows).
+  const loose = [...f.brows, hair];
+  for (const o of loose) head.remove(o);
+  fuseOwn(head);
+  for (const o of loose) head.add(o);
+  // The aura: a soft glow round the body, brightest at the edges and fading toward the
+  // top, with flames licking upward. Drawn by a little shader, so it reads as light.
+  const auraMat = new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color(look.aura) }, power: { value: 0 }, time: { value: 0 } },
+    vertexShader: `
+      varying vec3 vN;
+      varying float vY;
+      void main() {
+        vN = normalize(normalMatrix * normal);
+        vY = position.y;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float power;
+      uniform float time;
+      varying vec3 vN;
+      varying float vY;
+      void main() {
+        float rim = pow(1.0 - abs(vN.z), 1.5);
+        float flick = 0.8 + 0.2 * sin(time * 17.0 + vY * 8.0);
+        float fade = smoothstep(1.0, -0.4, vY);
+        gl_FragColor = vec4(color * 1.25, (0.12 + rim * 0.88) * power * flick * fade * 0.55);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
   const aura = group(root, 0, 0, 0);
-  for (const [w, h, y] of [[1.2, 2.6, 1.15], [1.0, 2.3, 1.1], [1.4, 1.6, 0.85]] as const) {
-    const shell = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), auraMat);
-    shell.position.y = y;
-    shell.rotation.y = w;
-    aura.add(shell);
-  }
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), auraMat);
+  shell.scale.set(0.62, 1.2, 0.62);
+  shell.position.y = 1.0;
+  aura.add(shell);
+  const flameGeo = new THREE.SphereGeometry(1, 10, 8);
+  flameGeo.scale(0.16, 0.42, 0.16);
+  const flames = Array.from({ length: 6 }, (_, i) => {
+    const m = new THREE.Mesh(flameGeo, auraMat);
+    const a = (i / 6) * Math.PI * 2;
+    m.position.set(Math.cos(a) * 0.4, 0.4, Math.sin(a) * 0.4);
+    aura.add(m);
+    return m;
+  });
   const ball = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshBasicMaterial({ color: look.aura, transparent: true }));
   ball.position.set(0, 1.1, 0.45);
   ball.visible = false;
@@ -201,5 +261,5 @@ export function buildFighter(look: FighterLook): FighterRig {
   const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }));
   beam.visible = false;
   root.add(beam);
-  return { root, body, torso, head, arms, legs, hairMat, aura, auraMat, ball, beam, brows: f.brows };
+  return { root, body, torso, head, arms, legs, hairMat, aura, auraMat, flames, ball, beam, brows: f.brows };
 }

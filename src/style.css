@@ -120,3 +120,51 @@ html, body {
 @keyframes safe { 50% { opacity: 0.25; } }
 #cult .bump { animation: bump 0.4s; }
 @keyframes bump { 40% { transform: scale(1.5); } }
+
+/* A fight, shot like a film: bars slide in top and bottom, and a title card names the
+   fighters. Whatever sits on the bars turns light so it can still be read. */
+:root { --bar: clamp(44px, 8vh, 72px); }
+.cinema { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+.cinema .bar {
+  position: absolute; left: 0; right: 0; height: var(--bar);
+  background: var(--ink); transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cinema .bar.top { top: 0; transform: translateY(-100%); }
+.cinema .bar.bottom { bottom: 0; transform: translateY(100%); }
+body.cinema-on .cinema .bar { transform: none; }
+body.cinema-on :is(#brand, #sound, #map-btn, #hint) {
+  --ink: #f6efe2; color: #f6efe2; transition: color 0.4s;
+}
+/* The subtitles sit in the bottom bar; the cult count steps down below the top one. */
+body.cinema-on #hint {
+  bottom: 0; height: var(--bar); display: flex; align-items: center; justify-content: center;
+  font-size: 12px; line-height: 1.3; opacity: 0.92;
+}
+body.cinema-on #cult { top: calc(var(--bar) + 10px); }
+#cult { transition: top 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+#brand, #sound, #map-btn, #cult, #hint { z-index: 2; }
+.cinema .vs {
+  position: absolute; left: 0; right: 0; top: 24%;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 0.5em;
+  font-weight: 800; font-size: clamp(20px, 4.4vw, 40px); letter-spacing: 0.22em; text-transform: uppercase;
+  opacity: 0; text-shadow: 0 2px 0 rgba(255, 253, 248, 0.9), 0 8px 24px rgba(29, 27, 25, 0.25);
+}
+.cinema .vs .a { color: #d8432f; }
+.cinema .vs .b { color: #4f3a86; }
+.cinema .vs .amp { color: var(--ink); opacity: 0.5; font-size: 0.6em; }
+.cinema .vs i {
+  flex-basis: 100%; text-align: center; font-style: normal; font-size: 0.5em;
+  letter-spacing: 0.5em; color: var(--ink); opacity: 0.6; margin: 0.25em 0;
+}
+.cinema .vs .c { color: #e2614c; }
+.cinema .vs.show { animation: vs 2.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes vs {
+  0% { opacity: 0; transform: scale(1.18); filter: blur(6px); }
+  14% { opacity: 1; transform: scale(1); filter: blur(0); }
+  78% { opacity: 1; transform: scale(0.98); }
+  100% { opacity: 0; transform: scale(0.96) translateY(-8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cinema .bar { transition: none; }
+  .cinema .vs.show { animation-duration: 2.6s; animation-timing-function: steps(1); }
+}
