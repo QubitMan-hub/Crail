@@ -1,8 +1,8 @@
-// The Day 6 Reel: the top comment asked for a lawsuit. Under 40 seconds. Times in seconds.
+// The Day 6 Reel: the top comment asked for a lawsuit. 45 seconds. Times in seconds.
 //   0-2.2     HOOK     "the comments want a lawsuit" (film braam)
-//   2.2-5.2   COMMENT  the top comment, as a card: Goku and Vegeta? That's a lawsuit.
-//   5.2-8.6   MEET     so: Sonny and Prinz. Totally different guys. (please don't sue)
-//   8.6-      FIGHT    the fight as it plays in the game (its own camera, slow motion, sound
+//   2.2-5.8   COMMENT  the top comment, as a card: Goku and Vegeta? That's a lawsuit.
+//   5.8-9.6   MEET     so: Sonny and Prinz. Totally different guys. (please don't sue)
+//   9.6-      FIGHT    the fight as it plays in the game (its own camera, slow motion, sound
 //                      and music), with jump cuts past the slow bits. Captions follow its beats.
 //   then      OUT      Day 7: the top comment decides. Keep it legal.
 //
@@ -16,9 +16,9 @@ const SHOT = existsSync(`${ASSETS}/top.png`);
 const POOL = { x: 3, z: 14 };
 /** Where Sonny and Prinz are met: the sand down-left of the pool. */
 const M = { x: -4, z: 21 };
-const T = { comment: 2.2, meet: 5.2, glare: 7.4, fight: 8.6 };
-// Measured with a dry run: they leave at 35.3; the end card stays up a little after.
-const seconds = 38.0;
+const T = { comment: 2.2, meet: 5.8, glare: 8.3, fight: 9.6 };
+// Measured with a dry run: they leave at 41.0; the end card stays up after.
+const seconds = 45.0;
 
 const CASTS = ['goths', 'femboys', 'soldiers', 'leader'];
 const actions = [
@@ -28,8 +28,8 @@ const actions = [
   // Facing the camera to be introduced.
   [0, 'fighters.place', 0, M.x - 1, M.z, 99, 1], [0, 'fighters.place', 1, M.x + 1, M.z, 99, 1], [0, 'cut'],
   [T.glare, 'rivals.standoff', 2.2],
-  // The fight, with its moves chosen: a combo, both at once, then the two of them at it.
-  [T.fight, 'rivals.fight', 1, ['punch:Sonny', 'flurry', 'clash']],
+  // The fight, with its moves chosen: a combo, both at once, a beam, then the two of them at it.
+  [T.fight, 'rivals.fight', 1, ['punch:Sonny', 'flurry', 'beam:Prinz', 'clash']],
 ];
 
 // Jump cuts inside the fight, by beat (game seconds into each beat).
@@ -38,9 +38,9 @@ const skip = `(() => {
   if (!r.fighting) return false;
   const b = r.beat;
   const k = r.beatT;
-  return (b === 'arrive' && k > 3.2) || b === 'taunt' || (b === 'power' && k < 1.0) || (b === 'punch:Sonny' && k > 2.0)
-    || (b === 'flurry' && k > 3.0) || (b === 'clash' && k > 2.95) || (b === 'stray' && k < 0.7) || (b === 'rescue' && !r.hugged)
-    || (b === 'bow' && k > 1.9);
+  return b === 'taunt' || (b === 'power' && k < 1.0) || (b === 'punch:Sonny' && k > 2.0) || (b === 'flurry' && k > 3.2)
+    || (b === 'beam:Prinz' && k < 0.35) || (b === 'clash' && k > 3.1) || (b === 'stray' && k < 0.7) || (b === 'rescue' && !r.hugged)
+    || (b === 'bow' && k > 2.0);
 })()`;
 
 const zoom = [[0, 2.2], [T.comment, 1.85], [T.meet - 0.01, 1.75], [T.meet, 2.5], [T.fight - 0.01, 2.65], [T.fight, 1.0]];
@@ -70,6 +70,7 @@ const SAY = {
   power: ['The hair is also', 'legally distinct.'],
   'punch:Sonny': ['Jab. Cross.'],
   flurry: ['Two on one.', 'Very fair.'],
+  'beam:Prinz': ['Charging 100%', 'copyright-free energy.'],
   clash: ['Then they forgot', 'about the octopus.'],
   stray: ['Missed.', 'Hit his rock instead.'],
   rescue: ['+ one more comment', 'too good to skip'],
@@ -144,7 +145,7 @@ function html(t, probe) {
          <div class="what">Add <u>goku and Vegeta</u> fighting with octopus</div>
          <div class="likes">♥ 34</div>`;
     h += `<div class="card" ${scaled(s, `transform:rotate(-2deg) scale(${s.toFixed(3)})`)}><span class="tag">TOP COMMENT</span>${body}</div>`;
-    if (t > 3.2) h += `<div class="cap" ${scaled(pop(t, 3.2, 0.18) * leaving)}>${lines(['Goku and Vegeta?', 'That’s a lawsuit.'])}</div>`;
+    if (t > 3.4) h += `<div class="cap" ${scaled(pop(t, 3.4, 0.18) * leaving)}>${lines(['Goku and Vegeta?', 'That’s a lawsuit.'])}</div>`;
   }
   if (within(t, T.meet, T.fight) && probe?.tags) {
     const looks = [['Sonny', '#d8432f'], ['Prinz', '#4f3a86']];
@@ -154,8 +155,8 @@ function html(t, probe) {
       h += `<div class="name" style="left:${((x + 1) * 50).toFixed(2)}%;top:${((1 - y) * 50).toFixed(2)}%">
         <span ${scaled(s, `background:${looks[i][1]}`)}>${looks[i][0].toUpperCase()}</span></div>`;
     });
-    if (t < 6.7) h += `<div class="cap" ${scaled(pop(t, 5.4, 0.18))}>${lines(['So please welcome', 'Sonny & Prinz.'])}</div>`;
-    else h += `<div class="cap" ${scaled(pop(t, 6.7, 0.18))}>${lines(['Totally different', 'guys.'])}</div>`;
+    if (t < 7.3) h += `<div class="cap" ${scaled(pop(t, 6.0, 0.18))}>${lines(['So please welcome', 'Sonny & Prinz.'])}</div>`;
+    else h += `<div class="cap" ${scaled(pop(t, 7.3, 0.18))}>${lines(['Totally different', 'guys.'])}</div>`;
     if (t > T.glare) h += `<div class="aside"><span ${scaled(pop(t, T.glare + 0.15, 0.16))}>(please don’t sue)</span></div>`;
   }
   if (t >= T.fight && probe) {
@@ -193,10 +194,10 @@ const gameSfx = [
   [T.comment, { kind: 'heavy', gain: 0.7 }],
   [T.meet, { kind: 'whoosh', dur: 0.4 }],
   [T.glare, { kind: 'crack', gain: 0.35 }],
-  [7.6, { kind: 'riser', dur: 1.0, gain: 0.7 }],
+  [8.6, { kind: 'riser', dur: 1.0, gain: 0.7 }],
   [T.fight + 0.9, { kind: 'heavy', gain: 0.55, pitch: 0.8 }],
 ];
-const sfx = [[3.2, 'dun'], [T.meet + 0.15, 'pop'], [T.meet + 0.6, 'pop'], [6.7, 'dun'], [T.glare + 0.15, 'pop']];
+const sfx = [[3.4, 'dun'], [T.meet + 0.15, 'pop'], [T.meet + 0.6, 'pop'], [7.3, 'dun'], [T.glare + 0.15, 'pop']];
 const music = { sections: [[T.comment + 0.1, T.fight - 0.3]] };
 
 export default {
