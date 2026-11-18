@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { GameContext } from '../core/game';
 import { seededRandom } from '../core/rng';
 import { animate, newMotion, type Motion } from './animate';
-import { createNpc, startFollow, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from './brain';
+import { createNpc, relocate, startFollow, startSit, tick, type CubeView, type DirIndex, type Npc, type Persona, type World } from './brain';
 import { makeSymbolSprite } from './emotes';
 import { buildBow, type Rig } from './rig';
 
@@ -141,6 +141,13 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
       } else m.n.timer = o?.idle ?? 0.4;
     },
   );
+  // Put one of them on a cell and keep them there for a while (video shots).
+  ctx.events.on<[number, number, number, number?]>(`direct:${key}.place`, ([i, x, z, idle]) => {
+    const n = members[i]?.n;
+    if (!n || n.nx !== null) return;
+    if (!['idle', 'walk', 'march'].includes(n.mode)) n.mode = 'idle';
+    if (relocate(n, world, x, z)) n.timer = idle ?? 99;
+  });
   ctx.events.on<[number, 'follow' | 'sit' | 'gift']>(`direct:${key}.do`, ([i, what]) => {
     const n = members[i]?.n;
     if (!n) return;

@@ -38,7 +38,8 @@ const actions = [
   [0, 'goths.spawn', 1, POOL.x, POOL.z + 4, 0, { idle: 99 }], [0, 'goths.bow', 0], [0, 'cut'],
   [6.6, 'octopus.steal', 'goth'],
   // One femboy, a long way from anywhere. The army sets up off screen while this plays.
-  ...clearAll(T.femboy),
+  // The goth stays in the world: her bow will fly back to her at the end.
+  ...['femboys', 'soldiers', 'leader'].map((c) => [T.femboy, `${c}.clear`]),
   [T.femboy, 'femboys.spawn', 0, F.x, F.z, 0, { idle: 99 }],
   [T.femboy, 'octopus.stashNow'], [T.femboy + 0.05, 'octopus.near', 'sock', 0, -4], [T.femboy + 0.05, 'cut'],
   [T.femboy, 'leader.spawn', 0, A.x, A.z, 0, { idle: 99 }], [T.femboy, 'leader.statue'], [T.femboy, 'leader.flag'], [T.femboy, 'leader.tank'],
@@ -51,7 +52,7 @@ const actions = [
   [T.cube + 0.05, 'octopus.near', 'charm', -4, 0], [T.cube + 0.05, 'cut'],
   [18.9, 'octopus.steal', '', 'charm'],
   // The rock.
-  [T.rock, 'octopus.stashNow'], [T.rock, 'cube.teleport', POOL.x + 2, POOL.z + 2], [T.rock + 0.05, 'cut'],
+  [T.rock, 'octopus.stashNow'], [T.rock, 'cube.teleport', POOL.x + 2, POOL.z + 2], [T.rock, 'goths.place', 0, POOL.x - 1, POOL.z + 3], [T.rock + 0.05, 'cut'],
   [T.out, 'cube.teleport', -70, 30], [T.out, 'cut'],
 ];
 
@@ -112,7 +113,9 @@ const asides = [
   [14.6, 16.4, 'flag: gone'],
   [16.8, 18.4, 'tank accuracy: still 0%'],
   [20.2, 21.8, '✦3 → ✦2'],
-  [24.9, 26.8, 'all returned · +1 ✦'],
+  [24.9, 25.9, 'all returned · +1 ✦'],
+  [25.9, 26.85, 'Gåmson: furious'],
+  [4.5, 7.2, 'his name is Gåmson'],
 ];
 
 const sfx = [

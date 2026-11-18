@@ -16,6 +16,8 @@ const PAPER = '#f7f2e7';
 const RED = '#f2542d';
 /** How many cells from the cube the map reaches. Anything further is pinned to the edge. */
 const REACH = 22;
+/** The octopus's name (his landmark is only used to say whether he is out). */
+const OCTOPUS = 'Gåmson';
 const FONT = `'Avenir Next', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif`;
 
 /** Who belongs to which group on the map, and how the group is shown. */
@@ -123,7 +125,7 @@ export function setupMap(ctx: GameContext, button: HTMLButtonElement): { toggle(
 
     // ---- Places ------------------------------------------------------------------
     // The octopus has its own marker below; its landmark only says whether it is out.
-    const places = landmarks(ctx).filter((m) => !m.hidden && m.name !== 'Octopus');
+    const places = landmarks(ctx).filter((m) => !m.hidden && m.name !== OCTOPUS);
     // Grounds first (the park lawn, the pool), so everything else sits on them.
     for (const m of places) {
       if (!m.w || !m.d) continue;
@@ -244,7 +246,7 @@ export function setupMap(ctx: GameContext, button: HTMLButtonElement): { toggle(
 
     // The octopus, while it is out: its own colour, a ring, and its name.
     const o = ctx.state.octopus as { x: number; z: number; mode: string; carrying: string[] } | undefined;
-    const octoOut = o && !(o.mode === 'lurk' && landmarks(ctx).find((m) => m.name === 'Octopus')?.hidden);
+    const octoOut = o && !(o.mode === 'lurk' && landmarks(ctx).find((m) => m.name === OCTOPUS)?.hidden);
     if (o && octoOut) {
       const [px, py] = at(o.x, o.z);
       if (inside(px, py, pad + 4)) {
@@ -257,7 +259,7 @@ export function setupMap(ctx: GameContext, button: HTMLButtonElement): { toggle(
         g.beginPath();
         g.arc(px, py, 8.5, 0, Math.PI * 2);
         g.stroke();
-        label(o.carrying.length ? `Octopus · ${o.carrying.length} stolen` : 'Octopus', px, py - 12, '#237a75', 10, 800, 0.04);
+        label(o.carrying.length ? `${OCTOPUS} · ${o.carrying.length} stolen` : OCTOPUS, px, py - 12, '#237a75', 10, 800, 0.04);
       }
     }
 

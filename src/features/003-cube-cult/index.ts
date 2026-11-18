@@ -36,10 +36,20 @@ const NAMES: Record<string, string> = { soldier: 'Soldiers', femboy: 'Femboys', 
 export const TEMPLE = { x: -11, z: -4 };
 /** How many members follow the cube about. The rest stay at the temple. */
 const RETINUE = 4;
-/** Where the congregation stands: rows in front of the temple, facing it, with an aisle up the middle. */
-const PEWS: { x: number; z: number; dir: DirIndex }[] = [0, 1, 2, 3, 4].flatMap((row) =>
-  [-12, -10, -13, -9, -14, -8].map((x) => ({ x, z: row, dir: 3 as DirIndex })),
+/**
+ * Where the congregation stands: three rows facing the temple door, with a gap round
+ * every member so each one reads, an aisle up the middle, and a clear band in front of
+ * the door and the shrine. Front row first, middle seats first.
+ */
+const PEWS: { x: number; z: number; dir: DirIndex }[] = [2, 4, 6].flatMap((z) =>
+  [-13, -9, -15, -7].map((x) => ({ x, z, dir: 3 as DirIndex })),
 );
+/** Beyond the retinue and the rows outside, members go into the temple. */
+const OUTSIDE = PEWS.length;
+/** Where they walk to before going in: the cell in front of the door. */
+const DOORSTEP = { x: -11, z: -1 };
+/** Somewhere far off the map where those inside are kept, unseen, each on their own cell. */
+const INSIDE_AT = { x: -11, z: -400 };
 type Rank = 'acolyte' | 'priest' | 'high';
 /** How often the high priest goes out and brings someone back, in seconds. */
 const PREACH_EVERY = 45;
@@ -63,7 +73,6 @@ const RANKS: [number, string, string][] = [
 const FOLLOW_SPEED = 3.1;
 
 const ROBE = '#3b3b42';
-const ROBE_LIGHT = '#4b4b54';
 const VOID = '#0c0c0f';
 const ROPE = '#8d7c5d';
 
@@ -73,8 +82,24 @@ const ROPE = '#8d7c5d';
  * trim is in their old colours, their hair peeks out under the brim, and anything
  * that stuck out before (ears, twin tails, a cap, a gun barrel) still sticks out.
  */
-function robe(m: Member): void {
+/** Robe colour by rank: the high priest in deep red, priests in slate, acolytes in charcoal. */
+const RANK_ROBE: Record<Rank, string> = { high: '#6e1f22', priest: '#5a5d6c', acolyte: ROBE };
+
+/** A colour a little lighter, for the collar. */
+function lighter(hex: string): string {
+  const c = new THREE.Color(hex);
+  c.lerp(new THREE.Color('#ffffff'), 0.12);
+  return `#${c.getHexString()}`;
+}
+
+function robe(m: Member, color = ROBE): void {
   const { rig, n } = m;
+  // Re-robing (a new rank): take the old robe off first.
+  for (const part of [rig.torso, rig.body, rig.head, rig.armL, rig.armR]) {
+    for (const old of part.children.filter((c) => c.name === 'robe')) old.removeFromParent();
+  }
+  const ROBE_C = color;
+  const ROBE_LIGHT_C = lighter(color);
   const wide = n.persona.kind === 'leader' ? 1.22 : 1;
   const bow = rig.head.getObjectByName('bow');
   for (const part of [rig.torso, rig.head, rig.armL, rig.armR, rig.legL, rig.legR]) {
@@ -88,17 +113,19 @@ function robe(m: Member): void {
 
   // Above the waist the robe bends with them; the skirt hangs straight from the hips.
   const top = group(rig.torso);
-  box(top, ROBE, 0.58 * wide, 0.62, 0.4, 0, 0.3, 0);
+  top.name = 'robe';
+  box(top, ROBE_C, 0.58 * wide, 0.62, 0.4, 0, 0.3, 0);
   // Caped collar: two tiers over the shoulders, the lower one a shade lighter.
-  box(top, ROBE_LIGHT, 0.94 * wide, 0.08, 0.66, 0, 0.41, 0);
-  box(top, ROBE, 0.84 * wide, 0.2, 0.56, 0, 0.55, 0);
+  box(top, ROBE_LIGHT_C, 0.94 * wide, 0.08, 0.66, 0, 0.41, 0);
+  box(top, ROBE_C, 0.84 * wide, 0.2, 0.56, 0, 0.55, 0);
   // The cube, on a cord.
   box(top, ROPE, 0.03, 0.2, 0.02, 0, 0.36, 0.29);
   box(top, RED, 0.1, 0.1, 0.1, 0, 0.25, 0.3);
   fuse(top);
   const skirt = group(rig.body, 0, HIP, 0);
-  box(skirt, ROBE, 0.6 * wide, 0.3, 0.42, 0, -0.08, 0);
-  box(skirt, ROBE, 0.66 * wide, 0.42, 0.48, 0, -0.4, 0); // flares toward the floor
+  skirt.name = 'robe';
+  box(skirt, ROBE_C, 0.6 * wide, 0.3, 0.42, 0, -0.08, 0);
+  box(skirt, ROBE_C, 0.66 * wide, 0.42, 0.48, 0, -0.4, 0); // flares toward the floor
   box(skirt, trim, 0.7 * wide, 0.1, 0.52, 0, -0.71, 0);
   box(skirt, ROPE, 0.62 * wide, 0.05, 0.44, 0, 0.05, 0);
   box(skirt, ROPE, 0.05, 0.3, 0.05, 0.14 * wide, -0.1, 0.23);
@@ -106,18 +133,20 @@ function robe(m: Member): void {
 
   for (const arm of [rig.armL, rig.armR]) {
     const sleeve = group(arm);
-    box(sleeve, ROBE, 0.2, 0.5, 0.24, 0, -0.2, 0);
-    box(sleeve, ROBE, 0.27, 0.16, 0.32, 0, -0.5, 0); // bell cuff
+    sleeve.name = 'robe';
+    box(sleeve, ROBE_C, 0.2, 0.5, 0.24, 0, -0.2, 0);
+    box(sleeve, ROBE_C, 0.27, 0.16, 0.32, 0, -0.5, 0); // bell cuff
     box(sleeve, trim, 0.28, 0.05, 0.33, 0, -0.56, 0);
     box(sleeve, VOID, 0.2, 0.02, 0.25, 0, -0.585, 0);
     fuse(sleeve);
   }
 
   const hood = group(rig.head);
+  hood.name = 'robe';
   box(hood, VOID, 0.5, 0.52, 0.5, 0, 0.3, 0); // where a face would be
-  box(hood, ROBE, 0.72, 0.16, 0.76, 0, 0.63, 0.02);
-  box(hood, ROBE, 0.72, 0.7, 0.12, 0, 0.32, -0.32);
-  for (const side of [1, -1]) box(hood, ROBE, 0.11, 0.7, 0.66, side * 0.305, 0.32, 0.03);
+  box(hood, ROBE_C, 0.72, 0.16, 0.76, 0, 0.63, 0.02);
+  box(hood, ROBE_C, 0.72, 0.7, 0.12, 0, 0.32, -0.32);
+  for (const side of [1, -1]) box(hood, ROBE_C, 0.11, 0.7, 0.66, side * 0.305, 0.32, 0.03);
   box(hood, trim, 0.72, 0.09, 0.1, 0, 0.57, 0.37); // the brim droops forward, in their colours
   box(hood, hair, 0.42, 0.09, 0.05, 0.02, 0.47, 0.262); // a fringe, peeking out
   if (kind === 'soldier') {
@@ -131,11 +160,11 @@ function robe(m: Member): void {
     box(hood, '#565d40', 0.11, 0.11, 0.6, 0, 0.3, 0.5);
     box(hood, INK, 0.14, 0.14, 0.08, 0, 0.3, 0.8);
   }
-  box(hood, ROBE, 0.7, 0.14, 0.62, 0, 0.0, 0.0);
+  box(hood, ROBE_C, 0.7, 0.14, 0.62, 0, 0.0, 0.0);
   // The point: three shrinking blocks, leaning back.
-  box(hood, ROBE, 0.5, 0.2, 0.5, 0, 0.78, -0.08);
-  box(hood, ROBE, 0.32, 0.2, 0.32, 0, 0.94, -0.2);
-  box(hood, ROBE, 0.17, 0.18, 0.17, 0, 1.08, -0.34);
+  box(hood, ROBE_C, 0.5, 0.2, 0.5, 0, 0.78, -0.08);
+  box(hood, ROBE_C, 0.32, 0.2, 0.32, 0, 0.94, -0.2);
+  box(hood, ROBE_C, 0.17, 0.18, 0.17, 0, 1.08, -0.34);
   fuse(hood);
   if (bow) {
     // The bow stays. It goes on top of the hood.
@@ -150,6 +179,7 @@ function robe(m: Member): void {
  */
 function dress(m: Member, rank: Rank): void {
   for (const part of [m.rig.torso, m.rig.head, m.rig.armR]) part.getObjectByName('rank')?.removeFromParent();
+  robe(m, RANK_ROBE[rank]);
   if (rank === 'acolyte') return;
   const color = rank === 'high' ? GOLD : RED;
   const wide = m.n.persona.kind === 'leader' ? 1.22 : 1;
@@ -309,7 +339,7 @@ export const cubeCult: Feature = {
         state.charms -= 1;
         grace = GRACE;
         refresh(true);
-        tip(`The octopus stole one of your charms (✦${before} → ✦${state.charms}). Roll into it to get it back.`);
+        tip(`Gåmson stole one of your charms (✦${before} → ✦${state.charms}). Roll into him to get it back.`);
       },
       putBack() {
         if (state.charms >= MAX_CHARMS) return;
@@ -323,7 +353,7 @@ export const cubeCult: Feature = {
       if (count < 2 || state.charms >= MAX_CHARMS) return;
       state.charms += 1;
       refresh(true);
-      tip(`You gave back all ${count} things it stole: +1 ✦ for that (✦${state.charms}).`);
+      tip(`You gave back all ${count} things Gåmson stole: +1 ✦ for that (✦${state.charms}).`);
     });
 
     // A blast that catches the cube knocks a charm out of it.
@@ -523,6 +553,46 @@ export const cubeCult: Feature = {
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) ctx.grid.claim(TEMPLE.x + dx, TEMPLE.z + dz, temple);
     const { hall, idol: roofIdol, flames } = buildTemple();
     hall.position.set(TEMPLE.x, 0, TEMPLE.z);
+    // When members are inside, the doorways glow, and a count hangs over the door.
+    const glowMat = new THREE.MeshBasicMaterial({ color: '#ffd98a', transparent: true, opacity: 0, depthWrite: false });
+    const glowFront = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.5), glowMat);
+    glowFront.position.set(0, 1.11, 1.085);
+    const glowSide = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.5), glowMat);
+    glowSide.position.set(1.085, 1.11, 0);
+    glowSide.rotation.y = Math.PI / 2;
+    hall.add(glowFront, glowSide);
+    const countCanvas = document.createElement('canvas');
+    countCanvas.width = 320;
+    countCanvas.height = 96;
+    const countTex = new THREE.CanvasTexture(countCanvas);
+    countTex.colorSpace = THREE.SRGBColorSpace;
+    const countSign = new THREE.Sprite(new THREE.SpriteMaterial({ map: countTex, transparent: true, depthWrite: false, depthTest: false }));
+    countSign.scale.set(1.5, 0.45, 1);
+    // Over the corner that faces you, drawn on top so no pillar hides it.
+    countSign.position.set(1.2, 2.5, 1.2);
+    countSign.renderOrder = 10;
+    countSign.visible = false;
+    hall.add(countSign);
+    let shownInside = -1;
+    const showInside = (n: number) => {
+      if (n === shownInside) return;
+      shownInside = n;
+      countSign.visible = n > 0;
+      glowMat.opacity = n > 0 ? Math.min(0.9, 0.35 + n * 0.05) : 0;
+      if (n <= 0) return;
+      const g = countCanvas.getContext('2d')!;
+      g.clearRect(0, 0, 320, 96);
+      g.fillStyle = 'rgba(29, 27, 25, 0.88)';
+      g.beginPath();
+      g.roundRect(8, 10, 304, 76, 38);
+      g.fill();
+      g.fillStyle = '#ffcf7a';
+      g.font = "800 40px 'Avenir Next', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif";
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(`+${n} inside`, 160, 50);
+      countTex.needsUpdate = true;
+    };
     ctx.scene.add(hall);
     // A ring of candles round the shrine, on the corners between cells.
     const candles: THREE.Mesh[] = [];
@@ -535,6 +605,38 @@ export const cubeCult: Feature = {
 
     const ranks = new Map<Npc, Rank>();
     const memberOf = (n: Npc) => everyone(ctx).find((e) => e.n === n);
+    const inside = new Set<Npc>();
+    const goingIn = new Map<Npc, number>();
+    const doorstep = { ...DOORSTEP, dir: 3 as DirIndex };
+    /** Move someone to a free cell near a spot, searching outward. */
+    const moveNear = (m: Member, x: number, z: number): boolean => {
+      for (let r = 0; r < 8; r++) {
+        for (let dx = -r; dx <= r; dx++) {
+          for (const dz of r === 0 ? [0] : [-r, r]) {
+            for (const [cx, cz] of dx === -r || dx === r ? [[x + dx, z + dz], [x + dz, z + dx]] : [[x + dx, z + dz]]) {
+              if (!ctx.grid.claim(cx, cz, m.n.occ)) continue;
+              if (m.n.nx !== null) ctx.grid.release(m.n.nx, m.n.nz!, m.n.occ);
+              ctx.grid.release(m.n.x, m.n.z, m.n.occ);
+              Object.assign(m.n, { x: cx, z: cz, nx: null, nz: null, p: 0, trail: [], mode: 'march', t: 0 });
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+    const goIn = (m: Member) => {
+      if (!moveNear(m, INSIDE_AT.x + (inside.size % 20), INSIDE_AT.z - Math.floor(inside.size / 20))) return;
+      m.n.post = { x: m.n.x, z: m.n.z, dir: 3 as DirIndex };
+      m.rig.root.visible = false;
+      inside.add(m.n);
+      goingIn.delete(m.n);
+    };
+    const comeOut = (m: Member) => {
+      if (!moveNear(m, DOORSTEP.x, DOORSTEP.z)) return;
+      m.rig.root.visible = true;
+      inside.delete(m.n);
+    };
     /** Seniority decides: the longest-serving member leads, the next two are priests. */
     const ordain = (): { high: number; priest: number; acolyte: number } => {
       const tally = { high: 0, priest: 0, acolyte: 0 };
@@ -548,7 +650,7 @@ export const cubeCult: Feature = {
       });
       return tally;
     };
-    Object.assign(state, { ranks, ordain });
+    Object.assign(state, { ranks, ordain, inside });
     ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {
       if (occupant !== temple) return;
       if (members.length === 0) return tip('The hall is empty. Recruit someone, then bring them here.');
@@ -570,6 +672,8 @@ export const cubeCult: Feature = {
       // Anyone removed from the world (scripted scenes) is no longer a member.
       for (let i = members.length - 1; i >= 0; i--) {
         if (ctx.grid.at(members[i].x, members[i].z) !== members[i].occ) {
+          inside.delete(members[i]);
+          goingIn.delete(members[i]);
           members.splice(i, 1);
           refresh(false);
         }
@@ -583,16 +687,29 @@ export const cubeCult: Feature = {
       }
       // Only the most senior few walk with the cube. Everyone else has a place in the
       // congregation in front of the temple, and goes there.
+      // The rows outside hold twelve. Anyone beyond that walks to the temple door and
+      // goes in: they are kept out of sight, but they still count, and the temple shows it.
       members.forEach((n, i) => {
         n.slot = i;
-        if (i < RETINUE) {
+        const m = memberOf(n);
+        const wanted: 'retinue' | 'outside' | 'inside' = i < RETINUE ? 'retinue' : i < RETINUE + OUTSIDE ? 'outside' : 'inside';
+        if (wanted !== 'inside' && inside.has(n) && m) comeOut(m);
+        if (wanted === 'retinue') {
           n.lead = lead;
-          if (n.post && PEWS.includes(n.post)) n.post = null;
-        } else {
+          if (n.post && (PEWS.includes(n.post) || n.post === doorstep)) n.post = null;
+        } else if (wanted === 'outside') {
           n.lead = null;
-          n.post = PEWS[(i - RETINUE) % PEWS.length];
+          n.post = PEWS[i - RETINUE];
+        } else if (!inside.has(n) && m) {
+          n.lead = null;
+          n.post = doorstep;
+          const waited = (goingIn.get(n) ?? 0) + dt;
+          goingIn.set(n, waited);
+          const there = Math.abs(n.x - DOORSTEP.x) + Math.abs(n.z - DOORSTEP.z) <= 1;
+          if (n.nx === null && (there || waited > 30)) goIn(m);
         }
       });
+      showInside(inside.size);
 
       preach(dt);
 

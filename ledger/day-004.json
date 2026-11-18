@@ -10,5 +10,9 @@
     "text": "Add an octopus that steals stuff from all parties",
     "likes": 13
   },
-  "decision_note": "Built as an octopus that lives in a tide pool and robs each group in turn: boots, socks and bows from goths and femboys, caps and the leader's medal and flag from the army, balloons from the park, a charm from the cube. It keeps the loot on a rock by its pool. The cube can bump it to make it drop what it holds, or bump the rock to return everything. The tank fires at it when it robs the army."
+  "decision_note": "Built as an octopus that lives in a tide pool and robs each group in turn: boots, socks and bows from goths and femboys, caps and the leader's medal and flag from the army, balloons from the park, a charm from the cube. It keeps the loot on a rock by its pool. The cube can bump it to make it drop what it holds, or bump the rock to return everything. The tank fires at it when it robs the army.",
+  "name": {
+    "value": "Gåmson",
+    "note": "The octopus was named Gåmson at the request of ump.619, in a reply under the winning comment, and the creator agreed."
+  }
 }

@@ -11,7 +11,7 @@ import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
 import { buildOctopus, buildPool, buildToken } from './model';
 
 /**
- * The octopus. It lives in a tide pool and steals from everybody, one party after
+ * Gåmson the octopus (named by @ump.619, who asked for him). He lives in a tide pool and steals from everybody, one party after
  * another: a goth's boot, a femboy's sock (or the bow, if they have one), a soldier's
  * cap, the leader's medal and his flag, a balloon from the park, a charm off the cube.
  * It carries up to three things home and keeps them on the rock beside its pool.
@@ -30,6 +30,8 @@ const CARRY = 3;
 const MAX_SEARCH = 2500;
 /** A full rock: it stays home to guard it until someone empties it. */
 const STASH_MAX = 9;
+/** His name, as the person who asked for him spelled it. */
+export const NAME = 'Gåmson';
 /** How long it fumes when its rock is raided, and how soon it goes out again after. */
 const ANGER = 2.6;
 const REVENGE = 3;
@@ -54,7 +56,7 @@ export const octopus: Feature = {
   meta: {
     id: '004-octopus',
     day: 4,
-    title: 'An octopus that steals from everyone',
+    title: 'Gåmson, an octopus who steals from everyone',
     credit: { username: 'ump.619', text: 'Add an octopus that steals stuff from all parties', method: 'top-comment' },
   },
   setup(ctx) {
@@ -70,8 +72,8 @@ export const octopus: Feature = {
     const rimOcc: Occupant = { kind: 'pool', id: 'octopus-pool' };
     const isRim = (x: number, z: number) => Math.max(Math.abs(x - POOL.x), Math.abs(z - POOL.z)) === 1;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (dx || dz) ctx.grid.claim(POOL.x + dx, POOL.z + dz, rimOcc);
-    addLandmark(ctx, { name: 'Tide pool', x: POOL.x - 1, z: POOL.z - 1, w: 3, d: 3, color: '#a9dbe6' });
-    const mark = addLandmark(ctx, { name: 'Octopus', x: POOL.x, z: POOL.z, color: '#2f9c95', hidden: true });
+    addLandmark(ctx, { name: `${NAME}’s pool`, x: POOL.x - 1, z: POOL.z - 1, w: 3, d: 3, color: '#a9dbe6' });
+    const mark = addLandmark(ctx, { name: NAME, x: POOL.x, z: POOL.z, color: '#2f9c95', hidden: true });
 
     const rig = buildOctopus();
     rig.root.scale.setScalar(1.15);
@@ -234,18 +236,18 @@ export const octopus: Feature = {
       // On the stones round its pool it owns no cell of its own, so go by where it is.
       const onIt = occupant === occ || (tx === state.x && tz === state.z) || (tx === state.nx && tz === state.nz);
       if (onIt) {
-        if (state.mode === 'lurk' && !held.length) return tip('It pretends to be a rock. Its loot is on the rock next door.');
+        if (state.mode === 'lurk' && !held.length) return tip(`${NAME} pretends to be a rock. His loot is on the rock next door.`);
         const dropped = startle();
-        tip(dropped ? `It dropped ${dropped === 1 ? 'what it took' : `all ${dropped} things`}. They are back with their owners.` : 'Ink. It had nothing on it yet.');
+        tip(dropped ? `${NAME} dropped ${dropped === 1 ? 'what he took' : `all ${dropped} things`}. They are on their way home.` : `Ink. ${NAME} had nothing on him yet.`);
       } else if (occupant === rimOcc) {
-        tip(stashed.length ? 'Its pool. What it stole is on the flat rock beside it.' : 'A tide pool. Something in it is watching you.');
+        tip(stashed.length ? `${NAME}’s pool. What he stole is on the flat rock beside it.` : `A tide pool. ${NAME} is watching you from it.`);
       } else if (occupant === shelfOcc) {
-        if (!stashed.length) return tip('Its rock is empty. For now.');
+        if (!stashed.length) return tip(`${NAME}’s rock is empty. For now.`);
         const n = giveBack(stashed);
         // That was its hoard. It comes up out of the water, and it is not pleased.
         angry = ANGER;
         if (state.mode === 'lurk') state.timer = ANGER + REVENGE;
-        tip(`You gave back ${n === 1 ? 'the one thing' : `all ${n} things`} it stole.`);
+        tip(`You gave back ${n === 1 ? 'the one thing' : `all ${n} things`} ${NAME} stole. He is furious.`);
         // After the tip, so a reward for it can have the last word.
         ctx.events.emit('octopus:raided', { count: n });
       }
@@ -372,7 +374,7 @@ export const octopus: Feature = {
             lastParty = target.party;
             names();
             ctx.events.emit('octopus:stole', { party: target.party, name: target.name, x: state.x, z: state.z });
-            if (seen && target.party !== 'cube') tip(`The octopus took ${target.name}. Roll into it to get it back.`);
+            if (seen && target.party !== 'cube') tip(`${NAME} took ${target.name}. Roll into him to get it back.`);
           } else target = null; // they stepped away in time
         }
         if (state.t >= 0.7) {

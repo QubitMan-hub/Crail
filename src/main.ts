@@ -49,7 +49,7 @@ const HELP: [string, string, string][] = [
   ['003-cube-cult', 'Your cult', 'Four followers walk with you; the rest wait at the temple. Bump the shrine for charms, and the temple door to give out ranks.'],
   ['003-supreme-leader', 'The leader', 'Cannot be recruited. Bump his statue, flag or launch pad and his soldiers react.'],
   ['003-supreme-leader', 'Danger', 'Once your cult has three members, his rockets aim at you: get out of the red ring. A hit costs a charm.'],
-  ['004-octopus', 'Octopus', 'Steals from everyone. Roll into it to make it drop things. Bump the rock by its pool to give everything back.'],
+  ['004-octopus', 'Gåmson', 'The octopus. Steals from everyone. Roll into him to make him drop things. Bump the rock by his pool to give everything back.'],
 ];
 const helpBtn = document.getElementById('help-btn') as HTMLButtonElement;
 const help = document.getElementById('help')!;

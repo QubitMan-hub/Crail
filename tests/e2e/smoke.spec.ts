@@ -733,7 +733,7 @@ test('the how-to-play card lists what this build has, and closes', async ({ page
   await open(page, '?seed=3');
   await page.locator('#help-btn').click();
   await expect(page.locator('#help')).toBeVisible();
-  await expect(page.locator('#help dl')).toContainText('Octopus');
+  await expect(page.locator('#help dl')).toContainText('Gåmson');
   await expect(page.locator('#help dl')).toContainText('Preach');
   await page.keyboard.press('Escape');
   await expect(page.locator('#help')).toBeHidden();
@@ -741,7 +741,7 @@ test('the how-to-play card lists what this build has, and closes', async ({ page
   await open(page, '?day=2');
   await page.locator('#help-btn').click();
   await expect(page.locator('#help dl')).toContainText('Femboys');
-  await expect(page.locator('#help dl')).not.toContainText('Octopus');
+  await expect(page.locator('#help dl')).not.toContainText('Gåmson');
   await page.locator('#help').click();
   await expect(page.locator('#help')).toBeHidden();
   expect(await cubeState(page)).toMatchObject({ rolls: 0 });
@@ -753,4 +753,32 @@ test('+ and - zoom the view, within limits, and it is remembered', async ({ page
   expect(Number(await page.evaluate(() => localStorage.getItem('crail.zoom')))).toBeCloseTo(1.7, 2);
   for (let i = 0; i < 20; i++) await page.keyboard.press('Minus');
   expect(Number(await page.evaluate(() => localStorage.getItem('crail.zoom')))).toBeCloseTo(0.6, 2);
+});
+
+test('a big cult: four follow, twelve stand in rows at the temple, the rest go inside', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  // Twenty recruits, spawned just south of the temple.
+  for (let i = 0; i < 20; i++) await direct(page, i % 2 ? 'femboys.spawn' : 'goths.spawn', Math.floor(i / 2) % 4, -16 + (i % 10), 9 + Math.floor(i / 10) * 2, 3, { idle: 999 });
+  for (let i = 0; i < 10; i++) {
+    await direct(page, 'cult.recruit', 'goths', i);
+    await direct(page, 'cult.recruit', 'femboys', i);
+  }
+  await direct(page, 'cube.teleport', 4, 4);
+  await page.waitForFunction(() => (window as any).__crail.state.cult.inside.size === 4, null, { timeout: 200_000 });
+  const c = await page.evaluate(() => {
+    const cult = (window as any).__crail.state.cult;
+    const outside = cult.members.filter((n: any) => !n.lead && !cult.inside.has(n));
+    const hidden = (window as any).__crail.state.everyone.filter((m: any) => cult.inside.has(m.n) && !m.rig.root.visible).length;
+    return {
+      members: cult.members.length,
+      following: cult.members.filter((n: any) => n.lead).length,
+      outside: outside.length,
+      // Rows keep a free cell between neighbours.
+      spaced: outside.every((a: any) => outside.every((b: any) => a === b || Math.abs(a.post.x - b.post.x) + Math.abs(a.post.z - b.post.z) >= 2)),
+      hidden,
+    };
+  });
+  expect(c).toEqual({ members: 20, following: 4, outside: 12, spaced: true, hidden: 4 });
 });
