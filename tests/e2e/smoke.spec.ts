@@ -607,9 +607,11 @@ test('the octopus robs people, keeps it on its rock, and the cube can give it al
   await direct(page, 'octopus.staged', true);
   await page.waitForFunction(() => (window as any).__crail.state.octopus.mode === 'lurk', null, { timeout: 30_000 });
   // Bumping it at home gets a hint; bumping the rock gets everything back.
-  await direct(page, 'cube.teleport', 3, 16);
-  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1 || s.cube.z === 15');
-  await direct(page, 'cube.teleport', 5, 15);
+  const { den, rock } = await page.evaluate(() => (window as any).__crail.state.octopus);
+  // Bump the water's edge in front of his den: the shore cell south of the pool.
+  await direct(page, 'cube.teleport', den.x, den.z + 3);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
+  await direct(page, 'cube.teleport', rock.x, rock.z + 1);
   const before = await page.evaluate(() => (window as any).__crail.state.cube.bonks);
   await holdUntil(page, 'KeyW', `s.cube.bonks > ${before}`);
   // The rock is empty at once; the things fly home, and the octopus is furious.
@@ -835,7 +837,9 @@ test('Tåhgong takes things back off the rock while Gåmson is out, and hugs the
     return { x: t.x, z: t.z };
   });
   await direct(page, 'tahgong.staged', true);
-  await direct(page, 'cube.teleport', at.x, at.z + 1);
+  // Bring him up on the shore so the cube can reach him.
+  await direct(page, 'tahgong.teleport', at.x - 4, at.z + 4);
+  await direct(page, 'cube.teleport', at.x - 4, at.z + 5);
   await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
   await holdUntil(page, 'KeyW', 's.cube.bonks >= 2');

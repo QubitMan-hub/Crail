@@ -128,6 +128,18 @@ export function setupMap(ctx: GameContext, button: HTMLButtonElement): { toggle(
     const places = landmarks(ctx).filter((m) => !m.hidden && m.name !== OCTOPUS);
     // Grounds first (the park lawn, the pool), so everything else sits on them.
     for (const m of places) {
+      if (m.cells) {
+        // An irregular place: every cell it covers.
+        g.fillStyle = m.color;
+        for (const [x, z] of m.cells) {
+          const corners = [at(x - 0.5, z - 0.5), at(x + 0.5, z - 0.5), at(x + 0.5, z + 0.5), at(x - 0.5, z + 0.5)];
+          g.beginPath();
+          corners.forEach(([qx, qy], i) => (i ? g.lineTo(qx, qy) : g.moveTo(qx, qy)));
+          g.closePath();
+          g.fill();
+        }
+        continue;
+      }
       if (!m.w || !m.d) continue;
       const corners = [at(m.x - 0.5, m.z - 0.5), at(m.x + m.w - 0.5, m.z - 0.5), at(m.x + m.w - 0.5, m.z + m.d - 0.5), at(m.x - 0.5, m.z + m.d - 0.5)];
       g.fillStyle = m.color;
@@ -162,9 +174,10 @@ export function setupMap(ctx: GameContext, button: HTMLButtonElement): { toggle(
 
     const edgeMarks: (() => void)[] = [];
     for (const m of places) {
-      const area = !!(m.w && m.d);
-      const mx = m.x + (area ? m.w! / 2 - 0.5 : 0);
-      const mz = m.z + (area ? m.d! / 2 - 0.5 : 0);
+      // Shaped places (cells) are labelled at (x, z); rectangles in their middle.
+      const area = !!(m.w && m.d) || !!m.cells;
+      const mx = m.x + (m.w && m.d ? m.w / 2 - 0.5 : 0);
+      const mz = m.z + (m.w && m.d ? m.d / 2 - 0.5 : 0);
       const [px, py] = at(mx, mz);
       if (!inside(px, py)) {
         // Off the map: a small pointer on the edge, with the name beside it.

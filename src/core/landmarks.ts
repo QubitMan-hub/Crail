@@ -12,6 +12,8 @@ export interface Landmark {
   /** For places that cover an area: size in cells, with (x, z) as the top-left corner. */
   w?: number;
   d?: number;
+  /** For places with an irregular shape: the exact cells they cover. */
+  cells?: [number, number][];
   hidden?: boolean;
 }
 

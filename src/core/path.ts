@@ -10,9 +10,11 @@ export function stepToward(
   who: Occupant,
   from: { x: number; z: number },
   goal: { x: number; z: number },
-  opts: { onto?: boolean; maxSearch?: number; margin?: number } = {},
+  opts: { onto?: boolean; maxSearch?: number; margin?: number; passable?: (x: number, z: number) => boolean } = {},
 ): [number, number] | null {
   const { onto = false, maxSearch = 1500, margin = 5 } = opts;
+  /** Free to step into: empty, or somewhere only this walker may go (water, for a swimmer). */
+  const open = opts.passable ?? ((x: number, z: number) => grid.isFree(x, z, who));
   const near = (x: number, z: number) => (onto ? x === goal.x && z === goal.z : Math.max(Math.abs(x - goal.x), Math.abs(z - goal.z)) <= 1);
   if (near(from.x, from.z)) return null;
   const key = (x: number, z: number) => `${x},${z}`;
@@ -30,7 +32,7 @@ export function stepToward(
     }
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const [qx, qz] = [x + dx, z + dz];
-      if (qx < x0 || qx > x1 || qz < z0 || qz > z1 || back.has(key(qx, qz)) || !grid.isFree(qx, qz, who)) continue;
+      if (qx < x0 || qx > x1 || qz < z0 || qz > z1 || back.has(key(qx, qz)) || !open(qx, qz)) continue;
       back.set(key(qx, qz), key(x, z));
       queue.push([qx, qz]);
     }
@@ -38,6 +40,6 @@ export function stepToward(
   const dist = (x: number, z: number) => Math.abs(goal.x - x) + Math.abs(goal.z - z);
   const closer = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
     .map(([dx, dz]) => [from.x + dx, from.z + dz] as [number, number])
-    .filter(([x, z]) => dist(x, z) < dist(from.x, from.z) && grid.isFree(x, z, who));
+    .filter(([x, z]) => dist(x, z) < dist(from.x, from.z) && open(x, z));
   return closer[0] ?? null;
 }

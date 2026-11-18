@@ -86,8 +86,9 @@ const report = await p.evaluate(async ({ seed, minutes }) => {
     if (o) {
       if (!o.carrying) note(t, 'octopus state missing');
       const own = ctx.grid.at(o.x, o.z);
-      const rim = Math.max(Math.abs(o.x - 3), Math.abs(o.z - 14)) === 1;
-      if (!rim && own?.kind !== 'octopus') note(t, `octopus at ${o.x},${o.z} does not own its cell (owner ${own?.kind})`);
+      if (own?.kind !== 'octopus') note(t, `octopus at ${o.x},${o.z} does not own its cell (owner ${own?.kind})`);
+      const sq = state.tahgong;
+      if (sq && ctx.grid.at(sq.x, sq.z)?.kind !== 'squid') note(t, `Tåhgong at ${sq.x},${sq.z} does not own his cell (owner ${ctx.grid.at(sq.x, sq.z)?.kind})`);
       if (o.mode !== octoMode.mode) Object.assign(octoMode, { mode: o.mode, since: t });
       else if (o.mode !== 'lurk' && t - octoMode.since > 45) note(t, `octopus stuck in ${o.mode} for ${t - octoMode.since}s at ${o.x},${o.z}`);
     }

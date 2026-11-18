@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
-import type { Occupant } from '../../core/grid';
+import type { Grid, Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
 import { stealables, type Stealable } from '../../core/loot';
 import { seededRandom } from '../../core/rng';
 import { tip } from '../../core/tip';
+import { relocate } from '../../characters/brain';
 import { everyone, type Member } from '../../characters/cast';
 import { setLoot } from '../../characters/rig';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
@@ -23,8 +24,37 @@ import { buildOctopus, buildPool, buildToken } from './model';
 
 /** The middle of the pool. The rock with the loot is two cells along from it. */
 export const POOL = { x: 3, z: 14 };
-/** The flat rock beside the pool where the loot piles up. */
-export const SHELF = { x: POOL.x + 2, z: POOL.z };
+/**
+ * The pool: an irregular blob of water, rows of cells relative to the den (POOL).
+ * Only swimmers (Gåmson, and his friend) can be in it; to everyone else it is solid.
+ */
+const SHAPE: [number, number, number][] = [
+  // dz, from dx, to dx
+  [-2, -1, 1], [-1, -3, 2], [0, -4, 2], [1, -4, 1], [2, -3, 0], [3, -2, -1],
+];
+export const WATER: [number, number][] = SHAPE.flatMap(([dz, a, b]) =>
+  Array.from({ length: b - a + 1 }, (_, i) => [POOL.x + a + i, POOL.z + dz] as [number, number]),
+);
+const wet = new Set(WATER.map(([x, z]) => `${x},${z}`));
+export const isWater = (x: number, z: number) => wet.has(`${x},${z}`);
+/** Who holds a water cell when no swimmer is in it. */
+export const POOL_OCC: Occupant = { kind: 'pool', id: 'octopus-pool' };
+/** Can a swimmer go here: an empty cell, or water nobody is swimming in. */
+export const swimmable = (grid: Grid, x: number, z: number, who: Occupant) =>
+  grid.isFree(x, z, who) || (isWater(x, z) && grid.at(x, z) === POOL_OCC);
+/** A swimmer takes a cell. Water is handed over from the pool to them. */
+export function occupy(grid: Grid, x: number, z: number, who: Occupant): boolean {
+  if (isWater(x, z) && grid.at(x, z) === POOL_OCC) grid.release(x, z, POOL_OCC);
+  return grid.claim(x, z, who);
+}
+/** A swimmer leaves a cell. Water goes back to the pool. */
+export function vacate(grid: Grid, x: number, z: number, who: Occupant): void {
+  if (grid.at(x, z) !== who) return;
+  grid.release(x, z, who);
+  if (isWater(x, z)) grid.claim(x, z, POOL_OCC);
+}
+/** The flat rock on the shore where the loot piles up. */
+export const SHELF = { x: POOL.x + 3, z: POOL.z };
 const SPEED = 3.4; // cells a second: quicker than anyone it robs
 const CARRY = 3;
 /** Cells the route search may look at per step: enough to get round a building, cheap on a phone. */
@@ -65,15 +95,24 @@ export const octopus: Feature = {
     const occ: Occupant = { kind: 'octopus', id: 'octopus' };
     const shelfOcc: Occupant = { kind: 'stash', id: 'octopus-stash' };
 
-    const pool = buildPool();
+    const pool = buildPool(WATER.map(([x, z]) => [x - POOL.x, z - POOL.z]), [SHELF.x - POOL.x, SHELF.z - POOL.z]);
     pool.root.position.set(POOL.x, 0, POOL.z);
     ctx.scene.add(pool.root);
+    // Anyone already standing where the water goes steps out of it first.
+    const clearOut = (x: number, z: number) => {
+      const m = everyone(ctx).find((e) => e.n.x === x && e.n.z === z);
+      if (!m) return;
+      for (let r = 1; r < 6; r++) {
+        for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) {
+          if (!isWater(x + dx, z + dz) && relocate(m.n, m.world, x + dx, z + dz)) return;
+        }
+      }
+    };
+    for (const [x, z] of [...WATER, [SHELF.x, SHELF.z] as [number, number]]) clearOut(x, z);
     ctx.grid.claim(SHELF.x, SHELF.z, shelfOcc);
-    // The stones round the pool are solid to everyone but the octopus, which climbs over them.
-    const rimOcc: Occupant = { kind: 'pool', id: 'octopus-pool' };
-    const isRim = (x: number, z: number) => Math.max(Math.abs(x - POOL.x), Math.abs(z - POOL.z)) === 1;
-    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (dx || dz) ctx.grid.claim(POOL.x + dx, POOL.z + dz, rimOcc);
-    addLandmark(ctx, { name: `${NAME}’s pool`, x: POOL.x - 1, z: POOL.z - 1, w: 3, d: 3, color: '#a9dbe6' });
+    // The water is solid to everyone but swimmers. He starts in his den.
+    for (const [x, z] of WATER) if (x !== POOL.x || z !== POOL.z) ctx.grid.claim(x, z, POOL_OCC);
+    addLandmark(ctx, { name: `${NAME}’s pool`, x: POOL.x - 1, z: POOL.z + 2, cells: WATER, color: '#a9dbe6' });
     const mark = addLandmark(ctx, { name: NAME, x: POOL.x, z: POOL.z, color: '#2f9c95', hidden: true });
 
     const rig = buildOctopus();
@@ -91,6 +130,17 @@ export const octopus: Feature = {
     fury.position.set(0, 1.85, 0);
     rig.root.add(fury);
     let angry = 0;
+    // Back home and his pile is smaller than he left it: someone has been at it.
+    let suspicious = 0;
+    let seenReturns = 0;
+    const checkPile = () => {
+      const friend = ctx.state.tahgong as { returned: number } | undefined;
+      if (friend && friend.returned > seenReturns) {
+        seenReturns = friend.returned;
+        suspicious = 2.4;
+        ctx.events.emit('octopus:suspicious');
+      }
+    };
     ctx.scene.add(rig.root);
     // Ink: a dark puddle where it was startled, fading.
     const ink = new THREE.Mesh(
@@ -111,6 +161,8 @@ export const octopus: Feature = {
        * Set by a later day: nothing hurts him. A blast flattens him for a moment and he
        * pops back up holding everything, instead of dropping it all and running.
        */
+      /** Where his den and his rock are (for tests and video shots). */
+      den: { ...POOL }, rock: { ...SHELF },
       immortal: false,
       shrugged: 0,
       /** Take the oldest thing off his rock (a friend tidying up behind his back). */
@@ -121,6 +173,14 @@ export const octopus: Feature = {
       },
     };
     ctx.state.octopus = state;
+    Object.assign(state, {
+      /** A friend can calm him down when he is furious. */
+      calm: () => {
+        if (angry <= 0) return false;
+        angry = 0;
+        return true;
+      },
+    });
     ctx.grid.claim(state.x, state.z, occ);
     const held: Held[] = [];
     const stashed: Held[] = [];
@@ -189,7 +249,7 @@ export const octopus: Feature = {
         }
         for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const [qx, qz] = [x + dx, z + dz];
-          if (from.has(key(qx, qz)) || !(isRim(qx, qz) || ctx.grid.isFree(qx, qz, occ))) continue;
+          if (from.has(key(qx, qz)) || !swimmable(ctx.grid, qx, qz, occ)) continue;
           if (qx < x0 || qx > x1 || qz < z0 || qz > z1) continue;
           from.set(key(qx, qz), key(x, z));
           queue.push([qx, qz]);
@@ -199,7 +259,7 @@ export const octopus: Feature = {
       const dist = (x: number, z: number) => Math.abs(goal.x - x) + Math.abs(goal.z - z);
       const steps = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const)
         .map(([dx, dz]) => [state.x + dx, state.z + dz] as [number, number])
-        .filter(([x, z]) => dist(x, z) < dist(state.x, state.z) && (isRim(x, z) || ctx.grid.isFree(x, z, occ)));
+        .filter(([x, z]) => dist(x, z) < dist(state.x, state.z) && swimmable(ctx.grid, x, z, occ));
       return steps[0] ?? null;
     };
     const setMode = (mode: Mode, timer = 0) => Object.assign(state, { mode, t: 0, timer });
@@ -261,7 +321,7 @@ export const octopus: Feature = {
         if (state.mode === 'lurk' && !held.length) return tip(`${NAME} pretends to be a rock. His loot is on the rock next door.`);
         const dropped = startle();
         tip(dropped ? `${NAME} dropped ${dropped === 1 ? 'what he took' : `all ${dropped} things`}. They are on their way home.` : `Ink. ${NAME} had nothing on him yet.`);
-      } else if (occupant === rimOcc) {
+      } else if (occupant === POOL_OCC) {
         tip(stashed.length ? `${NAME}’s pool. What he stole is on the flat rock beside it.` : `A tide pool. ${NAME} is watching you from it.`);
       } else if (occupant === shelfOcc) {
         if (!stashed.length) return tip(`${NAME}’s rock is empty. For now.`);
@@ -308,8 +368,8 @@ export const octopus: Feature = {
       const at = [...stealables(ctx), ...pockets()].find((s) => s.token === token && s.where())?.where();
       if (!at || state.nx !== null) return;
       for (const [ox, oz] of [[dx, dz], [dx + 1, dz], [dx, dz + 1], [dx - 1, dz], [dx, dz - 1]]) {
-        if (!ctx.grid.claim(at.x + ox, at.z + oz, occ)) continue;
-        ctx.grid.release(state.x, state.z, occ);
+        if (!occupy(ctx.grid, at.x + ox, at.z + oz, occ)) continue;
+        vacate(ctx.grid, state.x, state.z, occ);
         Object.assign(state, { x: at.x + ox, z: at.z + oz });
         facing = Math.atan2(-ox, -oz);
         setMode('lurk', 99);
@@ -319,19 +379,19 @@ export const octopus: Feature = {
     /** Whatever it is holding goes straight onto the rock, and it is back in its pool. */
     ctx.events.on('direct:octopus.stashNow', () => {
       if (state.nx !== null) {
-        ctx.grid.release(state.nx, state.nz!, occ);
+        vacate(ctx.grid, state.nx, state.nz!, occ);
         state.nx = state.nz = null;
       }
-      ctx.grid.release(state.x, state.z, occ);
+      vacate(ctx.grid, state.x, state.z, occ);
       Object.assign(state, { x: POOL.x, z: POOL.z, p: 0 });
-      ctx.grid.claim(state.x, state.z, occ);
+      occupy(ctx.grid, state.x, state.z, occ);
       target = null;
       setMode('stash');
       state.t = 1;
     });
     ctx.events.on<[number, number]>('direct:octopus.teleport', ([x, z]) => {
-      if (state.nx !== null || !ctx.grid.claim(x, z, occ)) return;
-      ctx.grid.release(state.x, state.z, occ);
+      if (state.nx !== null || !occupy(ctx.grid, x, z, occ)) return;
+      vacate(ctx.grid, state.x, state.z, occ);
       Object.assign(state, { x, z });
     });
     ctx.events.on('direct:octopus.home', () => setMode('haul'));
@@ -348,7 +408,7 @@ export const octopus: Feature = {
           return false;
         }
         const step = stepToward(goal, onto);
-        if (!step || !(isRim(step[0], step[1]) || ctx.grid.claim(step[0], step[1], occ))) {
+        if (!step || !occupy(ctx.grid, step[0], step[1], occ)) {
           stuck += dt;
           retry = 0.25;
           return false;
@@ -367,7 +427,7 @@ export const octopus: Feature = {
       if (state.nx !== null && state.nz !== null) {
         state.p += SPEED * (state.mode === 'flee' ? 1.6 : 1) * dt;
         if (state.p >= 1) {
-          ctx.grid.release(state.x, state.z, occ);
+          vacate(ctx.grid, state.x, state.z, occ);
           Object.assign(state, { x: state.nx, z: state.nz, nx: null, nz: null, p: 0 });
         }
       }
@@ -414,7 +474,10 @@ export const octopus: Feature = {
           setMode(target ? 'hunt' : held.length ? 'haul' : 'flee');
         }
       } else if (state.mode === 'haul' || state.mode === 'flee') {
-        if (moveTo(POOL, true, dt)) setMode(held.length ? 'stash' : 'lurk', 7 + rand() * 6);
+        if (moveTo(POOL, true, dt)) {
+          setMode(held.length ? 'stash' : 'lurk', 7 + rand() * 6);
+          checkPile();
+        }
         else if (stuck > 4 && state.nx === null) {
           // Boxed in. It waits for a gap; an octopus has time.
           stuck = 0;
@@ -458,18 +521,24 @@ export const octopus: Feature = {
         }
       }
       angry = Math.max(0, angry - dt);
-      showSymbol(fury, angry > 0 ? 'anger' : null, ANGER - angry, ANGER, 0.7);
+      suspicious = Math.max(0, suspicious - dt);
+      Object.assign(state, { angry, suspicious });
+      if (angry > 0) showSymbol(fury, 'anger', ANGER - angry, ANGER, 0.7);
+      else showSymbol(fury, suspicious > 0 ? 'q' : null, 2.4 - suspicious, 2.4, 0.6);
 
       // ---- How it looks ----------------------------------------------------------
       const k = state.nx === null ? 0 : state.p;
       const px = state.x + ((state.nx ?? state.x) - state.x) * k;
       const pz = state.z + ((state.nz ?? state.z) - state.z) * k;
       const home = state.mode === 'lurk' && state.x === POOL.x && state.z === POOL.z;
+      const friend = ctx.state.tahgong as { x: number; z: number } | undefined;
       if (angry > 0 && cube) facing = Math.atan2(cube.x - state.x, cube.z - state.z); // glaring at you
+      else if (suspicious > 0 && friend) facing = Math.atan2(friend.x - state.x, friend.z - state.z); // at him
       else if (home) facing = Math.PI / 4; // watching the camera from the water
       // In its pool it sinks to the eyes.
       // Angry, it rears up out of the water and shakes.
-      const sink = home && angry <= 0 ? -0.24 + Math.sin(time * 0.8) * 0.03 : angry > 0 ? 0.25 + Math.abs(Math.sin(time * 9)) * 0.12 : 0;
+      const swimming = isWater(Math.round(px), Math.round(pz));
+      const sink = home && angry <= 0 ? -0.24 + Math.sin(time * 0.8) * 0.03 : angry > 0 ? 0.25 + Math.abs(Math.sin(time * 9)) * 0.12 : swimming ? -0.16 : 0;
       const moving = state.nx !== null;
       // It pulses along: a squash and a stretch with every cell.
       const pulse = moving ? Math.sin(k * Math.PI) : 0;
