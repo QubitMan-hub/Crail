@@ -52,7 +52,7 @@ const actions = [
   [T.cube + 0.05, 'octopus.near', 'charm', -4, 0], [T.cube + 0.05, 'cut'],
   [18.9, 'octopus.steal', '', 'charm'],
   // The rock.
-  [T.rock, 'octopus.stashNow'], [T.rock, 'cube.teleport', POOL.x + 2, POOL.z + 2], [T.rock, 'goths.place', 0, POOL.x - 1, POOL.z + 3], [T.rock + 0.05, 'cut'],
+  [T.rock, 'octopus.stashNow'], [T.rock, 'cube.teleport', POOL.x + 2, POOL.z + 2], [T.rock, 'goths.place', 0, POOL.x, POOL.z + 2], [T.rock + 0.05, 'cut'],
   [T.out, 'cube.teleport', -70, 30], [T.out, 'cut'],
 ];
 
