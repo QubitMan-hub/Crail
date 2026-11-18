@@ -3,16 +3,18 @@ import type { Feature } from '../../core/feature';
 import { addLandmark } from '../../core/landmarks';
 import { seededRandom } from '../../core/rng';
 import { tip } from '../../core/tip';
-import { floor } from '../../characters/brain';
-import { everyone } from '../../characters/cast';
+import { FIGHTER, floor, relocate, type DirIndex } from '../../characters/brain';
+import { createCast, everyone, type Member } from '../../characters/cast';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
 import { isWater, POOL, SHELF } from '../004-octopus';
-import { buildFighter, PRINZ, SONNY, type FighterRig } from './model';
+import { buildFighter, buildFighterRig, PRINZ, SONNY, type FighterRig } from './model';
 
 /**
- * Two rival fighters, Sonny and Prinz, who now and then drop out of the sky to pick a
- * fight with Gåmson. Not often: the first time after a few minutes, then every five to
- * seven, and only when the cube is close enough to see it.
+ * Two rival fighters, Sonny and Prinz. Most of the time they just live here: they wander
+ * about, wave at people, and now and then run into each other (a glare, nothing more),
+ * spar with a soldier, or trade looks with the leader. Very rarely, they fly off to the
+ * pool and pick a fight with Gåmson: the first time after seven minutes or so, then
+ * every ten to fifteen, and only when the cube is close enough to see it.
  *
  * A fight is a little show: they land, trade insults and power up; Gåmson rises from
  * the pool, furious; then a run of moves in a different order every time (teleport
@@ -68,8 +70,9 @@ interface OctopusAPI {
   calm?: () => boolean;
 }
 
-const FIRST_FIGHT = 150;
-const NEXT_FIGHT = [300, 420] as const;
+/** Rare: the first fight after seven minutes or so, then one every ten to fifteen. */
+const FIRST_FIGHT = 420;
+const NEXT_FIGHT = [600, 900] as const;
 /** The cube has to be this close (in cells) to the pool for a fight to start. */
 const WITNESS = 26;
 const G = new THREE.Vector3(POOL.x, 0.7, POOL.z);
@@ -85,6 +88,48 @@ export const rivals: Feature = {
   },
   setup(ctx) {
     const rand = seededRandom(ctx.seed ^ 0x6ff);
+    // Day to day: two ordinary residents who wander about between the park and the pool.
+    const residents = createCast(ctx, {
+      key: 'fighters', persona: FIGHTER, variants: [SONNY, PRINZ], build: buildFighterRig, count: 2, seedSalt: 0x5a1,
+      home: { x: POOL.x - 6, z: POOL.z - 8 },
+      bow: ['#f6a8c4', '#ee6fa4'],
+    });
+    const resident = (name: string): Member | undefined => residents.members.find((m) => m.rig.identity.trim === (name === 'Sonny' ? SONNY.top : PRINZ.top));
+    /** Off to the fight: up into the sky from wherever they are, and out of the way meanwhile. */
+    const away = new Set<Member>();
+    const goAway = (m: Member, i: number) => {
+      const from = new THREE.Vector3(m.n.x, 0.5, m.n.z);
+      streak(i, from, from.clone().add(new THREE.Vector3(0, 14, -4)));
+      dust(m.n.x, m.n.z, 0.9, i ? PRINZ.aura : SONNY.aura);
+      // Halfway through a step: finish it on the spot first.
+      if (m.n.nx !== null && m.n.nz !== null) {
+        ctx.grid.release(m.n.x, m.n.z, m.n.occ);
+        Object.assign(m.n, { x: m.n.nx, z: m.n.nz, nx: null, nz: null, p: 0 });
+      }
+      m.n.mode = 'idle';
+      for (let k = 0; k < 40; k++) {
+        if (relocate(m.n, m.world, -60 + i * 3, -200 - k)) break;
+      }
+      m.rig.root.visible = false;
+      m.world.staged = true;
+      away.add(m);
+    };
+    /** Back from the fight: down where they left the fight, and on with their day. */
+    const comeBack = (m: Member, at: THREE.Vector3) => {
+      for (let r = 0; r < 6 && away.has(m); r++) {
+        for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r]]) {
+          if (isWater(Math.round(at.x) + dx, Math.round(at.z) + dz)) continue;
+          m.n.mode = 'idle';
+          if (relocate(m.n, m.world, Math.round(at.x) + dx, Math.round(at.z) + dz)) {
+            away.delete(m);
+            break;
+          }
+        }
+      }
+      m.rig.root.visible = true;
+      m.world.staged = false;
+      Object.assign(m.n, { timer: 2, emote: { kind: 'sparkle', t: 0 } });
+    };
     const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
     const makeFighter = (look: typeof SONNY, shore: THREE.Vector3, air: THREE.Vector3, close: THREE.Vector3): Fighter => {
       const rig = buildFighter(look);
@@ -522,6 +567,7 @@ export const rivals: Feature = {
       if (state.fighting) return;
       const o = octopus();
       if (o) o.busy = true;
+      [resident('Sonny'), resident('Prinz')].forEach((m, i) => m && goAway(m, i));
       state.fighting = true;
       state.fights += 1;
       state.cubeHits = 0;
@@ -560,6 +606,10 @@ export const rivals: Feature = {
       });
       const o = octopus();
       if (o) o.busy = false;
+      const s = resident('Sonny');
+      const p = resident('Prinz');
+      if (s) comeBack(s, sonny.shore);
+      if (p) comeBack(p, prinz.shore);
       state.nextIn = NEXT_FIGHT[0] + rand() * (NEXT_FIGHT[1] - NEXT_FIGHT[0]);
       ctx.events.emit('rivals:ended');
     };
@@ -650,8 +700,64 @@ export const rivals: Feature = {
       return p;
     };
 
+    // ---- Rare encounters, on an ordinary day ------------------------------------------------
+    let sinceLook = 0;
+    let lastStandoff = -99;
+    let clock = 0;
+    const faceEach = (a: Member['n'], b: { x: number; z: number }) => {
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      a.dir = (Math.abs(dx) >= Math.abs(dz) ? (dx >= 0 ? 0 : 2) : dz >= 0 ? 1 : 3) as DirIndex;
+    };
+    const free = (n: Member['n']) => n.nx === null && ['idle', 'walk'].includes(n.mode) && !n.cult;
+    const encounters = () => {
+      const s = resident('Sonny');
+      const p = resident('Prinz');
+      if (!s || !p || away.size) return;
+      const d = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z));
+      // The two of them, face to face: a glare, an angry mark each, and they walk on.
+      if (d(s.n, p.n) <= 2 && free(s.n) && free(p.n) && clock - lastStandoff > 90 && rand() < 0.5) {
+        lastStandoff = clock;
+        faceEach(s.n, p.n);
+        faceEach(p.n, s.n);
+        for (const m of [s, p]) Object.assign(m.n, { mode: 'stare', t: 0, timer: 2.2, focus: null, emote: { kind: 'anger', t: 0 } });
+        if (cubeNear(14)) tip('Sonny and Prinz just glared at each other. Not today.');
+        return;
+      }
+      for (const m of everyone(ctx)) {
+        if (m === s || m === p || !free(m.n)) continue;
+        const kind = m.n.persona.kind;
+        // Sonny spars with a soldier, who salutes him for it.
+        if (kind === 'soldier' && d(m.n, s.n) <= 2 && free(s.n) && rand() < 0.04) {
+          faceEach(s.n, m.n);
+          Object.assign(s.n, { emote: { kind: 'note', t: 0 } });
+          m.n.order = 'salute';
+          return;
+        }
+        // Prinz and the leader: neither has anything nice to say.
+        if (kind === 'leader' && d(m.n, p.n) <= 3 && free(p.n) && rand() < 0.05) {
+          faceEach(p.n, m.n);
+          p.n.order = 'fume';
+          m.n.order = 'fume';
+          if (cubeNear(14)) tip('Prinz and the leader have nothing nice to say to each other.');
+          return;
+        }
+        // A goth, very occasionally, quite taken with Prinz.
+        if (kind === 'goth' && d(m.n, p.n) <= 2 && rand() < 0.03) {
+          faceEach(m.n, p.n);
+          m.n.emote = { kind: 'heart', t: 0 };
+          return;
+        }
+      }
+    };
+
     // ---- Every frame -----------------------------------------------------------------------
     ctx.onUpdate((dt, time) => {
+      clock += dt;
+      if (!state.fighting && (sinceLook += dt) > 1) {
+        sinceLook = 0;
+        encounters();
+      }
       // Now and then, a fight. Not when the octopus is busy elsewhere, and not unseen.
       if (!state.fighting && !state.staged) {
         state.nextIn -= dt;

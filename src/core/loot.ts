@@ -11,7 +11,7 @@ export interface Stealable {
   /** What to call it, as in "The octopus took the flag." */
   name: string;
   /** What it looks like in someone else's hands. */
-  token: 'flag' | 'balloon' | 'charm' | 'bow' | 'boot' | 'sock' | 'cap' | 'medal' | 'battery';
+  token: 'flag' | 'balloon' | 'charm' | 'bow' | 'boot' | 'sock' | 'cap' | 'medal' | 'battery' | 'band';
   /** Where it is right now, or null if it is not there to take. */
   where(): { x: number; z: number } | null;
   take(): void;

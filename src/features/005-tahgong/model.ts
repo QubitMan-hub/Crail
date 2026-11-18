@@ -97,8 +97,10 @@ export function buildSquid(): SquidRig {
   };
   const arms: THREE.Group[][] = [];
   for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    const base = group(body, Math.sin(a) * 0.2, 0.1, Math.cos(a) * 0.2);
+    // Round the back and sides only: the front is kept clear for the two long tentacles,
+    // so nothing grows out of the same spot.
+    const a = Math.PI / 3 + (i / 7) * ((4 * Math.PI) / 3);
+    const base = group(body, Math.sin(a) * 0.21, 0.1, Math.cos(a) * 0.21);
     base.rotation.y = a;
     arms.push(limb(base, [[0.16, 0.24], [0.13, 0.22], [0.1, 0.18]]));
   }

@@ -84,6 +84,7 @@ const POCKETS: Record<string, [Stealable['token'], string]> = {
   femboy: ['sock', 'a femboy’s sock'],
   soldier: ['cap', 'a soldier’s cap'],
   leader: ['medal', 'the leader’s medal'],
+  fighter: ['band', 'a fighter’s wristband'],
 };
 
 type Mode = 'lurk' | 'hunt' | 'snatch' | 'haul' | 'stash' | 'flee';

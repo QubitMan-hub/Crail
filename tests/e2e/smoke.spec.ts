@@ -68,7 +68,7 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong', '005-picachu', '006-rivals']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong', '005-picachu', '006-rivals', '006-secrets']);
   await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
@@ -96,7 +96,7 @@ const clearStage = async (page: import('@playwright/test').Page) => {
   await direct(page, 'tahgong.staged', true);
   await direct(page, 'picachu.staged', true);
   await direct(page, 'rivals.staged', true);
-  for (const cast of ['goths', 'femboys', 'soldiers', 'leader']) {
+  for (const cast of ['goths', 'femboys', 'soldiers', 'leader', 'fighters']) {
     await direct(page, `${cast}.staged`, true);
     await direct(page, `${cast}.clear`);
   }
@@ -960,4 +960,44 @@ test('bump a fighter twice and they bow out early, impressed, and the cube earns
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
   await page.waitForFunction(() => ['bow', 'leave', ''].includes((window as any).__crail.state.rivals.beat), null, { timeout: 30_000 });
   await expect(page.locator('#hint')).toContainText('impressed');
+});
+
+test('Sonny and Prinz live here: they wander, leave for a fight, and come back after it', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, '?seed=3');
+  const who = () => page.evaluate(() =>
+    (window as any).__crail.state.everyone.filter((m: any) => m.n.persona.kind === 'fighter').map((m: any) => ({ visible: m.rig.root.visible, x: m.n.x, z: m.n.z })),
+  );
+  const before = await who();
+  expect(before).toHaveLength(2);
+  expect(before.every((f: any) => f.visible)).toBe(true);
+  await direct(page, 'rivals.staged', true);
+  await direct(page, 'rivals.fight', 4);
+  // Off to the fight: gone from where they were.
+  expect((await who()).every((f: any) => !f.visible)).toBe(true);
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.fights === 1 && !(window as any).__crail.state.rivals.fighting, null, { timeout: 200_000 });
+  // Back, by the pool where the fight was.
+  const after = await who();
+  expect(after.every((f: any) => f.visible && Math.abs(f.z - 16) < 6)).toBe(true);
+});
+
+test('an easter egg: the golden cube', async ({ page }) => {
+  await open(page, '?seed=3');
+  await clearStage(page);
+  for (const k of ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight']) await page.keyboard.press(k);
+  expect(await page.evaluate(() => (window as any).__crail.state.secrets.goldens)).toBe(1);
+  await expect(page.locator('#hint')).toContainText('golden cube');
+  // And it is a secret: not in the credits.
+  await expect(page.locator('#credits')).not.toContainText('Easter');
+});
+
+test('an easter egg: sit still in Gåmson’s shallows and he waves', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  const { den } = await page.evaluate(() => (window as any).__crail.state.octopus);
+  await direct(page, 'cube.teleport', den.x - 3, den.z + 3);
+  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 2));
+  await page.waitForFunction(() => (window as any).__crail.state.secrets.waved === true, null, { timeout: 200_000 });
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
 });

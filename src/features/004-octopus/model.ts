@@ -112,6 +112,10 @@ export function buildToken(kind: Stealable['token']): THREE.Group {
       box(g, '#c8452f', 0.3, 0.05, 0.3, 0, 0.07, 0);
       box(g, INK, 0.24, 0.03, 0.12, 0, 0.05, 0.2);
       break;
+    case 'band':
+      box(g, '#2f6fd6', 0.22, 0.1, 0.22, 0, 0.12, 0);
+      box(g, '#1f4fa6', 0.12, 0.11, 0.12, 0, 0.12, 0);
+      break;
     case 'battery':
       box(g, '#2b2a2e', 0.2, 0.3, 0.2, 0, 0.17, 0);
       box(g, '#f6c445', 0.21, 0.12, 0.21, 0, 0.26, 0);

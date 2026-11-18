@@ -1,3 +1,4 @@
+import { stepToward } from '../core/path';
 import type { Grid, Occupant } from '../core/grid';
 
 /**
@@ -75,6 +76,12 @@ export const LEADER: Persona = {
   kind: 'leader', blocked: 'inspect', bonk: 'summon', caught: 'deny', sits: false, greets: false,
   followChance: 0, twirls: false, bounce: 0.6, restLids: 0.4,
   speed: 0.95, stride: 0.8, snappy: false, wanders: true, builds: true, rest: 'handsBehind',
+};
+/** Sonny and Prinz on an ordinary day: quick on their feet, friendly enough, too cool to be bumped. */
+export const FIGHTER: Persona = {
+  kind: 'fighter', blocked: 'stare', bonk: 'reject', caught: 'deny', sits: false, greets: true,
+  followChance: 0.04, twirls: false, bounce: 1.3, restLids: 0.15,
+  speed: 1.6, stride: 1.3, snappy: true, wanders: true, builds: false, rest: 'plain',
 };
 export const SOLDIER: Persona = {
   kind: 'soldier', blocked: 'stare', bonk: 'salute', caught: 'deny', sits: false, greets: false,
@@ -164,6 +171,9 @@ export interface Npc {
   drafted: boolean;
   /** Caught by a blast in the middle of a step: goes down on arriving. */
   knocked: boolean;
+  /** Movement left over from finishing a step this tick, carried into the next one. */
+  spare: number;
+  spareAt: number;
   /** A cell just stepped out of while going round something, so they do not step straight back. */
   avoid: { x: number; z: number; steps: number } | null;
   /** A guard's post: where to stand and which way to face. Guards do not follow the column. */
@@ -219,7 +229,7 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
+    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, spare: 0, spareAt: -1, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
     variant, x, z, home: { x, z }, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -243,6 +253,9 @@ function say(n: Npc, kind: EmoteKind): void {
 function turn(n: Npc, d: DirIndex): boolean {
   if (n.dir === d) return false;
   n.dir = d;
+  // Already on the move (a step just ended): round the corner without stopping; the
+  // body turns smoothly as they go. From standing, a short beat to turn first.
+  if (n.spareAt === n.t) return false;
   n.wait = n.persona.snappy ? 0.05 : TURN_WAIT;
   return true;
 }
@@ -277,7 +290,8 @@ function step(n: Npc, w: World, d: DirIndex): StepResult {
   w.grid.claim(tx, tz, n.occ);
   n.nx = tx;
   n.nz = tz;
-  n.p = 0;
+  // Carry on at the same pace: whatever was left over from the last step counts.
+  n.p = n.spareAt === n.t ? n.spare : 0;
   return 'ok';
 }
 
@@ -487,11 +501,18 @@ function approach(n: Npc, w: World, to: { x: number; z: number }): void {
   };
   let d = ways.find(open);
   if (d === undefined) {
-    // Every direct way is taken. Step round it: whichever free cell is nearest the target,
-    // and remember where we came from so the next step does not undo this one.
-    const after = (way: DirIndex) => Math.abs(to.x - n.x - DIRS[way][0]) + Math.abs(to.z - n.z - DIRS[way][1]);
-    d = ([0, 1, 2, 3] as DirIndex[]).filter(open).sort((p, q) => after(p) - after(q))[0];
-    if (d === undefined) return;
+    // Every direct way is taken: find a real way round (a short search of the cells
+    // nearby), instead of shuffling back and forth in front of the obstacle.
+    const route = stepToward(w.grid, n.occ, n, to, { onto: true, maxSearch: 700, margin: 4 });
+    const routed = route ? (([0, 1, 2, 3] as DirIndex[]).find((k) => n.x + DIRS[k][0] === route[0] && n.z + DIRS[k][1] === route[1]) ?? undefined) : undefined;
+    if (routed !== undefined && open(routed)) d = routed;
+    else {
+      // No route either: step to whichever free cell is nearest, and remember where we came
+      // from so the next step does not undo this one.
+      const after = (way: DirIndex) => Math.abs(to.x - n.x - DIRS[way][0]) + Math.abs(to.z - n.z - DIRS[way][1]);
+      d = ([0, 1, 2, 3] as DirIndex[]).filter(open).sort((p, q) => after(p) - after(q))[0];
+      if (d === undefined) return;
+    }
     n.avoid = { x: n.x, z: n.z, steps: 4 };
   } else if (n.avoid && --n.avoid.steps <= 0) n.avoid = null;
   if (turn(n, d)) return;
@@ -837,6 +858,8 @@ export function tick(n: Npc, w: World, dt: number): void {
     n.x = n.nx;
     n.z = n.nz;
     n.nx = n.nz = null;
+    n.spare = Math.min(0.6, n.p - 1);
+    n.spareAt = n.t;
     n.p = 0;
   }
   if (n.knocked) {

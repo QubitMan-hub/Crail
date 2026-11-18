@@ -10,6 +10,9 @@ export interface Motion {
   phase: number;
   /** Smoothed pose values, eased toward the target for the current mode. */
   pose: Pose;
+  /** Where they are drawn on the floor: eased after where they really are, so corners round off. */
+  sx: number;
+  sz: number;
 }
 
 interface Pose {
@@ -30,7 +33,7 @@ const CROSSED = { armLx: -0.95, armLz: -0.75, armRx: -0.8, armRz: 0.75 };
 const SEAT_Y = 1 - (HIP - 0.1) * SCALE;
 const SEATED_LEGS = -1.45;
 
-export const newMotion = (n: Npc): Motion => ({ yaw: dirYaw(n.dir), yawVel: 0, phase: 0, pose: { ...REST } });
+export const newMotion = (n: Npc): Motion => ({ yaw: dirYaw(n.dir), yawVel: 0, phase: 0, pose: { ...REST }, sx: n.x, sz: n.z });
 
 const dirYaw = (d: number) => Math.atan2(DIRS[d][0], DIRS[d][1]);
 const smooth = (x: number) => { const c = Math.min(1, Math.max(0, x)); return c * c * (3 - 2 * c); };
@@ -395,7 +398,18 @@ export function animate(rig: Rig, n: Npc, w: World, m: Motion, time: number, dt:
   // Rising from the floor: legs fold back under her in step with the lift.
   if (n.mode === 'rise') p.legL = p.legR = SEATED_LEGS * (1 - smooth(n.t / 0.4));
 
-  rig.root.position.set(px, py, pz);
+  // Walking about, the drawn position glides after the real one: smooth starts and stops,
+  // rounded corners. Seats and rides need exact spots, and a teleport snaps straight there.
+  const exact = n.carry || ['hop', 'sit', 'hang', 'plop', 'rise', 'hopOff', 'toSit', 'riding'].includes(n.mode);
+  if (exact || Math.hypot(px - m.sx, pz - m.sz) > 1.5) {
+    m.sx = px;
+    m.sz = pz;
+  } else {
+    const k = 1 - Math.exp(-14 * dt);
+    m.sx += (px - m.sx) * k;
+    m.sz += (pz - m.sz) * k;
+  }
+  rig.root.position.set(m.sx, py, m.sz);
   const spin = n.mode === 'twirl' ? smooth(n.t / 0.85) * Math.PI * 2 : 0;
   rig.root.rotation.y = m.yaw + spin;
   rig.body.position.y = p.y;

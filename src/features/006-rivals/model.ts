@@ -1,11 +1,17 @@
 import * as THREE from 'three';
-import { box, fuse, fuseOwn, group, SCALE } from '../../characters/rig';
+import { bake, box, buildFace, fuseOwn, group, HIP, SCALE, type Rig } from '../../characters/rig';
 
 /**
  * Two original rival fighters (an homage to a certain kind of anime, not copies of
- * anyone's characters). Sonny: cheerful, red training clothes, wild black spikes.
- * Prinz: proud, a purple suit with a gold chest plate, tall swept-back flame hair.
- * Both power up: an aura flares round them and their hair glows gold.
+ * anyone's characters).
+ *
+ * Sonny: cheerful. A red wrap-over training top with cream trim, a knotted belt, red
+ * trousers, blue wristbands, and a big fan of chunky black spikes with a fringe.
+ * Prinz: proud. A purple suit under a gold chest plate with shoulder guards, white
+ * gloves and boots, and tall hair swept up and back like a flame, with a sharp peak.
+ *
+ * Day to day they wander about like anyone else. Only in a fight do they power up:
+ * an aura round them, and their hair glowing gold.
  */
 
 export interface FighterLook {
@@ -17,11 +23,131 @@ export interface FighterLook {
   skin: string;
   hair: 'wild' | 'flame';
   aura: string;
+  band: string;
 }
 
-export const SONNY: FighterLook = { name: 'Sonny', top: '#d8432f', trim: '#f6f1e6', legs: '#d8432f', boots: '#2b2a2e', skin: '#f2d2b6', hair: 'wild', aura: '#ffd84a' };
-export const PRINZ: FighterLook = { name: 'Prinz', top: '#5b3f8c', trim: '#e8c75a', legs: '#5b3f8c', boots: '#f6f1e6', skin: '#ecc9aa', hair: 'flame', aura: '#7fd8ff' };
+export const SONNY: FighterLook = { name: 'Sonny', top: '#d8432f', trim: '#f6efe2', legs: '#c23a28', boots: '#2b2a2e', skin: '#f2d2b6', hair: 'wild', aura: '#ffd84a', band: '#2f6fd6' };
+export const PRINZ: FighterLook = { name: 'Prinz', top: '#4f3a86', trim: '#e2bf52', legs: '#4f3a86', boots: '#f6f1e6', skin: '#ecc9aa', hair: 'flame', aura: '#7fd8ff', band: '#f6f1e6' };
 
+const INK = '#1d1b19';
+const HAIR = '#1d1b19';
+
+/**
+ * The hair, in blocks. Each spike is a little stack of boxes that shrink toward the tip,
+ * so it reads as one solid tuft rather than loose sticks.
+ */
+function addHair(head: THREE.Group, look: FighterLook, mat: THREE.Material, top: number): THREE.Group {
+  const hair = group(head, 0, top, 0);
+  const block = (parent: THREE.Object3D, w: number, h: number, d: number, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    parent.add(m);
+  };
+  /** A tuft: `levels` shrinking blocks, tilted by (rx, rz), rooted at (x, y, z). */
+  const tuft = (x: number, y: number, z: number, rx: number, rz: number, w: number, len: number, levels = 3) => {
+    const g = group(hair, x, y, z);
+    g.rotation.set(rx, 0, rz);
+    for (let i = 0; i < levels; i++) {
+      const k = 1 - i / levels;
+      block(g, w * k, len / levels + 0.02, w * k, 0, (i + 0.5) * (len / levels), 0);
+    }
+  };
+  // A cap over the top and the back of the head, so no scalp ever shows.
+  block(hair, 0.48, 0.12, 0.46, 0, 0, -0.01);
+  block(hair, 0.46, 0.3, 0.12, 0, -0.12, -0.18);
+  if (look.hair === 'wild') {
+    // A fan of big spikes, the middle tallest, the outer ones leaning right out.
+    tuft(0, 0.04, -0.04, -0.15, 0, 0.2, 0.42);
+    for (const s of [1, -1]) {
+      tuft(s * 0.13, 0.03, -0.04, -0.1, s * -0.45, 0.18, 0.36);
+      tuft(s * 0.22, -0.02, -0.02, 0, s * -1.0, 0.16, 0.3);
+      tuft(s * 0.2, -0.12, -0.08, 0.2, s * -1.5, 0.13, 0.22); // sideburn flicks
+    }
+    // Two more at the back, leaning back.
+    for (const s of [1, -1]) tuft(s * 0.08, 0, -0.16, -0.7, s * -0.3, 0.17, 0.32);
+    // The fringe: three short spikes falling over the forehead.
+    for (const [x, rz] of [[-0.11, 0.25], [0, 0], [0.11, -0.25]] as const) tuft(x, -0.02, 0.17, 2.55, rz, 0.12, 0.14, 2);
+  } else {
+    // A tall flame: a tapering tower, swept back, with smaller flames either side.
+    tuft(0, 0.04, -0.03, -0.32, 0, 0.36, 0.6, 5);
+    for (const s of [1, -1]) tuft(s * 0.14, 0.02, -0.03, -0.38, s * -0.32, 0.2, 0.42, 4);
+    // The peak: a sharp point down the middle of the forehead.
+    block(hair, 0.16, 0.06, 0.04, 0, -0.05, 0.22);
+    block(hair, 0.08, 0.06, 0.04, 0, -0.1, 0.22);
+    // Close at the sides.
+    for (const s of [1, -1]) block(hair, 0.05, 0.2, 0.3, s * 0.235, -0.12, -0.02);
+  }
+  return hair;
+}
+
+/** The outfit on a torso group. Shared by the walking-about body and the fighting one. */
+function dressTorso(torso: THREE.Group, look: FighterLook): void {
+  box(torso, look.top, 0.5, 0.62, 0.3, 0, 0.31, 0);
+  if (look.name === 'Sonny') {
+    // A wrap-over top: cream lapels crossing into a V, and a knotted belt with tails.
+    box(torso, look.trim, 0.07, 0.42, 0.02, -0.06, 0.38, 0.156).rotation.z = -0.5;
+    box(torso, look.trim, 0.07, 0.42, 0.02, 0.06, 0.38, 0.157).rotation.z = 0.5;
+    box(torso, look.skin, 0.12, 0.12, 0.02, 0, 0.55, 0.152);
+    box(torso, look.band, 0.53, 0.07, 0.32, 0, 0.05, 0);
+    box(torso, look.band, 0.06, 0.16, 0.03, 0.1, -0.05, 0.16);
+    box(torso, look.band, 0.06, 0.13, 0.03, 0.17, -0.04, 0.16);
+  } else {
+    // A gold chest plate, shoulder guards, a dark belt.
+    box(torso, look.trim, 0.54, 0.34, 0.34, 0, 0.44, 0);
+    box(torso, '#c9a43c', 0.4, 0.04, 0.35, 0, 0.3, 0);
+    for (const s of [1, -1]) box(torso, look.trim, 0.2, 0.08, 0.34, s * 0.27, 0.62, 0);
+    box(torso, '#2b2a2e', 0.52, 0.06, 0.32, 0, 0.05, 0);
+  }
+  box(torso, look.skin, 0.18, 0.08, 0.18, 0, 0.64, 0); // neck
+}
+
+/** The face, with brows that can frown. Sonny grins; Prinz looks down his nose. */
+function face(head: THREE.Group, look: FighterLook) {
+  return buildFace(head, {
+    white: '#fbf7ef', pupil: INK, lid: look.name === 'Prinz' ? '#c49a80' : '#d9a98e',
+    brow: HAIR, mouth: look.name === 'Prinz' ? '#9c5a4a' : '#b9553f', mouthWidth: look.name === 'Prinz' ? 0.07 : 0.11,
+  });
+}
+
+/** The everyday body: built like everyone else's, so it walks, bumps and gets knocked over the same way. */
+export function buildFighterRig(look: FighterLook, emote: THREE.Sprite): Rig {
+  const root = new THREE.Group();
+  root.scale.setScalar(SCALE);
+  const body = group(root);
+  const torso = group(body, 0, HIP, 0);
+  dressTorso(torso, look);
+  const limbs = (side: 1 | -1) => {
+    const leg = group(body, side * 0.12, HIP, 0);
+    box(leg, look.legs, 0.21, 0.5, 0.22, 0, -0.25, 0);
+    box(leg, look.boots, 0.23, 0.22, 0.3, 0, -0.64, 0.03);
+    box(leg, look.name === 'Prinz' ? look.trim : look.band, 0.24, 0.04, 0.24, 0, -0.52, 0);
+    const arm = group(torso, side * 0.32, 0.56, 0);
+    box(arm, look.name === 'Prinz' ? look.top : look.skin, 0.15, 0.5, 0.16, 0, -0.22, 0);
+    box(arm, look.name === 'Prinz' ? '#f6f1e6' : look.skin, 0.15, 0.12, 0.15, 0, -0.52, 0);
+    return { leg, arm };
+  };
+  const L = limbs(1);
+  const R = limbs(-1);
+  // The wristband (or glove cuff) on the left arm: its own piece, so it can be stolen.
+  const band = group(L.arm);
+  band.name = 'band';
+  box(band, look.band, 0.17, 0.08, 0.18, 0, -0.42, 0);
+  const head = group(torso, 0, 0.68, 0);
+  box(head, look.skin, 0.44, 0.44, 0.42, 0, 0.22, 0);
+  box(head, look.skin, 0.06, 0.1, 0.08, 0.23, 0.2, 0); // ears
+  box(head, look.skin, 0.06, 0.1, 0.08, -0.23, 0.2, 0);
+  const f = face(head, look);
+  addHair(head, look, new THREE.MeshStandardMaterial({ color: HAIR, roughness: 0.7 }), 0.44);
+  emote.position.set(0, 2.7, 0);
+  root.add(emote);
+  return bake({
+    root, body, torso, head, armL: L.arm, armR: R.arm, legL: L.leg, legR: R.leg, ...f, sway: [], hang: [], emote,
+    stride: 1.2, headTop: 0.95, identity: { kind: 'fighter', trim: look.top, hair: HAIR }, loot: { item: band },
+  });
+}
+
+/** The fighting body: two joints in every limb for punches and kicks, an aura, a beam. */
 export interface FighterRig {
   root: THREE.Group;
   body: THREE.Group;
@@ -37,14 +163,11 @@ export interface FighterRig {
   brows: THREE.Mesh[];
 }
 
-const INK = '#1d1b19';
-
 export function buildFighter(look: FighterLook): FighterRig {
   const root = new THREE.Group();
   root.scale.setScalar(SCALE);
   const body = group(root);
   const hipY = 0.78;
-
   const legs = [1, -1].map((s) => {
     const upper = group(body, s * 0.12, hipY, 0);
     box(upper, look.legs, 0.21, 0.4, 0.22, 0, -0.2, 0);
@@ -52,74 +175,32 @@ export function buildFighter(look: FighterLook): FighterRig {
     const lower = group(upper, 0, -0.38, 0);
     box(lower, look.legs, 0.19, 0.22, 0.2, 0, -0.1, 0);
     box(lower, look.boots, 0.23, 0.2, 0.3, 0, -0.3, 0.03);
-    box(lower, look.trim, 0.24, 0.04, 0.24, 0, -0.18, 0);
+    box(lower, look.name === 'Prinz' ? look.trim : look.band, 0.24, 0.04, 0.24, 0, -0.18, 0);
     fuseOwn(lower);
     return { upper, lower };
   });
-
   const torso = group(body, 0, hipY, 0);
-  box(torso, look.top, 0.5, 0.62, 0.3, 0, 0.31, 0);
-  box(torso, look.trim, 0.52, 0.08, 0.32, 0, 0.04, 0); // belt
-  if (look.name === 'Prinz') {
-    // A gold chest plate with shoulder pads.
-    box(torso, look.trim, 0.54, 0.34, 0.34, 0, 0.44, 0);
-    for (const s of [1, -1]) box(torso, look.trim, 0.18, 0.08, 0.32, s * 0.26, 0.62, 0);
-  } else {
-    // A wrap-over training top, and a little circle badge.
-    box(torso, look.trim, 0.06, 0.4, 0.02, -0.06, 0.38, 0.156).rotation.z = -0.5;
-    box(torso, '#f6c445', 0.1, 0.1, 0.02, 0.13, 0.46, 0.158);
-  }
-  box(torso, look.skin, 0.18, 0.08, 0.18, 0, 0.64, 0); // neck
+  dressTorso(torso, look);
   fuseOwn(torso);
-
   const arms = [1, -1].map((s) => {
     const upper = group(torso, s * 0.32, 0.56, 0);
     box(upper, look.name === 'Prinz' ? look.top : look.skin, 0.15, 0.32, 0.16, 0, -0.14, 0);
     fuseOwn(upper);
     const fore = group(upper, 0, -0.3, 0);
-    box(fore, look.skin, 0.13, 0.22, 0.14, 0, -0.1, 0);
-    box(fore, look.name === 'Prinz' ? '#f6f1e6' : '#2b6fd6', 0.15, 0.08, 0.16, 0, -0.02, 0); // gloves / wristbands
-    box(fore, look.name === 'Prinz' ? '#f6f1e6' : look.skin, 0.15, 0.12, 0.15, 0, -0.24, 0); // fist
+    box(fore, look.name === 'Prinz' ? look.top : look.skin, 0.13, 0.22, 0.14, 0, -0.1, 0);
+    box(fore, look.band, 0.16, 0.08, 0.17, 0, -0.04, 0);
+    box(fore, look.name === 'Prinz' ? '#f6f1e6' : look.skin, 0.15, 0.12, 0.15, 0, -0.24, 0);
     fuseOwn(fore);
     return { upper, fore };
   });
-
   const head = group(torso, 0, 0.68, 0);
   box(head, look.skin, 0.44, 0.44, 0.42, 0, 0.22, 0);
-  box(head, INK, 0.09, 0.05, 0.02, -0.1, 0.24, 0.211);
-  box(head, INK, 0.09, 0.05, 0.02, 0.1, 0.24, 0.211);
-  box(head, '#b9553f', 0.1, 0.025, 0.02, 0, 0.1, 0.211);
-  fuseOwn(head);
-  // Brows: determined, and they angle when shouting.
-  const brows = [-1, 1].map((s) => {
-    const b = box(head, INK, 0.13, 0.04, 0.02, s * 0.1, 0.31, 0.215);
-    b.rotation.z = s * 0.35;
-    return b;
-  });
-  // The hair: its own material, so it can glow gold when they power up.
-  const hairMat = new THREE.MeshStandardMaterial({ color: '#1d1b19', emissive: '#ffcc33', emissiveIntensity: 0, roughness: 0.7 });
-  const hair = group(head, 0, 0.44, 0);
-  const spike = (w: number, h: number, x: number, y: number, z: number, rz: number, rx = 0) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), hairMat);
-    m.position.set(x, y + h / 2, z);
-    m.rotation.set(rx, 0, rz);
-    m.castShadow = true;
-    hair.add(m);
-  };
-  if (look.hair === 'wild') {
-    // Spikes in every direction, a fringe over the forehead.
-    spike(0.46, 0.12, 0, -0.05, -0.02, 0);
-    for (const [x, rz, h] of [[-0.2, 0.8, 0.28], [-0.12, 0.4, 0.34], [0, 0, 0.36], [0.12, -0.4, 0.32], [0.2, -0.8, 0.26]] as const) spike(0.11, h, x, 0, -0.04, rz);
-    for (const [x, rz] of [[-0.14, 0.2], [0.14, -0.2], [0, 0]] as const) spike(0.1, 0.22, x, -0.02, -0.16, rz, -0.6);
-    for (const x of [-0.12, 0, 0.12]) spike(0.08, 0.12, x, -0.16, 0.2, 0, 2.6);
-  } else {
-    // Tall, swept back like a flame, with a sharp widow's peak.
-    spike(0.44, 0.1, 0, -0.06, -0.02, 0);
-    for (const [x, h] of [[-0.12, 0.42], [0, 0.52], [0.12, 0.42]] as const) spike(0.13, h, x, 0, -0.06, x * -0.6, -0.25);
-    spike(0.08, 0.14, 0, -0.14, 0.2, 0, 2.9);
-  }
-
-  // The aura: three soft, see-through shells, hidden until they power up.
+  box(head, look.skin, 0.06, 0.1, 0.08, 0.23, 0.2, 0);
+  box(head, look.skin, 0.06, 0.1, 0.08, -0.23, 0.2, 0);
+  const f = face(head, look);
+  // In a fight the hair can glow gold, so it gets a material of its own.
+  const hairMat = new THREE.MeshStandardMaterial({ color: HAIR, emissive: '#ffcc33', emissiveIntensity: 0, roughness: 0.7 });
+  addHair(head, look, hairMat, 0.44);
   const auraMat = new THREE.MeshBasicMaterial({ color: look.aura, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   const aura = group(root, 0, 0, 0);
   for (const [w, h, y] of [[1.2, 2.6, 1.15], [1.0, 2.3, 1.1], [1.4, 1.6, 0.85]] as const) {
@@ -128,16 +209,14 @@ export function buildFighter(look: FighterLook): FighterRig {
     shell.rotation.y = w;
     aura.add(shell);
   }
-  // The energy ball, between the hands, and the beam it becomes.
   const ball = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshBasicMaterial({ color: look.aura, transparent: true }));
   ball.position.set(0, 1.1, 0.45);
   ball.visible = false;
   root.add(ball);
   const beamGeo = new THREE.BoxGeometry(0.36, 0.36, 1);
-  beamGeo.translate(0, 0, 0.5); // grows forward from where it starts
+  beamGeo.translate(0, 0, 0.5);
   const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }));
   beam.visible = false;
   root.add(beam);
-  void fuse;
-  return { root, body, torso, head, arms, legs, hairMat, aura, auraMat, ball, beam, brows };
+  return { root, body, torso, head, arms, legs, hairMat, aura, auraMat, ball, beam, brows: f.brows };
 }

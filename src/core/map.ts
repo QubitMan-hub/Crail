@@ -26,6 +26,7 @@ const GROUPS: Record<string, { color: string; one: string; many: string }> = {
   femboy: { color: '#e0679c', one: 'Femboy', many: 'Femboys' },
   army: { color: '#5f6b3a', one: 'Soldier', many: 'Army' },
   cult: { color: RED, one: 'Your follower', many: 'Your cult' },
+  fighter: { color: '#c23a28', one: 'Fighter', many: 'Fighters' },
 };
 const groupOf = (n: Person): string => (n.cult ? 'cult' : n.persona.kind === 'leader' || n.persona.kind === 'soldier' ? 'army' : n.persona.kind);
 
