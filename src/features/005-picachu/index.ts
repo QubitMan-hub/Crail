@@ -14,7 +14,10 @@ import { isWater } from '../004-octopus';
 import { buildCritter } from './model';
 
 /**
- * Picachu: an off-brand electric critter that wanders round the park gate.
+ * Picachu: a very rare easter egg. An off-brand electric critter that is usually not
+ * there at all. There is a small chance it is about when the game starts, and every few
+ * minutes a small chance it wanders in somewhere near the cube, stays a while, then
+ * scampers off. While it is gone it is truly gone: hidden, off the map, nothing to steal.
  *
  * Its belly gauge fills up over time. When it is full, Picachu zaps whoever is nearest:
  * they sit down, dazed, hair on end. Zap one of the leader's men and the tank fires
@@ -35,6 +38,12 @@ const CHARGE_TIME = 16;
 const ZAP_REACH = 4;
 const BOOST_SECONDS = 6;
 const SURGE_SECONDS = 8;
+/** Rarity: the chance it is about at the start, and per check after that. */
+const START_CHANCE = 1 / 25;
+const CHECK_EVERY = 180;
+const VISIT_CHANCE = 1 / 8;
+/** How long a visit lasts before it scampers off. */
+const STAY = 90;
 
 type Mode = 'idle' | 'stalk' | 'zap';
 
@@ -42,8 +51,10 @@ export const picachu: Feature = {
   meta: {
     id: '005-picachu',
     day: 5,
-    title: 'Picachu (off-brand)',
-    credit: { username: 'ancientpro_gamer', text: 'Add picachu', method: 'top-comment' },
+    title: 'Picachu (off-brand), very rarely',
+    // The comment that asked for it was deleted, so it is credited to no one, and kept a secret.
+    credit: { username: '', text: 'a since-deleted comment', method: 'creator-pick' },
+    secret: true,
   },
   setup(ctx) {
     const rand = seededRandom(ctx.seed ^ 0x9c4);
@@ -87,23 +98,56 @@ export const picachu: Feature = {
       ctx.bump(0.06);
     };
 
-    const start = (() => {
-      for (let r = 0; r < 6; r++) {
+    /** A free, dry cell near a spot, searching outward. */
+    const findSpot = (cx: number, cz: number, from = 0): { x: number; z: number } | null => {
+      for (let r = from; r < from + 6; r++) {
         for (let dx = -r; dx <= r; dx++) {
           for (let dz = -r; dz <= r; dz++) {
-            if (!isWater(HOME.x + dx, HOME.z + dz) && ctx.grid.claim(HOME.x + dx, HOME.z + dz, occ)) return { x: HOME.x + dx, z: HOME.z + dz };
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+            if (!isWater(cx + dx, cz + dz) && ctx.grid.isFree(cx + dx, cz + dz)) return { x: cx + dx, z: cz + dz };
           }
         }
       }
-      return { ...HOME };
-    })();
+      return null;
+    };
     const state = {
-      x: start.x, z: start.z, nx: null as number | null, nz: null as number | null, p: 0,
+      x: HOME.x, z: HOME.z, nx: null as number | null, nz: null as number | null, p: 0,
       mode: 'idle' as Mode, t: 0, timer: 1.5,
       charge: 0.3, battery: true, zaps: 0, surges: 0, boosts: 0, staged: false,
+      /** Is it here at all? Usually not. */
+      present: false, visits: 0, home: { ...HOME },
     };
+    rig.root.visible = false;
     ctx.state.picachu = state;
-    const mark = addLandmark(ctx, { name: NAME, x: state.x, z: state.z, color: '#f4c534' });
+    const mark = addLandmark(ctx, { name: NAME, x: state.x, z: state.z, color: '#f4c534', hidden: true });
+    let stayed = 0;
+    let sinceCheck = 0;
+    /** It turns up: near a spot, on a free dry cell. */
+    const appear = (cx: number, cz: number, from = 0): boolean => {
+      if (state.present) return true;
+      const at = findSpot(cx, cz, from);
+      if (!at || !ctx.grid.claim(at.x, at.z, occ)) return false;
+      Object.assign(state, { x: at.x, z: at.z, nx: null, nz: null, p: 0, present: true, home: { ...at } });
+      state.visits += 1;
+      stayed = 0;
+      rig.root.visible = true;
+      setMode('idle', 1);
+      say('sparkle');
+      if (seen()) tip('Something small and electric is nearby…');
+      ctx.events.emit('picachu:appeared');
+      return true;
+    };
+    /** And goes again, battery and all (if it still has it). */
+    const leave = () => {
+      if (!state.present) return;
+      if (state.nx !== null) ctx.grid.release(state.nx, state.nz!, occ);
+      ctx.grid.release(state.x, state.z, occ);
+      Object.assign(state, { present: false, nx: null, nz: null });
+      target = null;
+      rig.root.visible = false;
+      bolt.clear();
+      mark.hidden = true;
+    };
     let target: Member | null = null;
     let facing = Math.PI / 4;
     let stuck = 0;
@@ -114,7 +158,7 @@ export const picachu: Feature = {
     // Its battery can be stolen like anything else. Without it, no charging.
     addStealable(ctx, {
       party: 'picachu', name: `${NAME}’s battery`, token: 'battery',
-      where: () => (state.battery ? { x: state.x, z: state.z } : null),
+      where: () => (state.present && state.battery ? { x: state.x, z: state.z } : null),
       take() {
         state.battery = false;
         state.charge = 0;
@@ -186,16 +230,38 @@ export const picachu: Feature = {
 
     // ---- Scripted control, for tests and video shots -----------------------------------
     ctx.events.on<[boolean]>('direct:picachu.staged', ([on]) => (state.staged = on));
+    ctx.events.on<[number?, number?]>('direct:picachu.appear', ([x, z]) => void appear(x ?? HOME.x, z ?? HOME.z));
+    ctx.events.on('direct:picachu.leave', leave);
     ctx.events.on<[number?]>('direct:picachu.charge', ([c]) => (state.charge = c ?? 1));
     ctx.events.on<[number, number]>('direct:picachu.teleport', ([x, z]) => {
+      if (!state.present) return void appear(x, z);
       if (state.nx !== null || !ctx.grid.claim(x, z, occ)) return;
       ctx.grid.release(state.x, state.z, occ);
-      Object.assign(state, { x, z });
+      Object.assign(state, { x, z, home: { x, z } });
     });
+    // Very rarely, it is already about when the game starts.
+    if (rand() < START_CHANCE) appear(HOME.x, HOME.z);
 
     // ---- Every frame -------------------------------------------------------------------
     ctx.onUpdate((dt, time) => {
       clock += dt;
+      // Every few minutes, a small chance it wanders in somewhere near the cube.
+      if (!state.present) {
+        if (state.staged) return;
+        sinceCheck += dt;
+        if (sinceCheck >= CHECK_EVERY) {
+          sinceCheck = 0;
+          const c = ctx.state.cube as { x: number; z: number } | undefined;
+          if (c && rand() < VISIT_CHANCE) appear(c.x + 7, c.z + 5, 0);
+        }
+        return;
+      }
+      stayed += dt;
+      // A visit only lasts so long (unless something scripted is keeping it).
+      if (!state.staged && stayed > STAY && state.mode === 'idle' && state.nx === null) {
+        if (seen()) tip(`${NAME} scampered off.`);
+        return leave();
+      }
       state.t += dt;
       if (state.nx !== null && state.nz !== null) {
         state.p += (state.battery ? SPEED : SPEED * 0.6) * dt;
@@ -233,7 +299,7 @@ export const picachu: Feature = {
           if ((state.timer -= dt) <= 0) {
             // A little wander round home, never into water.
             const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(
-              ([dx, dz]) => Math.abs(state.x + dx - HOME.x) <= ROAM && Math.abs(state.z + dz - HOME.z) <= ROAM && dry(state.x + dx, state.z + dz),
+              ([dx, dz]) => Math.abs(state.x + dx - state.home.x) <= ROAM && Math.abs(state.z + dz - state.home.z) <= ROAM && dry(state.x + dx, state.z + dz),
             );
             const d = dirs[Math.floor(rand() * dirs.length)];
             if (d && ctx.grid.claim(state.x + d[0], state.z + d[1], occ)) {
@@ -302,7 +368,7 @@ export const picachu: Feature = {
       boltMat.opacity = boltAge < 0.28 ? 1 - boltAge / 0.28 : 0;
       emoteAge += dt;
       showSymbol(emote, emoteAge < 1.6 ? emoteKind : null, emoteAge, 1.6, 0.5);
-      Object.assign(mark, { x: state.x, z: state.z });
+      Object.assign(mark, { x: state.x, z: state.z, hidden: false });
     });
   },
 };

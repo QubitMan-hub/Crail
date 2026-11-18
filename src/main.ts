@@ -17,6 +17,7 @@ dayBtn.textContent = `Day ${day}`;
 // Credits: every feature, who asked for it, and their exact words.
 const credits = document.getElementById('credits')!;
 for (const f of [...features].reverse()) {
+  if (f.meta.secret) continue;
   const row = document.createElement('li');
   const head = document.createElement('b');
   head.textContent = `Day ${f.meta.day} · ${f.meta.title}`;
@@ -51,7 +52,6 @@ const HELP: [string, string, string][] = [
   ['003-supreme-leader', 'Danger', 'Once your cult has three members, his rockets aim at you: get out of the red ring. A hit costs a charm.'],
   ['004-octopus', 'Gåmson', 'The octopus. Steals from everyone. Roll into him to make him drop things. Bump the rock by his pool to give everything back.'],
   ['005-immortal-gamson', 'Immortal', 'Tank shells and rockets cannot hurt Gåmson any more. Only you can make him let go.'],
-  ['005-picachu', 'Picachu', 'Off-brand and electric. When its belly gauge is full it zaps someone nearby, or overcharges the park rides. Roll into it for a burst of speed.'],
   ['005-tahgong', 'Tåhgong', 'Gåmson’s squid friend. He is nice: while Gåmson is out, he takes things back off the rock to their owners. Bump into him for a hug, and now and then a charm.'],
 ];
 const helpBtn = document.getElementById('help-btn') as HTMLButtonElement;

@@ -15,6 +15,8 @@ export interface FeatureMeta {
   day: number;
   title: string;
   credit: FeatureCredit;
+  /** An easter egg: left out of the credits and the how-to-play card, for players to find. */
+  secret?: boolean;
 }
 
 export interface Feature {
