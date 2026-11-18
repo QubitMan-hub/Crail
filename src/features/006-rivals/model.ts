@@ -6,9 +6,9 @@ import { bake, box, buildFace, fuseOwn, group, HIP, SCALE, type Rig } from '../.
  * anyone's characters).
  *
  * Sonny: cheerful. A red wrap-over training top with cream trim, a knotted belt, red
- * trousers, blue wristbands, and a big fan of chunky black spikes with a fringe.
+ * trousers, blue wristbands, and short black hair with a side fringe.
  * Prinz: proud. A purple suit under a gold chest plate with shoulder guards, white
- * gloves and boots, and tall hair swept up and back like a flame, with a sharp peak.
+ * gloves and boots, and neat black hair combed back.
  *
  * Day to day they wander about like anyone else. Only in a fight do they power up:
  * an aura round them, and their hair glowing gold.
@@ -33,50 +33,31 @@ const INK = '#1d1b19';
 const HAIR = '#1d1b19';
 
 /**
- * The hair, in blocks. Each spike is a little stack of boxes that shrink toward the tip,
- * so it reads as one solid tuft rather than loose sticks.
+ * Simple hair: a neat short cut over the top, back and sides. Sonny's has a soft fringe
+ * falling to one side; Prinz's is combed back, a little taller on top.
  */
 function addHair(head: THREE.Group, look: FighterLook, mat: THREE.Material, top: number): THREE.Group {
   const hair = group(head, 0, top, 0);
-  const block = (parent: THREE.Object3D, w: number, h: number, d: number, x: number, y: number, z: number) => {
+  const block = (w: number, h: number, d: number, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
     m.castShadow = true;
-    parent.add(m);
+    hair.add(m);
   };
-  /** A tuft: `levels` shrinking blocks, tilted by (rx, rz), rooted at (x, y, z). */
-  const tuft = (x: number, y: number, z: number, rx: number, rz: number, w: number, len: number, levels = 3) => {
-    const g = group(hair, x, y, z);
-    g.rotation.set(rx, 0, rz);
-    for (let i = 0; i < levels; i++) {
-      const k = 1 - i / levels;
-      block(g, w * k, len / levels + 0.02, w * k, 0, (i + 0.5) * (len / levels), 0);
-    }
-  };
-  // A cap over the top and the back of the head, so no scalp ever shows.
-  block(hair, 0.48, 0.12, 0.46, 0, 0, -0.01);
-  block(hair, 0.46, 0.3, 0.12, 0, -0.12, -0.18);
-  if (look.hair === 'wild') {
-    // A fan of big spikes, the middle tallest, the outer ones leaning right out.
-    tuft(0, 0.04, -0.04, -0.15, 0, 0.2, 0.42);
-    for (const s of [1, -1]) {
-      tuft(s * 0.13, 0.03, -0.04, -0.1, s * -0.45, 0.18, 0.36);
-      tuft(s * 0.22, -0.02, -0.02, 0, s * -1.0, 0.16, 0.3);
-      tuft(s * 0.2, -0.12, -0.08, 0.2, s * -1.5, 0.13, 0.22); // sideburn flicks
-    }
-    // Two more at the back, leaning back.
-    for (const s of [1, -1]) tuft(s * 0.08, 0, -0.16, -0.7, s * -0.3, 0.17, 0.32);
-    // The fringe: three short spikes falling over the forehead.
-    for (const [x, rz] of [[-0.11, 0.25], [0, 0], [0.11, -0.25]] as const) tuft(x, -0.02, 0.17, 2.55, rz, 0.12, 0.14, 2);
+  // Over the top, down the back, and over the tops of the ears.
+  block(0.48, 0.1, 0.46, 0, 0.0, -0.01);
+  block(0.47, 0.26, 0.1, 0, -0.12, -0.19);
+  for (const s of [1, -1]) block(0.05, 0.14, 0.34, s * 0.235, -0.08, -0.03);
+  if (look.name === 'Sonny') {
+    // A little volume, and a fringe swept to one side.
+    block(0.44, 0.06, 0.4, 0, 0.07, -0.02);
+    block(0.46, 0.07, 0.07, 0, -0.06, 0.2);
+    block(0.2, 0.08, 0.06, -0.12, -0.12, 0.2);
   } else {
-    // A tall flame: a tapering tower, swept back, with smaller flames either side.
-    tuft(0, 0.04, -0.03, -0.32, 0, 0.36, 0.6, 5);
-    for (const s of [1, -1]) tuft(s * 0.14, 0.02, -0.03, -0.38, s * -0.32, 0.2, 0.42, 4);
-    // The peak: a sharp point down the middle of the forehead.
-    block(hair, 0.16, 0.06, 0.04, 0, -0.05, 0.22);
-    block(hair, 0.08, 0.06, 0.04, 0, -0.1, 0.22);
-    // Close at the sides.
-    for (const s of [1, -1]) block(hair, 0.05, 0.2, 0.3, s * 0.235, -0.12, -0.02);
+    // Combed straight back: a taller top that rises toward the back, a clean hairline.
+    block(0.44, 0.08, 0.36, 0, 0.08, -0.04);
+    block(0.4, 0.06, 0.24, 0, 0.14, -0.08);
+    block(0.46, 0.05, 0.06, 0, -0.03, 0.2);
   }
   return hair;
 }
