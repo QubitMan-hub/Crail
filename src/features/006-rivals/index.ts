@@ -3,6 +3,7 @@ import type { Feature } from '../../core/feature';
 import { addLandmark } from '../../core/landmarks';
 import { seededRandom } from '../../core/rng';
 import { tip } from '../../core/tip';
+import type { SfxEvent, SfxKind } from '../../core/sound';
 import { FIGHTER, floor, relocate, type DirIndex } from '../../characters/brain';
 import { createCast, everyone, type Member } from '../../characters/cast';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
@@ -247,7 +248,7 @@ export const rivals: Feature = {
     const both = [sonny, prinz];
     const say = (f: Fighter, kind: Fighter['emoteKind']) => Object.assign(f, { emoteKind: kind, emoteAge: 0 });
 
-    const state = { fighting: false, fights: 0, cubeHits: 0, beat: '', staged: false, nextIn: FIRST_FIGHT };
+    const state = { fighting: false, fights: 0, cubeHits: 0, beat: '', staged: false, nextIn: FIRST_FIGHT, sounds: 0, music: false };
     ctx.state.rivals = state;
     const mark = addLandmark(ctx, { name: 'Fight!', x: POOL.x, z: POOL.z - 3, color: '#f2542d', hidden: true });
     const octopus = () => ctx.state.octopus as OctopusAPI | undefined;
@@ -280,16 +281,20 @@ export const rivals: Feature = {
       if (on === cinemaOn) return;
       cinemaOn = on;
       document.body.classList.toggle('cinema-on', on);
+      if (on) sfx('bars');
       if (!on) vsCard.classList.remove('show');
     };
     const showTitle = () => {
       vsCard.classList.remove('show');
       void vsCard.offsetWidth; // restart the animation
       vsCard.classList.add('show');
+      sfx('stinger');
     };
     /** Slow the world (only for a real fight being watched, never in a sped-up test). */
     const slow = (scale: number, seconds: number) => {
-      if (speed === 1 && watching()) ctx.slowmo(scale, seconds);
+      if (speed !== 1 || !watching()) return;
+      ctx.slowmo(scale, seconds);
+      if (seconds >= 0.4) sfx('slowmo', null, { gain: 0.8 });
     };
     /** A punch landing: the world all but stops for a heartbeat. */
     const freeze = (seconds = 0.07) => slow(0.05, seconds);
@@ -297,6 +302,25 @@ export const rivals: Feature = {
     /** The camera leans in a little more, for a moment. */
     const punchIn = (amount: number) => (kick = Math.max(kick, amount));
     const shake = (strength: number) => watching() && ctx.shake(strength);
+    /**
+     * A sound, panned to where it happens on screen. Full volume when the cube is watching,
+     * quieter from further off, and nothing at all from across the map.
+     */
+    const sfx = (kind: SfxKind, at?: THREE.Vector3 | null, o: Partial<SfxEvent> = {}) => {
+      const near = watching() ? 1 : cubeNear() ? 0.35 : 0;
+      if (!near) return;
+      let pan = 0;
+      if (at) pan = Math.max(-0.8, Math.min(0.8, at.clone().project(ctx.camera).x * 0.8));
+      ctx.events.emit('sfx', { kind, pan, ...o, gain: (o.gain ?? 1) * near });
+      state.sounds += 1;
+    };
+    let musicOn = false;
+    const music = (on: boolean) => {
+      if (on === musicOn) return;
+      musicOn = on;
+      state.music = on;
+      ctx.events.emit('sfx:music', on);
+    };
 
     // ---- Effects: dust rings, shock rings, flashes, sparks, hearts, streaks, beams --------
     const rings = Array.from({ length: 8 }, () => {
@@ -455,6 +479,7 @@ export const rivals: Feature = {
     const chest = (f: Fighter) => f.pos.clone().setY(f.pos.y + 1.0);
     /** A punch (or kick) landing on something: flash, sparks, a jolt, and a freeze. */
     const landHit = (p: THREE.Vector3, color: string, big = false) => {
+      sfx(big ? 'heavy' : 'punch', p, { pitch: 0.9 + rand() * 0.25 });
       flash(p, big ? 0.9 : 0.5);
       burst(p, color, big ? 16 : 7, big ? 3.6 : 2.4);
       if (big) shock(p, 0.9, color);
@@ -466,6 +491,9 @@ export const rivals: Feature = {
 
     /** Something heavy lands: a dust ring (or a splash), a jolt, and anyone close is knocked flat. */
     const impact = (x: number, z: number, strength = 1) => {
+      const at = v(x, 0.3, z);
+      if (isWater(Math.round(x), Math.round(z))) sfx('splash', at, { gain: 0.6 + 0.4 * strength });
+      else sfx(strength >= 1 ? 'boom' : 'land', at, { gain: 0.5 + 0.5 * Math.min(1, strength) });
       if (isWater(Math.round(x), Math.round(z))) water()?.splash(x, z, strength);
       else {
         dust(x, z, 1.2 * strength);
@@ -532,6 +560,7 @@ export const rivals: Feature = {
           if (at(t, prev, t0)) {
             moveTo(f, f.shore, 0.8, 0, inQuad);
             streak(i, f.pos.clone(), f.shore);
+            sfx('whoosh', f.shore, { dur: 0.8, pitch: 0.7 });
           }
           faceTo(f, G);
         });
@@ -564,6 +593,8 @@ export const rivals: Feature = {
       start() {
         say2('They are powering up…');
         punchIn(0.06);
+        sfx('power', null, { dur: 2.4 });
+        sfx('rumble', null, { dur: 2.6 });
       },
       tick(t, prev) {
         both.forEach((f) => {
@@ -584,6 +615,8 @@ export const rivals: Feature = {
           });
           shake(0.16);
           punchIn(0.14);
+          sfx('boom', null);
+          sfx('crack', null, { gain: 0.8 });
           slow(0.35, 0.4);
         }
       },
@@ -597,6 +630,7 @@ export const rivals: Feature = {
         if (at(t, prev, 0.3)) {
           streak(f.index, f.pos.clone(), f.close);
           moveTo(f, f.close, 0.16, 0, outQuart);
+          sfx('dash', f.pos);
         }
         if (t >= 0.3 && t < 0.48) pose(f, 'dash');
         if (at(t, prev, 0.48)) landHit(G.clone().setY(0.95), f.look.aura);
@@ -620,6 +654,7 @@ export const rivals: Feature = {
         both.forEach((f) => {
           streak(f.index, f.pos.clone(), f.close);
           moveTo(f, f.close, 0.32, 0, outQuart);
+          sfx('dash', f.pos, { pitch: f.index ? 1.1 : 0.9 });
         });
       },
       tick(t, prev) {
@@ -641,13 +676,17 @@ export const rivals: Feature = {
             if (i === 3 || i === hits.length - 1) octopus()?.hit();
           }
         });
-        if (at(t, prev, 1.68)) octopus()?.swat(toG(sonny));
+        if (at(t, prev, 1.68)) {
+          octopus()?.swat(toG(sonny));
+          sfx('swat', G, { gain: 1.2 });
+        }
         if (at(t, prev, 1.75)) {
           both.forEach((f) => {
             landHit(chest(f), '#ffffff');
             say(f, 'bang');
             moveTo(f, f.shore, 0.95, 1.8, outQuad);
           });
+          sfx('whoosh', G, { dur: 0.9, pitch: 0.6 });
           slow(0.3, 0.5);
           shake(0.16);
           punchIn(0.12);
@@ -660,16 +699,23 @@ export const rivals: Feature = {
     const swat = (f: Fighter): Beat => ({
       name: `swat:${f.name}`, dur: 2.9,
       tick(t, prev) {
-        if (at(t, prev, 0.01)) moveTo(f, f.close, 0.55, 0.3, inQuad);
+        if (at(t, prev, 0.01)) {
+          moveTo(f, f.close, 0.55, 0.3, inQuad);
+          sfx('whoosh', f.pos, { dur: 0.55 });
+        }
         if (t < 0.68) {
           pose(f, t < 0.15 ? 'windup' : 'dash');
           faceTo(f, G);
         }
-        if (at(t, prev, 0.58)) octopus()?.swat(toG(f));
+        if (at(t, prev, 0.58)) {
+          octopus()?.swat(toG(f));
+          sfx('swat', G);
+        }
         if (at(t, prev, 0.68)) {
           landHit(chest(f), '#ffffff', true);
           say(f, 'bang');
           moveTo(f, f.shore, 1.0, 2.2, outQuad);
+          sfx('whoosh', f.pos, { dur: 1.0, pitch: 0.6 });
         }
         if (t >= 0.68 && t < 1.7) pose(f, 'tumble');
         if (t >= 1.7) {
@@ -695,6 +741,7 @@ export const rivals: Feature = {
             f.leg = null;
             anchor = f.pos.clone();
             octopus()?.inkAt(f.pos.x, f.pos.z);
+            sfx('ink', f.pos);
             say(f, 'q');
             dust(f.pos.x, f.pos.z, 0.9, '#1d1b19');
             burst(chest(f), '#1d1b19', 10, 2);
@@ -725,6 +772,7 @@ export const rivals: Feature = {
         faceTo(f, G);
         const ball = f.rig.ball;
         if (t < 0.5) pose(f, 'fly');
+        if (at(t, prev, 0.5)) sfx('charge', f.pos, { dur: 1.3 });
         if (t >= 0.5 && t < 1.8) {
           pose(f, 'charge');
           const k = (t - 0.5) / 1.3;
@@ -740,12 +788,15 @@ export const rivals: Feature = {
         if (at(t, prev, 1.8)) {
           ball.visible = false;
           fire(beams[f.index], hands(f), G, f.look.aura, size);
+          sfx('beam', f.pos, { dur: 0.85, pitch: f.index ? 1.12 : 1 });
           // The kick of it pushes them back a little.
           moveTo(f, f.air.clone().add(v(Math.sin(f.face) * -0.35, 0.05, Math.cos(f.face) * -0.35)), 0.3, 0, outQuad);
         }
         if (at(t, prev, 1.88)) {
           octopus()?.hit();
           water()?.splash(G.x, G.z, 2);
+          sfx('boom', G);
+          sfx('splash', G);
           flash(G.clone().setY(0.9), 1.4 * size);
           burst(G.clone().setY(0.9), f.look.aura, 20, 4);
           shock(G.clone().setY(0.9), 1.4 * size, f.look.aura);
@@ -768,6 +819,7 @@ export const rivals: Feature = {
       start() {
         say2('They’ve forgotten Gåmson and started fighting each other.');
         both.forEach((f, i) => moveTo(f, meet(i ? 1 : -1), 0.6, 0.4, inOut));
+        both.forEach((f) => sfx('whoosh', f.pos, { dur: 0.62 }));
       },
       tick(t, prev) {
         const mid = MID;
@@ -776,6 +828,8 @@ export const rivals: Feature = {
           faceTo(f, both[1 - i].pos);
         });
         if (at(t, prev, 0.62)) {
+          sfx('crack', mid);
+          sfx('heavy', mid);
           flash(mid, 1.2);
           shock(mid, 1.3);
           burst(mid, '#ffffff', 14, 3.4);
@@ -808,6 +862,8 @@ export const rivals: Feature = {
           // Fist to fist, everything they have.
           both.forEach((f) => pose(f, 'punch'));
           const p = sonny.pos.clone().lerp(prinz.pos, 0.5).setY(mid.y + 0.95);
+          sfx('boom', p);
+          sfx('crack', p);
           flash(p, 1.6);
           shock(p, 1.8);
           shock(p, 1.1, '#ffd84a');
@@ -817,7 +873,10 @@ export const rivals: Feature = {
           punchIn(0.16);
           slow(0.25, 0.5);
         }
-        if (at(t, prev, 2.6)) both.forEach((f) => moveTo(f, f.air, 0.8, 0.3, outQuart));
+        if (at(t, prev, 2.6)) {
+          both.forEach((f) => moveTo(f, f.air, 0.8, 0.3, outQuart));
+          sfx('whoosh', MID, { dur: 0.8, pitch: 0.8 });
+        }
         if (t >= 2.6) both.forEach((f, i) => {
           pose(f, t < 3.0 ? 'hurt' : 'guard');
           faceTo(f, both[1 - i].pos);
@@ -832,6 +891,7 @@ export const rivals: Feature = {
       start() {
         say2('Prinz is charging something big…', true);
         moveTo(prinz, prinz.air, 0.4);
+        sfx('charge', prinz.air, { dur: 1.6, pitch: 0.8, gain: 1.2 });
       },
       tick(t, prev) {
         const f = prinz;
@@ -846,15 +906,20 @@ export const rivals: Feature = {
           if (Math.floor(t / 0.04) !== Math.floor(prev / 0.04)) drawIn(ball.getWorldPosition(new THREE.Vector3()), f.look.aura, 2, 1.1);
           if (Math.floor(t / 0.25) !== Math.floor(prev / 0.25)) shake(0.02 + t * 0.03);
         }
-        if (at(t, prev, 1.45)) octopus()?.swat(toG(f));
+        if (at(t, prev, 1.45)) {
+          octopus()?.swat(toG(f));
+          sfx('swat', G);
+        }
         if (at(t, prev, 1.6)) {
           ball.visible = false;
           fire(beams[1], hands(f), G, f.look.aura, 1.8);
+          sfx('beam', f.pos, { dur: 0.75, pitch: 0.85, gain: 1.2 });
           punchIn(0.1);
         }
         if (at(t, prev, 1.7)) {
           // Gåmson swats it aside, straight into his own rock.
           fire(beams[2], G, rock, f.look.aura, 1.6);
+          sfx('crack', G);
           flash(G.clone().setY(0.9), 0.9);
           burst(G.clone().setY(0.9), f.look.aura, 10, 3);
         }
@@ -864,6 +929,7 @@ export const rivals: Feature = {
           burst(rock.clone().setY(0.6), '#8b8478', 18, 4);
           burst(rock.clone().setY(0.6), f.look.aura, 12, 3.4);
           impact(SHELF.x, SHELF.z, 1.2);
+          sfx('rumble', rock, { dur: 1.6 });
           shake(0.3);
           punchIn(0.18);
           slow(0.25, 0.7);
@@ -912,6 +978,9 @@ export const rivals: Feature = {
           hugged = true;
           // A hug so big it blows them back.
           heartBurst(G.clone().setY(1.2));
+          sfx('chime', G);
+          sfx('splash', G, { gain: 0.8 });
+          sfx('whoosh', G, { dur: 1.0, pitch: 0.6 });
           shock(G.clone().setY(1), 1.8, '#ff8fb3');
           ctx.bump(0.2);
           shake(0.1);
@@ -949,6 +1018,7 @@ export const rivals: Feature = {
           pose(f, t > 0.6 && t < 2.0 ? 'bow' : 'stand');
         });
         if (at(t, prev, 0.7)) {
+          sfx('chime', null, { gain: 0.45, pitch: 0.75 });
           say(sonny, 'heart');
           say(prinz, 'sparkle');
         }
@@ -967,6 +1037,8 @@ export const rivals: Feature = {
             dust(f.pos.x, f.pos.z, 1, f.look.aura);
             shock(chest(f), 0.8, f.look.aura);
             moveTo(f, to, 1.0, 0, inQuad);
+            sfx('dash', f.pos, { dur: 0.5, pitch: 0.7 });
+            sfx('whoosh', f.pos, { dur: 1.0 });
           }
           if (t >= t0) pose(f, 'fly');
         });
@@ -975,6 +1047,7 @@ export const rivals: Feature = {
 
     // ---- Running a fight -------------------------------------------------------------------
     let beats: Beat[] = [];
+    let tankAt = -1;
     let current = -1;
     let beatT = 0;
     const shuffle = <T,>(a: T[]) => {
@@ -984,7 +1057,19 @@ export const rivals: Feature = {
       }
       return a;
     };
-    const startFight = () => {
+    /** The moves by name, for a fight with its moves chosen (video shots). */
+    const byName = (name: string): Beat | null => {
+      const [move, who] = name.split(':');
+      const f = who === 'Prinz' ? prinz : sonny;
+      if (move === 'punch') return combo(f);
+      if (move === 'swat') return swat(f);
+      if (move === 'beam') return beam(f);
+      if (move === 'ink') return inked(f);
+      if (move === 'flurry') return flurry;
+      if (move === 'clash') return clash;
+      return null;
+    };
+    const startFight = (plan?: string[]) => {
       if (state.fighting) return;
       const o = octopus();
       if (o) o.busy = true;
@@ -998,15 +1083,11 @@ export const rivals: Feature = {
       // rushing him, or the two of them going at each other), and two more at random.
       const big = rand() < 0.5 ? [flurry, clash] : [clash, flurry];
       const extras = shuffle([combo(sonny), combo(prinz), inked(sonny), inked(prinz), beam(prinz), swat(prinz), big[1]]).slice(0, 2);
-      const moves = shuffle([swat(sonny), beam(sonny), big[0], ...extras]);
-      // The tank takes its shot at the start of the brawl.
-      const first = moves[0];
-      const start = first.start?.bind(first);
-      first.start = () => {
-        start?.();
-        ctx.events.emit('rivals:intruders', { x: prinz.shore.x, z: prinz.shore.z });
-      };
+      const chosen = plan?.map(byName).filter((b): b is Beat => !!b);
+      const moves = chosen?.length ? chosen : shuffle([swat(sonny), beam(sonny), big[0], ...extras]);
       beats = [arrive, taunt, powerUp, ...moves, stray, rescue, bow, leave];
+      // The tank takes its shot at the start of the brawl.
+      tankAt = 3;
       current = -1;
       next();
       ctx.events.emit('rivals:started');
@@ -1017,6 +1098,7 @@ export const rivals: Feature = {
       if (current >= beats.length) return endFight();
       state.beat = beats[current].name;
       beats[current].start?.();
+      if (current === tankAt) ctx.events.emit('rivals:intruders', { x: prinz.shore.x, z: prinz.shore.z });
     };
     const endFight = () => {
       state.fighting = false;
@@ -1035,6 +1117,7 @@ export const rivals: Feature = {
         b.flare.visible = false;
       });
       setCinema(false);
+      music(false);
       const o = octopus();
       if (o) o.busy = false;
       const s = resident('Sonny');
@@ -1058,6 +1141,7 @@ export const rivals: Feature = {
       for (const f of both) {
         if (f.pos.y > 0.3 || f.stun > 0 || Math.hypot(f.pos.x - x, f.pos.z - z) > 1.4) continue;
         f.stun = 1;
+        sfx('punch', f.pos, { pitch: 0.8 });
         say(f, 'bang');
         dust(f.pos.x, f.pos.z, 0.7);
         burst(chest(f), '#ffffff', 8, 2.4);
@@ -1075,9 +1159,9 @@ export const rivals: Feature = {
 
     // ---- Scripted control, for tests and video shots ---------------------------------------
     // Tests can run a fight faster than real time; the game never does.
-    ctx.events.on<[number?]>('direct:rivals.fight', ([s]) => {
+    ctx.events.on<[number?, string[]?]>('direct:rivals.fight', ([s, plan]) => {
       speed = s ?? 1;
-      startFight();
+      startFight(plan);
     });
     ctx.events.on<[boolean]>('direct:rivals.staged', ([on]) => (state.staged = on));
     ctx.events.on('direct:rivals.end', () => state.fighting && endFight());
@@ -1172,7 +1256,7 @@ export const rivals: Feature = {
         lastStandoff = clock;
         faceEach(s.n, p.n);
         faceEach(p.n, s.n);
-        for (const m of [s, p]) Object.assign(m.n, { mode: 'stare', t: 0, timer: 2.2, focus: null, emote: { kind: 'anger', t: 0 } });
+        for (const [m, o] of [[s, p], [p, s]]) Object.assign(m.n, { mode: 'stare', stareKind: 'bonked', t: 0, timer: 2.2, focus: { x: o.n.x, z: o.n.z }, emote: { kind: 'anger', t: 0 } });
         if (cubeNear(14)) tip('Sonny and Prinz just glared at each other. Not today.');
         return;
       }
@@ -1203,6 +1287,16 @@ export const rivals: Feature = {
       }
     };
 
+
+    // A glare on demand (video shots): wherever the two of them are.
+    ctx.events.on<[number?]>('direct:rivals.standoff', ([seconds]) => {
+      const s = resident('Sonny');
+      const p = resident('Prinz');
+      if (!s || !p) return;
+      faceEach(s.n, p.n);
+      faceEach(p.n, s.n);
+      for (const [m, o] of [[s, p], [p, s]]) Object.assign(m.n, { mode: 'stare', stareKind: 'bonked', t: 0, timer: seconds ?? 2.6, focus: { x: o.n.x, z: o.n.z }, emote: { kind: 'anger', t: 0 } });
+    });
 
     // ---- Every frame -----------------------------------------------------------------------
     let lean: THREE.Vector3 | null = null;
@@ -1388,6 +1482,8 @@ export const rivals: Feature = {
       const c = cubeAt();
       const watch = watching();
       setCinema(watch);
+      // The fight has its own music, for as long as the cube is watching it.
+      music(watch && state.fighting && beats[current] !== leave);
       const film = watch && !state.staged && c;
       if (film && c) {
         frame(c, dt);

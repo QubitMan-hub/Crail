@@ -17,6 +17,10 @@
 //   voice [[srcFrom, srcTo, at]]     where each spoken line of the --voice file lands in the video
 //   music {sections, duck}           a quiet plucked tune between [from, to] times, lowered under speech
 //   world(t) -> {cubeY, impactAt}
+//   query '&seed=3'                  extra URL parameters for the game
+//   probe '<js expression>'          read from the page every frame; html(t, probe) gets the result
+//   gameSfx [[time, {kind, ...}]]    extra sounds from the game's own sound engine (src/core/sound.ts)
+// The game's own sounds (fights, music) are recorded as they happen and rendered with it.
 import { chromium } from 'playwright';
 import { preview } from 'vite';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -62,6 +66,7 @@ const server = await preview({ preview: { port: 4175, strictPort: true }, logLev
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
 const landings = [];
 const heard = [];
+let gameAudio = null;
 const actions = [...(shots.actions ?? [])].sort((a, b) => a[0] - b[0]);
 try {
   const page = await browser.newPage({ viewport: { width: W / 2, height: H / 2 }, deviceScaleFactor: 2 });
@@ -72,7 +77,7 @@ try {
       return route.fulfill({ path: path.join(shots.assets.dir, file) });
     });
   }
-  await page.goto(`http://localhost:4175/?manual${day}`);
+  await page.goto(`http://localhost:4175/?manual${day}${shots.query ?? ''}`);
   await page.waitForFunction(() => window.__crail?.game);
   await page.addStyleTag({ content: OVERLAY_CSS });
   await page.evaluate(() => {
@@ -85,12 +90,19 @@ try {
       game.ctx.events.on(e, () => window.__heard.push(e));
     }
     window.__cube = game.ctx.scene.getObjectByName('cube');
+    // The game's own sounds, stamped with the video time they happen at.
+    window.__t = 0;
+    window.__sfx = [];
+    window.__music = [];
+    game.ctx.events.on('sfx', (e) => window.__sfx.push([window.__t, e]));
+    game.ctx.events.on('sfx:music', (on) => window.__music.push([window.__t, on]));
   });
 
   const held = new Set();
   let seen = 0;
   let nextAction = 0;
   const due = [];
+  let probed = null;
   for (let f = 0; f < frames; f++) {
     const t = f / FPS;
     const want = new Set(shots.keys.filter(([a, b]) => t >= a && t < b).map(([, , key]) => `Key${key}`));
@@ -100,9 +112,10 @@ try {
     const world = shots.world?.(t) ?? {};
     const impact = world.impactAt !== undefined && t >= world.impactAt && t - 1 / FPS < world.impactAt;
     while (nextAction < actions.length && actions[nextAction][0] <= t) due.push(actions[nextAction++].slice(1));
-    const { count, heard: now } = await page.evaluate(
-      async ({ dt, cam, html, cubeY, impact, due, gameStyle }) => {
+    const result = await page.evaluate(
+      async ({ t, dt, cam, html, cubeY, impact, due, gameStyle, probe }) => {
         const { game, direct } = window.__crail;
+        window.__t = t;
         const { ctx } = game;
         let cut = false;
         for (const [name, ...args] of due) {
@@ -141,23 +154,51 @@ try {
         const layer = document.getElementById('reel');
         layer.innerHTML = html;
         await Promise.all([...layer.querySelectorAll('img')].map((i) => i.decode().catch(() => {})));
-        return { count: window.__landings, heard: window.__heard.splice(0) };
+        // eslint-disable-next-line no-eval
+        const probed = probe ? (0, eval)(probe) : null;
+        return { count: window.__landings, heard: window.__heard.splice(0), probed };
       },
       {
+        t,
+        probe: shots.probe ?? null,
         dt: shots.frozen?.(t) ? 0 : 1 / FPS,
         cam: shots.camera(t),
-        html: shots.html(t),
+        html: shots.html(t, probed),
         cubeY: world.cubeY,
         impact,
         due: due.splice(0),
         gameStyle: shots.gameStyle?.(t) ?? '',
       },
     );
-    for (const e of now) heard.push([t, e]);
-    for (; seen < count; seen++) landings.push(t);
+    probed = result.probed;
+    for (const e of result.heard) heard.push([t, e]);
+    for (; seen < result.count; seen++) landings.push(t);
     await page.screenshot({ path: `${dir}/${String(f).padStart(5, '0')}.jpg`, quality: 95, type: 'jpeg' });
     if (f % 150 === 0) console.log(`frame ${f}/${frames}`);
   }
+  // Render the game's sounds offline, with the same engine the game plays them live with.
+  gameAudio = await page.evaluate(async ({ seconds, extra }) => {
+    const events = [...window.__sfx, ...extra];
+    const ranges = [];
+    let on = null;
+    for (const [t, m] of window.__music) {
+      if (m && on === null) on = t;
+      else if (!m && on !== null) { ranges.push([on, t]); on = null; }
+    }
+    if (on !== null) ranges.push([on, seconds]);
+    const [l, r] = await window.__crail.renderSound(events, ranges, seconds);
+    // Interleaved 16-bit, as base64, to bring it back out of the page.
+    const pcm = new Int16Array(l.length * 2);
+    for (let i = 0; i < l.length; i++) {
+      pcm[i * 2] = Math.max(-1, Math.min(1, l[i])) * 32767;
+      pcm[i * 2 + 1] = Math.max(-1, Math.min(1, r[i])) * 32767;
+    }
+    const bytes = new Uint8Array(pcm.buffer);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return { b64: btoa(bin), sounds: events.length, music: ranges };
+  }, { seconds: shots.seconds, extra: shots.gameSfx ?? [] });
+  console.log(`game sound: ${gameAudio.sounds} effects, music ${JSON.stringify(gameAudio.music)}`);
 } finally {
   await browser.close();
   await server.close();
@@ -275,16 +316,27 @@ wav.writeUInt32LE(RATE, 24); wav.writeUInt32LE(RATE * 2, 28); wav.writeUInt16LE(
 wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(pcm.length * 2, 40);
 pcm.forEach((v, i) => wav.writeInt16LE(Math.round(Math.max(-1, Math.min(1, v)) * 32767), 44 + i * 2));
 await writeFile(`${dir}/sfx.wav`, wav);
+{
+  const data = Buffer.from(gameAudio.b64, 'base64');
+  const head = Buffer.alloc(44);
+  head.write('RIFF', 0); head.writeUInt32LE(36 + data.length, 4); head.write('WAVEfmt ', 8);
+  head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(2, 22);
+  head.writeUInt32LE(RATE, 24); head.writeUInt32LE(RATE * 4, 28); head.writeUInt16LE(4, 32);
+  head.writeUInt16LE(16, 34); head.write('data', 36); head.writeUInt32LE(data.length, 40);
+  await writeFile(`${dir}/game.wav`, Buffer.concat([head, data]));
+}
 
 const out = `captures/${name}.mp4`;
-const args = ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', `${dir}/%05d.jpg`, '-i', `${dir}/sfx.wav`];
+const args = ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', `${dir}/%05d.jpg`, '-i', `${dir}/sfx.wav`, '-i', `${dir}/game.wav`];
 // Audio graph: effects (unless --no-sfx), extra clips from the shot list, and the voice-over on top.
 const chains = [];
 const mixed = [];
-let input = 2;
+let input = 3;
 if (!values['no-sfx']) {
   chains.push(`[1:a]volume=${values.voice ? 0.5 : 1}[fx]`);
   mixed.push('[fx]');
+  chains.push(`[2:a]volume=${values.voice ? 0.6 : 1}[gx]`);
+  mixed.push('[gx]');
 }
 for (const clip of shots.audio ?? []) {
   args.push('-i', clip.file);

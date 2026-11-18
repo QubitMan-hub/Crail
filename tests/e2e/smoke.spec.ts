@@ -990,8 +990,13 @@ test('a fight seen up close is shot like a film: bars in, a title card, bars out
   await direct(page, 'rivals.fight', 4);
   await expect(page.locator('body')).toHaveClass(/cinema-on/);
   await expect(page.locator('.cinema .vs')).toHaveClass(/show/);
+  // With its own music, and a sound for every hit, whoosh and landing.
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.music === true);
   await page.waitForFunction(() => (window as any).__crail.state.rivals.fights === 1 && !(window as any).__crail.state.rivals.fighting, null, { timeout: 200_000 });
   await expect(page.locator('body')).not.toHaveClass(/cinema-on/);
+  const s = await page.evaluate(() => (window as any).__crail.state.rivals);
+  expect(s.music).toBe(false);
+  expect(s.sounds).toBeGreaterThan(40);
 });
 
 test('an easter egg: the golden cube', async ({ page }) => {

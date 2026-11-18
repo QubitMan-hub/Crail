@@ -2,6 +2,7 @@ import './style.css';
 import { createGame } from './core/game';
 import { currentDay, parseSelection, selectFeatures } from './core/feature';
 import { setupMap } from './core/map';
+import { renderOffline, Sound, type SfxEvent } from './core/sound';
 import { allFeatures } from './features';
 
 const features = selectFeatures(allFeatures, parseSelection(location.search));
@@ -33,6 +34,16 @@ dayBtn.addEventListener('click', () => {
 });
 
 const map = setupMap(game.ctx, document.getElementById('map-btn') as HTMLButtonElement);
+
+// Sound effects and the fight music. Browsers only allow sound after a key press or tap.
+const sound = new Sound();
+game.ctx.input.onGesture(() => sound.unlock());
+game.ctx.events.on<SfxEvent>('sfx', (e) => sound.play(e));
+game.ctx.events.on<boolean>('sfx:music', (on) => sound.music(on));
+game.ctx.events.on<boolean>('sound:set', (on) => {
+  sound.enabled = on;
+  if (!on) sound.music(false);
+});
 
 // The opening instructions go once you have rolled. Later messages manage themselves.
 const hint = document.getElementById('hint')!;
@@ -176,4 +187,6 @@ applySound();
   direct: (name: string, ...args: unknown[]) => game.ctx.events.emit(`direct:${name}`, args),
   // Only in ?manual mode: lets the reel renderer drive time and the camera.
   game: manual ? game : undefined,
+  /** Only in ?manual mode: renders the game's sounds offline, in step with the video. */
+  renderSound: manual ? renderOffline : undefined,
 };

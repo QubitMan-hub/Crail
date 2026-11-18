@@ -142,7 +142,7 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     },
   );
   // Put one of them on a cell and keep them there for a while (video shots).
-  ctx.events.on<[number, number, number, number?]>(`direct:${key}.place`, ([i, x, z, idle]) => {
+  ctx.events.on<[number, number, number, number?, DirIndex?]>(`direct:${key}.place`, ([i, x, z, idle, dir]) => {
     const n = members[i]?.n;
     if (!n) return;
     // Mid-step: finish the step on the spot first.
@@ -152,6 +152,7 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
     }
     if (!['idle', 'walk', 'march'].includes(n.mode)) n.mode = 'idle';
     if (relocate(n, world, x, z)) n.timer = idle ?? 99;
+    if (dir !== undefined) n.dir = dir;
   });
   ctx.events.on<[number, 'follow' | 'sit' | 'gift']>(`direct:${key}.do`, ([i, what]) => {
     const n = members[i]?.n;
