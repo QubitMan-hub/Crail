@@ -50,7 +50,7 @@ await rm(dir, { recursive: true, force: true });
 await mkdir(dir, { recursive: true });
 
 const OVERLAY_CSS = `
-  .hud, #sound, #map-btn, #cult, .landmark { display: none !important; }
+  .hud, #sound, #map-btn, #cult, #help-btn, #help, .landmark { display: none !important; }
   /* Shot lists draw into this layer. Keep clear of Instagram's own buttons:
      nothing important in the top 11% or the bottom 22%. */
   #reel { position: fixed; inset: 0; overflow: hidden; pointer-events: none; color: #1d1b19;

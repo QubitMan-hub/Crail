@@ -144,7 +144,12 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
   // Put one of them on a cell and keep them there for a while (video shots).
   ctx.events.on<[number, number, number, number?]>(`direct:${key}.place`, ([i, x, z, idle]) => {
     const n = members[i]?.n;
-    if (!n || n.nx !== null) return;
+    if (!n) return;
+    // Mid-step: finish the step on the spot first.
+    if (n.nx !== null && n.nz !== null) {
+      ctx.grid.release(n.x, n.z, n.occ);
+      Object.assign(n, { x: n.nx, z: n.nz, nx: null, nz: null, p: 0 });
+    }
     if (!['idle', 'walk', 'march'].includes(n.mode)) n.mode = 'idle';
     if (relocate(n, world, x, z)) n.timer = idle ?? 99;
   });
