@@ -1,0 +1,14 @@
+{
+  "day": 6,
+  "method": "top-comment",
+  "reel": "Day 5 Reel on @qubitman_ftw",
+  "source": "Screenshot of the comments taken by the creator about 6 hours after posting. The automated snapshot was not run for this round because the Instagram API token is not set up yet.",
+  "final": false,
+  "note": "Recorded before the 24-hour deadline. The winning comment had 34 likes at the time of the screenshot; the next highest had 6.",
+  "winner": {
+    "username": "ancientpro_gamer",
+    "text": "Add goku and Vegeta fighting with octopus",
+    "likes": 34
+  },
+  "decision_note": "Built as an homage rather than the trademarked characters: two original spiky-haired rival fighters, Sonny and Prinz, who now and then drop in to fight Gåmson. They land, trade insults and power up; Gåmson rises; a different run of moves each time (teleport punches, his swats and ink, charged beams, the two fighting each other); a stray beam smashes his rock and sends his loot home; Tåhgong comes to the rescue (the squid stays, as the creator asked); they bow and fly off. The cube can join in and earn a charm."
+}

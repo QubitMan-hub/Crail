@@ -140,6 +140,7 @@ export const octopus: Feature = {
     const rig = buildOctopus();
     rig.root.scale.setScalar(1.15);
     let flattened = 9;
+    let swatT = 9;
     // His halo, for when he is immortal: pale gold, a little crooked, never quite still.
     const halo = new THREE.Mesh(
       new THREE.TorusGeometry(0.34, 0.04, 8, 28),
@@ -187,6 +188,8 @@ export const octopus: Feature = {
       den: { ...POOL }, rock: { ...SHELF },
       immortal: false,
       shrugged: 0,
+      /** Held at home while a fight is on. */
+      busy: false,
       /** Take the oldest thing off his rock (a friend tidying up behind his back). */
       handOver: (): Held | null => {
         const h = stashed.shift() ?? null;
@@ -202,6 +205,27 @@ export const octopus: Feature = {
         angry = 0;
         return true;
       },
+      /** Something has made him furious for a while. */
+      provoke: (seconds: number) => void (angry = Math.max(angry, seconds)),
+      /** A hit: flattened (he is immortal, so he pops back), a splash, a jolt. */
+      hit: () => {
+        flattened = 0;
+        ctx.bump(0.3);
+        water.splash(state.x, state.z, 1.3);
+      },
+      /** Swing his front arms at something in that direction. */
+      swat: (angle: number) => {
+        facing = angle;
+        swatT = 0;
+      },
+      /** Squirt ink at a spot. */
+      inkAt: (x: number, z: number) => {
+        Object.assign(ink.position, { x, y: 0.014, z });
+        inkAge = 0;
+      },
+      face: (angle: number) => void (facing = angle),
+      /** His rock knocked over: everything on it flies home. */
+      scatter: () => giveBack(stashed),
     });
     ctx.grid.claim(state.x, state.z, occ);
     const held: Held[] = [];
@@ -458,8 +482,9 @@ export const octopus: Feature = {
 
       if (state.mode === 'lurk') {
         state.timer -= dt;
-        if (!state.staged && state.timer <= 0 && stashed.length >= STASH_MAX) state.timer = 5;
-        else if (!state.staged && state.timer <= 0) {
+        if ((state.staged || state.busy) && state.timer <= 0) state.timer = 2;
+        else if (state.timer <= 0 && stashed.length >= STASH_MAX) state.timer = 5;
+        else if (state.timer <= 0) {
           target = choose();
           if (target) setMode('hunt');
           else state.timer = 6;
@@ -555,7 +580,7 @@ export const octopus: Feature = {
       const pz = state.z + ((state.nz ?? state.z) - state.z) * k;
       const home = state.mode === 'lurk' && state.x === POOL.x && state.z === POOL.z;
       const friend = ctx.state.tahgong as { x: number; z: number } | undefined;
-      if (angry > 0 && cube) facing = Math.atan2(cube.x - state.x, cube.z - state.z); // glaring at you
+      if (angry > 0 && cube && !state.busy) facing = Math.atan2(cube.x - state.x, cube.z - state.z); // glaring at you
       else if (suspicious > 0 && friend) facing = Math.atan2(friend.x - state.x, friend.z - state.z); // at him
       else if (home) facing = Math.PI / 4; // watching the camera from the water
       // In its pool it sinks to the eyes.
@@ -565,7 +590,9 @@ export const octopus: Feature = {
       const moving = state.nx !== null;
       // It pulses along: a squash and a stretch with every cell.
       const pulse = moving ? Math.sin(k * Math.PI) : 0;
-      const lunge = state.mode === 'snatch' ? Math.sin(Math.min(1, state.t / 0.5) * Math.PI) : 0;
+      swatT += dt;
+      // A lunge: when snatching something, or swatting at someone.
+      const lunge = state.mode === 'snatch' ? Math.sin(Math.min(1, state.t / 0.5) * Math.PI) : swatT < 0.5 ? Math.sin((swatT / 0.5) * Math.PI) : 0;
       const shake = angry > 0 ? Math.sin(time * 38) * 0.05 : 0;
       rig.root.position.set(px + Math.sin(facing) * lunge * 0.3 + shake, 0, pz + Math.cos(facing) * lunge * 0.3 - shake);
       let turn = facing - rig.root.rotation.y;

@@ -168,6 +168,11 @@ export const tahgong: Feature = {
 
     // ---- Scripted control, for tests and video shots -----------------------------------
     ctx.events.on<[boolean]>('direct:tahgong.staged', ([on]) => (state.staged = on));
+    // A fight at the pool: he goes to Gåmson's side, whatever else he was doing.
+    ctx.events.on('rivals:rescue', () => {
+      if (held) deliver();
+      setMode('comfort');
+    });
     ctx.events.on('direct:tahgong.errand', () => void errand());
     ctx.events.on<[number, number]>('direct:tahgong.teleport', ([x, z]) => {
       if (state.nx !== null || !occupy(ctx.grid, x, z, occ)) return;
@@ -192,7 +197,8 @@ export const tahgong: Feature = {
 
       switch (state.mode) {
         case 'idle': {
-          if (state.staged) break;
+          // Held back while a fight is on, until it is time to step in.
+          if (state.staged || (ctx.state.rivals as { fighting?: boolean } | undefined)?.fighting) break;
           // A furious friend comes first.
           if (o && o.angry > 0.4 && gamsonHome()) {
             setMode('comfort');

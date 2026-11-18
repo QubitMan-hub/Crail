@@ -68,7 +68,7 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong', '005-picachu']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong', '005-picachu', '006-rivals']);
   await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
@@ -95,6 +95,7 @@ const clearStage = async (page: import('@playwright/test').Page) => {
   await direct(page, 'octopus.staged', true);
   await direct(page, 'tahgong.staged', true);
   await direct(page, 'picachu.staged', true);
+  await direct(page, 'rivals.staged', true);
   for (const cast of ['goths', 'femboys', 'soldiers', 'leader']) {
     await direct(page, `${cast}.staged`, true);
     await direct(page, `${cast}.clear`);
@@ -108,7 +109,7 @@ const goth = (page: import('@playwright/test').Page, i = 0) =>
 
 test('boots with every feature on: day 3, goths, femboys, a leader, credits name the winners', async ({ page }) => {
   await open(page);
-  await expect(page.locator('#day')).toHaveText('Day 5');
+  await expect(page.locator('#day')).toHaveText('Day 6');
   expect(await page.evaluate(() => (window as any).__crail.state.leader.npcs.length)).toBe(1);
   await expect(page.locator('#credits')).toContainText('@gyarados117');
   await expect(page.locator('#credits')).toContainText('@megamouse173');
@@ -911,4 +912,52 @@ test('Picachu is a rare secret: usually absent, never in the credits, and it can
   expect(await page.evaluate(() => (window as any).__crail.state.picachu.present)).toBe(true);
   await direct(page, 'picachu.leave');
   expect(await page.evaluate(() => (window as any).__crail.state.picachu.present)).toBe(false);
+});
+
+// ---- Day 6: two rival fighters ----------------------------------------------------
+
+test('a fight: they drop in, a stray beam empties Gåmson’s rock, Tåhgong rescues him, they leave', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, -4, 10, 1, { idle: 999 });
+  const boot = () => page.evaluate(() => (window as any).__crail.state.everyone[0].rig.loot.item.visible);
+  // Something on his rock first.
+  await direct(page, 'octopus.steal', '', 'boot');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.stash.length === 1, null, { timeout: 90_000 });
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.mode === 'lurk', null, { timeout: 30_000 });
+  expect(await boot()).toBe(false);
+  await direct(page, 'tahgong.staged', false);
+  await direct(page, 'rivals.fight', 3);
+  expect(await page.evaluate(() => (window as any).__crail.state.octopus.busy)).toBe(true);
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.beat === 'stray', null, { timeout: 120_000 });
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.fights === 1 && !(window as any).__crail.state.rivals.fighting, null, { timeout: 120_000 });
+  // Everything he stole went home, Tåhgong stepped in, and Gåmson is free to go out again.
+  await page.waitForFunction(() => (window as any).__crail.state.everyone[0].rig.loot.item.visible === true, null, { timeout: 30_000 });
+  const after = await page.evaluate(() => {
+    const s = (window as any).__crail.state;
+    return { stash: s.octopus.stash.length, busy: s.octopus.busy, comforts: s.tahgong.comforts };
+  });
+  expect(after.stash).toBe(0);
+  expect(after.busy).toBe(false);
+  expect(after.comforts).toBeGreaterThanOrEqual(1);
+});
+
+test('bump a fighter twice and they bow out early, impressed, and the cube earns a charm', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'rivals.fight', 0.5);
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.beat === 'taunt', null, { timeout: 90_000 });
+  // Sonny stands on the west sand. Roll up to him, back, and up to him again.
+  await direct(page, 'cube.teleport', -3, 17);
+  await holdUntil(page, 'KeyD', 's.cube.x === -2');
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.cubeHits === 1);
+  await holdUntil(page, 'KeyA', 's.cube.x === -3');
+  await page.waitForTimeout(2500);
+  await holdUntil(page, 'KeyD', 's.cube.x === -2');
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.cubeHits === 2);
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
+  await page.waitForFunction(() => ['bow', 'leave', ''].includes((window as any).__crail.state.rivals.beat), null, { timeout: 30_000 });
+  await expect(page.locator('#hint')).toContainText('impressed');
 });

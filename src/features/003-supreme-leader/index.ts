@@ -325,6 +325,11 @@ export const supremeLeader: Feature = {
       take: () => (flag.stolen = true),
       putBack: () => (flag.stolen = false),
     });
+    // Strangers fighting on his land: the tank takes a shot at them.
+    ctx.events.on<{ x: number; z: number }>('rivals:intruders', ({ x, z }) => {
+      if (soldiers.world.staged) return;
+      fireShell({ x, z });
+    });
     ctx.events.on<{ party: string; x: number; z: number }>('picachu:zapped', ({ party, x, z }) => {
       if (party !== 'army') return;
       const n = boss();
