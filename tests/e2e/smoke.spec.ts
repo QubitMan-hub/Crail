@@ -855,9 +855,8 @@ test('the shallows can be waded into (the cube included); the deep middle cannot
   await clearStage(page);
   const { den } = await page.evaluate(() => (window as any).__crail.state.octopus);
   // From the sand south of the pool's west end, roll north into the shallows.
-  // Roll into the shallows away from Tåhgong's spot (bumping him earns a charm of its own).
-  await direct(page, 'cube.teleport', den.x - 1, den.z + 4);
-  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 3));
+  await direct(page, 'cube.teleport', den.x - 3, den.z + 3);
+  await holdUntil(page, 'KeyW', 's.cube.z === ' + (den.z + 2));
   await page.waitForFunction(() => !(window as any).__crail.state.cube.moving);
   expect(await cubeState(page)).toMatchObject({ x: den.x - 3, z: den.z + 2 });
   // Next to the den the water is deep: the cube bumps instead.

@@ -1248,7 +1248,12 @@ export const rivals: Feature = {
       const hh = (cam.top / zoom) * usable;
       const fit = Math.min(hw / Math.max(0.01, (x1 - x0) / 2), hh / Math.max(0.01, (y1 - y0) / 2));
       kick *= Math.exp(-3.2 * dt);
-      ctx.lens = Math.max(0.78, Math.min(CLOSE_UP, fit)) + kick;
+      // On a narrow (portrait) screen it may pull back further to fit everyone in.
+      // Some room to spare all round: the screen's edges fade into the vignette, and a
+      // hit leans the camera in a little further still.
+      const widest = hw < hh ? 0.55 : 0.78;
+      const base = Math.max(widest, Math.min(CLOSE_UP, fit / 1.2));
+      ctx.lens = base * (1 + kick * 0.7);
       lensOwned = true;
       // The middle of that box. If it all cannot fit, the cube wins: slide over until it is
       // back inside the frame.
@@ -1256,8 +1261,8 @@ export const rivals: Feature = {
       let cy = (y0 + y1) / 2;
       const cubeX = sxOf(c.x, 0.5, c.z);
       const cubeY = syOf(c.x, 0.5, c.z);
-      const roomX = Math.max(0, hw / ctx.lens - 0.9);
-      const roomY = Math.max(0, hh / ctx.lens - 0.9);
+      const roomX = Math.max(0, hw / ctx.lens - 1.1);
+      const roomY = Math.max(0, hh / ctx.lens - 1.1);
       cx = cubeX - Math.max(-roomX, Math.min(roomX, cubeX - cx));
       cy = cubeY - Math.max(-roomY, Math.min(roomY, cubeY - cy));
       const fx = (cx * R2 - cy * R6) / 2;
