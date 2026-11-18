@@ -110,7 +110,8 @@ const report = await p.evaluate(async ({ seed, minutes }) => {
     problems,
     summary: {
       rolls: state.cube.rolls, cult: state.cult.members.length, retinue: state.cult.members.filter((n) => n.lead).length, atPews: state.cult.members.filter((n) => !n.lead && n.post && n.x === n.post.x && n.z === n.post.z).length, rides: state.park.rides,
-      octopus: { stolen: state.octopus.stolen, returned: state.octopus.returned, stash: state.octopus.stash.length },
+      octopus: { stolen: state.octopus.stolen, returned: state.octopus.returned, stash: state.octopus.stash.length, shrugged: state.octopus.shrugged },
+      tahgong: state.tahgong ? { returned: state.tahgong.returned, mode: state.tahgong.mode } : null,
       army: { blasts: state.army.blasts, conscripts: state.army.conscripts, tank: state.army.tank, followers: state.army.followers },
       rocket: { launches: state.rocket.launches, strikes: state.rocket.strikes },
       sceneChildren: { start: startChildren, max: maxChildren, end: ctx.scene.children.length },

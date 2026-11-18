@@ -68,7 +68,7 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong']);
   await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
@@ -93,6 +93,7 @@ const holdUntil = async (page: import('@playwright/test').Page, key: string, con
 };
 const clearStage = async (page: import('@playwright/test').Page) => {
   await direct(page, 'octopus.staged', true);
+  await direct(page, 'tahgong.staged', true);
   for (const cast of ['goths', 'femboys', 'soldiers', 'leader']) {
     await direct(page, `${cast}.staged`, true);
     await direct(page, `${cast}.clear`);
@@ -106,7 +107,7 @@ const goth = (page: import('@playwright/test').Page, i = 0) =>
 
 test('boots with every feature on: day 3, goths, femboys, a leader, credits name the winners', async ({ page }) => {
   await open(page);
-  await expect(page.locator('#day')).toHaveText('Day 4');
+  await expect(page.locator('#day')).toHaveText('Day 5');
   expect(await page.evaluate(() => (window as any).__crail.state.leader.npcs.length)).toBe(1);
   await expect(page.locator('#credits')).toContainText('@gyarados117');
   await expect(page.locator('#credits')).toContainText('@megamouse173');
@@ -619,7 +620,8 @@ test('the octopus robs people, keeps it on its rock, and the cube can give it al
 
 test('startle the octopus and it drops what it is carrying, and the owner gets it back', async ({ page }) => {
   test.setTimeout(90_000);
-  await open(page, '?seed=3');
+  // As on day 4, before he became immortal.
+  await open(page, '?day=4&seed=3');
   await clearStage(page);
   await direct(page, 'goths.spawn', 0, -3, 8, 1, { idle: 999 });
   await direct(page, 'goths.bow', 0);
@@ -650,7 +652,7 @@ test('startle the octopus and it drops what it is carrying, and the owner gets i
 
 test('what the octopus takes is gone from the person, and comes back with them', async ({ page }) => {
   test.setTimeout(90_000);
-  await open(page, '?seed=3');
+  await open(page, '?day=4&seed=3');
   await clearStage(page);
   await direct(page, 'leader.spawn', 0, 2, 8, 1, { idle: 999 });
   await direct(page, 'leader.soldier');
@@ -781,4 +783,62 @@ test('a big cult: three follow, twelve stand in rows at the temple, the rest go 
     };
   });
   expect(c).toEqual({ members: 20, following: 3, outside: 12, spaced: true, hidden: 5 });
+});
+
+// ---- Day 5: an immortal Gåmson, and Tåhgong ---------------------------------------
+
+test('Gåmson is immortal: a blast flattens him, and he keeps everything', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, -3, 8, 1, { idle: 999 });
+  await direct(page, 'octopus.staged', false);
+  await direct(page, 'octopus.steal', 'goth');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.carrying.length >= 1);
+  await page.evaluate(() => {
+    const c = (window as any).__crail;
+    c.direct('leader.blast', c.state.octopus.x, c.state.octopus.z, 1);
+  });
+  const o = await page.evaluate(() => {
+    const s = (window as any).__crail.state.octopus;
+    return { immortal: s.immortal, carrying: s.carrying.length, returned: s.returned, shrugged: s.shrugged, fled: s.mode === 'flee' };
+  });
+  expect(o).toEqual({ immortal: true, carrying: 1, returned: 0, shrugged: 1, fled: false });
+  await expect(page.locator('#hint')).toContainText('immortal');
+});
+
+test('Tåhgong takes things back off the rock while Gåmson is out, and hugs the cube', async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, '?seed=3');
+  await clearStage(page);
+  await direct(page, 'goths.spawn', 0, -4, 10, 1, { idle: 999 });
+  const boot = () => page.evaluate(() => (window as any).__crail.state.everyone[0].rig.loot.item.visible);
+  // Gåmson takes her boot home and leaves it on his rock.
+  await direct(page, 'octopus.staged', false);
+  await direct(page, 'octopus.steal', '', 'boot');
+  await page.waitForFunction(() => (window as any).__crail.state.octopus.stash.length === 1, null, { timeout: 60_000 });
+  expect(await boot()).toBe(false);
+  // With Gåmson at home, Tåhgong does not dare.
+  await direct(page, 'tahgong.errand');
+  expect(await page.evaluate(() => (window as any).__crail.state.tahgong.mode)).not.toBe('fetch');
+  // Gåmson goes out; Tåhgong fetches it and walks it back to her.
+  await direct(page, 'octopus.staged', true);
+  await direct(page, 'octopus.teleport', 10, 20);
+  await direct(page, 'tahgong.errand');
+  await page.waitForFunction(() => (window as any).__crail.state.tahgong.returned === 1, null, { timeout: 60_000 });
+  expect(await boot()).toBe(true);
+  expect(await page.evaluate(() => (window as any).__crail.state.octopus.stash.length)).toBe(0);
+  // Bump him: a hug and a charm, then just a hug.
+  await page.waitForFunction(() => (window as any).__crail.state.tahgong.mode === 'idle', null, { timeout: 30_000 });
+  const at = await page.evaluate(() => {
+    const t = (window as any).__crail.state.tahgong;
+    return { x: t.x, z: t.z };
+  });
+  await direct(page, 'tahgong.staged', true);
+  await direct(page, 'cube.teleport', at.x, at.z + 1);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 1');
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
+  await holdUntil(page, 'KeyW', 's.cube.bonks >= 2');
+  expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__crail.state.tahgong.hugs)).toBe(2);
 });

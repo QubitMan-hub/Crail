@@ -651,7 +651,7 @@ export const cubeCult: Feature = {
       });
       return tally;
     };
-    Object.assign(state, { ranks, ordain, inside });
+    Object.assign(state, { ranks, ordain, inside, give: gain });
     ctx.events.on<{ occupant?: Occupant }>('cube:bonk', ({ occupant }) => {
       if (occupant !== temple) return;
       if (members.length === 0) return tip('The hall is empty. Recruit someone, then bring them here.');

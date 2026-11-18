@@ -23,7 +23,8 @@ import { buildOctopus, buildPool, buildToken } from './model';
 
 /** The middle of the pool. The rock with the loot is two cells along from it. */
 export const POOL = { x: 3, z: 14 };
-const SHELF = { x: POOL.x + 2, z: POOL.z };
+/** The flat rock beside the pool where the loot piles up. */
+export const SHELF = { x: POOL.x + 2, z: POOL.z };
 const SPEED = 3.4; // cells a second: quicker than anyone it robs
 const CARRY = 3;
 /** Cells the route search may look at per step: enough to get round a building, cheap on a phone. */
@@ -47,7 +48,7 @@ const POCKETS: Record<string, [Stealable['token'], string]> = {
 };
 
 type Mode = 'lurk' | 'hunt' | 'snatch' | 'haul' | 'stash' | 'flee';
-interface Held {
+export interface Held {
   item: Stealable;
   mesh: THREE.Group;
 }
@@ -77,6 +78,15 @@ export const octopus: Feature = {
 
     const rig = buildOctopus();
     rig.root.scale.setScalar(1.15);
+    let flattened = 9;
+    // His halo, for when he is immortal: pale gold, a little crooked, never quite still.
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.34, 0.04, 8, 28),
+      new THREE.MeshStandardMaterial({ color: '#fff1b8', emissive: '#ffd36b', emissiveIntensity: 0.9 }),
+    );
+    halo.rotation.x = Math.PI / 2 - 0.25;
+    halo.visible = false;
+    rig.root.add(halo);
     const fury = makeSymbolSprite();
     fury.position.set(0, 1.85, 0);
     rig.root.add(fury);
@@ -97,6 +107,18 @@ export const octopus: Feature = {
       /** Names of what it is holding, and of what is on the rock. */
       carrying: [] as string[], stash: [] as string[],
       stolen: 0, returned: 0, staged: false,
+      /**
+       * Set by a later day: nothing hurts him. A blast flattens him for a moment and he
+       * pops back up holding everything, instead of dropping it all and running.
+       */
+      immortal: false,
+      shrugged: 0,
+      /** Take the oldest thing off his rock (a friend tidying up behind his back). */
+      handOver: (): Held | null => {
+        const h = stashed.shift() ?? null;
+        names();
+        return h;
+      },
     };
     ctx.state.octopus = state;
     ctx.grid.claim(state.x, state.z, occ);
@@ -254,7 +276,16 @@ export const octopus: Feature = {
     });
     // Anything that goes off next to it has the same effect as being bumped.
     ctx.events.on<{ x: number; z: number; radius: number }>('army:blast', ({ x, z, radius }) => {
-      if (Math.max(Math.abs(state.x - x), Math.abs(state.z - z)) <= radius) startle();
+      if (Math.max(Math.abs(state.x - x), Math.abs(state.z - z)) > radius) return;
+      if (!state.immortal) return void startle();
+      // Immortal: squashed flat, then back up as if nothing happened, loot and all.
+      flattened = 0;
+      state.shrugged += 1;
+      const cube = ctx.state.cube as { x: number; z: number } | undefined;
+      if (cube && Math.abs(cube.x - state.x) + Math.abs(cube.z - state.z) < 15) {
+        tip(`That hit ${NAME}. He is immortal. He kept everything.`);
+      }
+      ctx.events.emit('octopus:shrugged', { x: state.x, z: state.z });
     });
 
     // ---- Scripted control, for tests and video shots -------------------------------
@@ -449,7 +480,16 @@ export const octopus: Feature = {
       turn = Math.atan2(Math.sin(turn), Math.cos(turn));
       rig.root.rotation.y += turn * Math.min(1, dt * 14);
       rig.body.position.y += (sink + pulse * 0.16 - rig.body.position.y) * Math.min(1, dt * 12);
-      rig.body.scale.set(1 + pulse * 0.08, 1 - pulse * 0.12 + Math.sin(time * 2.2) * 0.02, 1 + pulse * 0.08);
+      // Flattened by a blast (immortal): down to a pancake, then a springy pop back.
+      flattened += dt;
+      const squash = flattened < 0.12 ? 1 - (flattened / 0.12) * 0.82 : flattened < 1 ? 1 - 0.82 * Math.exp(-(flattened - 0.12) * 6) * Math.cos((flattened - 0.12) * 14) : 1;
+      const spread = 1 + (1 - squash) * 0.5;
+      rig.body.scale.set((1 + pulse * 0.08) * spread, (1 - pulse * 0.12 + Math.sin(time * 2.2) * 0.02) * squash, (1 + pulse * 0.08) * spread);
+      halo.visible = state.immortal;
+      if (state.immortal) {
+        halo.position.set(Math.sin(time * 1.3) * 0.04, rig.body.position.y + 1.3 * squash + 0.1 + Math.sin(time * 2.1) * 0.04, -0.05);
+        halo.rotation.z = time * 0.7;
+      }
       rig.body.rotation.x = lunge * 0.3 + (moving ? 0.12 : 0);
       const sneaky = state.mode === 'hunt' || state.mode === 'snatch';
       // At home it watches, half-lidded, and narrows its eyes now and then.
