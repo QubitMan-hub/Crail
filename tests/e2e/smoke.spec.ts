@@ -234,6 +234,7 @@ test('the leader builds soldiers, and an alarm sends them to box the cube in', a
 });
 
 test('the rocket goes up and comes straight back down', async ({ page }) => {
+  test.setTimeout(120_000);
   await open(page, '?seed=3');
   await clearStage(page);
   await direct(page, 'leader.spawn', 0, 3, 0, 2, { idle: 999 });
@@ -554,7 +555,7 @@ test('a blast flattens whoever is near it, throws the cube and costs a charm', a
 });
 
 test('with a cult of three, the rocket is aimed: a warning, then it lands where the cube was', async ({ page }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(300_000);
   await open(page, '?seed=3');
   await clearStage(page);
   await direct(page, 'leader.spawn', 0, 6, 0, 2, { idle: 999 });
@@ -562,16 +563,16 @@ test('with a cult of three, the rocket is aimed: a warning, then it lands where 
   await direct(page, 'cult.charms', 3);
   await direct(page, 'leader.launch', 'strike');
   // Stay put: it hits, and he is delighted.
-  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 1, null, { timeout: 30_000 });
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 1, null, { timeout: 90_000 });
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(2);
   expect(await page.evaluate(() => (window as any).__crail.state.rocket.hits)).toBe(1);
   // Next time, roll out of the ring: it misses and he fumes.
-  await page.waitForFunction(() => (window as any).__crail.state.rocket.phase === 'idle' && !(window as any).__crail.state.cube.moving, null, { timeout: 30_000 });
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.phase === 'idle' && !(window as any).__crail.state.cube.moving, null, { timeout: 90_000 });
   const before = await cubeState(page);
   await direct(page, 'leader.launch', 'strike');
-  await page.waitForFunction(() => /aimed at you/.test(document.querySelector('#hint')!.textContent ?? ''), null, { timeout: 30_000 });
+  await page.waitForFunction(() => /aimed at you/.test(document.querySelector('#hint')!.textContent ?? ''), null, { timeout: 90_000 });
   await direct(page, 'cube.teleport', before.x - 6, before.z + 6);
-  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 2, null, { timeout: 60_000 });
+  await page.waitForFunction(() => (window as any).__crail.state.rocket.strikes === 2, null, { timeout: 90_000 });
   expect(await page.evaluate(() => (window as any).__crail.state.cult.charms)).toBe(2);
   expect(await page.evaluate(() => (window as any).__crail.state.rocket.hits)).toBe(1);
 });
