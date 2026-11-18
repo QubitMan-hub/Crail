@@ -13,7 +13,8 @@ import { box, fuse, group, HIP, mat } from '../../characters/rig';
  * The Cult of the Cube. Earn a charm (ride a ride, or visit the shrine), then stop
  * beside anyone but the leader and stay still: the cube preaches, a ring fills, and
  * they put on the robe and follow the cube from then on. Bumping people recruits nobody.
- * Only the four most senior members follow the cube; the rest keep to the temple.
+ * Only the three most senior members (the high priest and two priests) follow the cube;
+ * the rest keep to the temple.
  * Stop moving and they gather and worship. Take them to the temple to be ordained:
  * priests make the shrine give more, and the high priest recruits on his own.
  */
@@ -35,7 +36,7 @@ const NAMES: Record<string, string> = { soldier: 'Soldiers', femboy: 'Femboys', 
 /** The temple: a hall behind the shrine where members are ordained. */
 export const TEMPLE = { x: -11, z: -4 };
 /** How many members follow the cube about. The rest stay at the temple. */
-const RETINUE = 4;
+const RETINUE = 3;
 /**
  * Where the congregation stands: three rows facing the temple door, with a gap round
  * every member so each one reads, an aisle up the middle, and a clear band in front of

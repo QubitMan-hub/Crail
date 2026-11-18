@@ -755,7 +755,7 @@ test('+ and - zoom the view, within limits, and it is remembered', async ({ page
   expect(Number(await page.evaluate(() => localStorage.getItem('crail.zoom')))).toBeCloseTo(0.6, 2);
 });
 
-test('a big cult: four follow, twelve stand in rows at the temple, the rest go inside', async ({ page }) => {
+test('a big cult: three follow, twelve stand in rows at the temple, the rest go inside', async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, '?seed=3');
   await clearStage(page);
@@ -766,7 +766,7 @@ test('a big cult: four follow, twelve stand in rows at the temple, the rest go i
     await direct(page, 'cult.recruit', 'femboys', i);
   }
   await direct(page, 'cube.teleport', 4, 4);
-  await page.waitForFunction(() => (window as any).__crail.state.cult.inside.size === 4, null, { timeout: 200_000 });
+  await page.waitForFunction(() => (window as any).__crail.state.cult.inside.size === 5, null, { timeout: 200_000 });
   const c = await page.evaluate(() => {
     const cult = (window as any).__crail.state.cult;
     const outside = cult.members.filter((n: any) => !n.lead && !cult.inside.has(n));
@@ -780,5 +780,5 @@ test('a big cult: four follow, twelve stand in rows at the temple, the rest go i
       hidden,
     };
   });
-  expect(c).toEqual({ members: 20, following: 4, outside: 12, spaced: true, hidden: 4 });
+  expect(c).toEqual({ members: 20, following: 3, outside: 12, spaced: true, hidden: 5 });
 });

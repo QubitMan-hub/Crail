@@ -46,7 +46,7 @@ const HELP: [string, string, string][] = [
   ['002-femboys', 'Femboys', 'Friendlier. Bump one three times and you may get a bow.'],
   ['003-park', 'Rides', 'Roll into a ride to get on. Each one gives a charm ✦, then needs a rest. Press a direction to get off early (no charm before halfway).'],
   ['003-cube-cult', 'Preach', 'With a charm, stop next to someone and stay still. A ring fills and they join. Goths cost ✦2.'],
-  ['003-cube-cult', 'Your cult', 'Four followers walk with you; the rest wait at the temple. Bump the shrine for charms, and the temple door to give out ranks.'],
+  ['003-cube-cult', 'Your cult', 'Your three most senior followers walk with you; the rest wait at the temple. Bump the shrine for charms, and the temple door to give out ranks.'],
   ['003-supreme-leader', 'The leader', 'Cannot be recruited. Bump his statue, flag or launch pad and his soldiers react.'],
   ['003-supreme-leader', 'Danger', 'Once your cult has three members, his rockets aim at you: get out of the red ring. A hit costs a charm.'],
   ['004-octopus', 'Gåmson', 'The octopus. Steals from everyone. Roll into him to make him drop things. Bump the rock by his pool to give everything back.'],
