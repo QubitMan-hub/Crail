@@ -897,3 +897,17 @@ test('Gåmson can steal Picachu’s battery, and then it cannot charge', async (
   const p = await page.evaluate(() => (window as any).__crail.state.picachu);
   expect({ battery: p.battery, charge: p.charge }).toEqual({ battery: false, charge: 0 });
 });
+
+test('Picachu is a rare secret: usually absent, never in the credits, and it can turn up', async ({ page }) => {
+  await open(page, '?seed=3');
+  const p = await page.evaluate(() => (window as any).__crail.state.picachu);
+  expect(p.present).toBe(false);
+  await expect(page.locator('#credits')).not.toContainText('Picachu');
+  await page.locator('#help-btn').click();
+  await expect(page.locator('#help dl')).not.toContainText('Picachu');
+  await page.keyboard.press('Escape');
+  await direct(page, 'picachu.appear');
+  expect(await page.evaluate(() => (window as any).__crail.state.picachu.present)).toBe(true);
+  await direct(page, 'picachu.leave');
+  expect(await page.evaluate(() => (window as any).__crail.state.picachu.present)).toBe(false);
+});
