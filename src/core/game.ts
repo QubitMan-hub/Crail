@@ -128,7 +128,10 @@ export function createGame(container: HTMLElement, features: Feature[], opts: Ga
   eased.copy(focus);
   let last = performance.now();
   const frame = (now: number) => {
-    const dt = Math.min((now - last) / 1000, 0.05);
+    // Never negative: the first frame's timestamp can be earlier than the moment the game
+    // started, and a negative step would run every timer backwards. Never more than 0.05 s
+    // either, so a stalled tab does not jump.
+    const dt = Math.max(0, Math.min((now - last) / 1000, 0.05));
     last = now;
     step(dt);
     requestAnimationFrame(frame);
