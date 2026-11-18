@@ -705,7 +705,8 @@ export const rivals: Feature = {
             const a = (t - 0.5) * 3.4;
             const fade = smooth((2.2 - t) / 0.3);
             f.pos.set(anchor.x + Math.sin(a) * 0.5 * fade, 0, anchor.z + (1 - Math.cos(a)) * 0.3 * fade);
-            f.face += (Math.atan2(Math.cos(a), Math.sin(a)) - f.face) * 0.25;
+            const want = Math.atan2(Math.cos(a), Math.sin(a)) - f.face;
+            f.face += Math.atan2(Math.sin(want), Math.cos(want)) * 0.25;
           }
           if (at(t, prev, 2.2)) moveTo(f, f.shore, 0.4);
           if (t >= 2.2) {
