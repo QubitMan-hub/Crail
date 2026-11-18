@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, fuse, group } from '../../characters/rig';
+import { box, fuse, fuseOwn, group } from '../../characters/rig';
 
 const CORAL = '#f29a86';
 const CORAL_DARK = '#d6705f';
@@ -91,6 +91,8 @@ export function buildSquid(): SquidRig {
       const [w, l] = tip;
       box(joints[joints.length - 1], CORAL_DARK, w, w * 0.6, l, 0, 0, segs[segs.length - 1][1] + l / 2 - 0.02);
     }
+    // Each joint's pieces as one mesh; the hand (added later) and next joint stay loose.
+    joints.forEach((j) => fuseOwn(j));
     return joints;
   };
   const arms: THREE.Group[][] = [];

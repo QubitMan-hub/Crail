@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Stealable } from '../../core/loot';
-import { box, buildBow, fuse, group } from '../../characters/rig';
+import { box, buildBow, fuse, fuseOwn, group } from '../../characters/rig';
 
 const TEAL = '#2f9c95';
 const TEAL_DARK = '#237a75';
@@ -66,6 +66,8 @@ export function buildOctopus(): OctopusRig {
       joints.push(joint);
       parent = joint;
     });
+    // Each joint's pieces as one mesh (the next joint stays separate, so it still bends).
+    joints.forEach((j) => fuseOwn(j));
     arms.push({ joints, angle });
     hands.push(group(joints[joints.length - 1], 0, 0.06, 0.16));
   }

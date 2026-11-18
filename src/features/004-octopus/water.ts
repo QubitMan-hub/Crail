@@ -82,15 +82,26 @@ export function createWater(cells: [number, number][], deep: (x: number, z: numb
   const base = Float32Array.from(pos);
 
   // ---- Foam where the water meets the sand -------------------------------------------
+  // One mesh for all of it: a flat strip along every edge where water meets sand.
   const foamMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, depthWrite: false });
+  const foamVerts: number[] = [];
+  const y = WATER_LEVEL + 0.012;
   for (const [x, z] of cells) {
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       if (isWet(x + dx, z + dz)) continue;
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(dx ? 0.1 : 1.02, 0.02, dz ? 0.1 : 1.02), foamMat);
-      strip.position.set(x + dx * 0.45, WATER_LEVEL + 0.012, z + dz * 0.45);
-      group.add(strip);
+      // A thin quad just inside the edge.
+      const [hx, hz] = dx ? [0.06, 0.51] : [0.51, 0.06];
+      const [ox, oz] = [x + dx * 0.44, z + dz * 0.44];
+      const a = [ox - hx, y, oz - hz];
+      const b = [ox + hx, y, oz - hz];
+      const c = [ox + hx, y, oz + hz];
+      const d = [ox - hx, y, oz + hz];
+      foamVerts.push(...a, ...c, ...b, ...a, ...d, ...c);
     }
   }
+  const foamGeo = new THREE.BufferGeometry();
+  foamGeo.setAttribute('position', new THREE.Float32BufferAttribute(foamVerts, 3));
+  group.add(new THREE.Mesh(foamGeo, foamMat));
 
   // ---- Fish, under the surface, in the deep part ------------------------------------
   const deepCells = cells.filter(([x, z]) => deep(x, z));
@@ -163,7 +174,6 @@ export function createWater(cells: [number, number][], deep: (x: number, z: numb
       p.setY(i, WATER_LEVEL + (Math.sin(time * 1.6 + x * 1.7 + z * 0.9) * 0.018 + Math.sin(time * 2.3 - x * 0.8 + z * 1.9) * 0.012) * edge);
     }
     p.needsUpdate = true;
-    geo.computeVertexNormals();
     foamMat.opacity = 0.45 + Math.sin(time * 2.2) * 0.15;
     for (const { f, tail, phase, r } of fish) {
       const t = time * 0.55 + phase;
@@ -180,6 +190,7 @@ export function createWater(cells: [number, number][], deep: (x: number, z: numb
       const k = (s.t % 3.2) / 3.2;
       const on = k < 0.18 ? Math.sin((k / 0.18) * Math.PI) : 0;
       if (k < 0.01) s.at = cells[Math.floor(Math.random() * cells.length)];
+      s.m.visible = on > 0;
       (s.m.material as THREE.MeshBasicMaterial).opacity = on * 0.9;
       s.m.position.set(s.at[0] + Math.sin(s.t * 7) * 0.3, WATER_LEVEL + 0.03, s.at[1] + Math.cos(s.t * 5) * 0.3);
     }
@@ -187,7 +198,8 @@ export function createWater(cells: [number, number][], deep: (x: number, z: numb
       r.age += dt;
       const k = Math.min(1, r.age / 1.1);
       r.m.scale.setScalar((0.15 + k * 0.75) * r.size);
-      (r.m.material as THREE.MeshBasicMaterial).opacity = r.age >= 0 && r.age < 1.1 ? 0.55 * (1 - k) : 0;
+      r.m.visible = r.age >= 0 && r.age < 1.1;
+      (r.m.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - k);
     }
     for (const d of drops) {
       if (!d.m.visible) continue;

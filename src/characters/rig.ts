@@ -124,6 +124,15 @@ export function buildBow(color: string, knot: string): THREE.Group {
 const baked = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72 });
 
 /** Fuse everything still under `parent` into a single mesh (for scenery and costumes). */
+/**
+ * Merge only the meshes directly inside `node`, leaving child groups (the next joint
+ * of an arm, say) alone so they can still move on their own.
+ */
+export function fuseOwn<T extends THREE.Object3D>(node: T): T {
+  mergeUnder(node, new Set(node.children.filter((c) => !(c as THREE.Mesh).isMesh)));
+  return node;
+}
+
 export function fuse<T extends THREE.Object3D>(parent: T): T {
   mergeUnder(parent, new Set());
   return parent;
