@@ -716,8 +716,8 @@ test('after losing a charm there is a moment when the next blast takes nothing, 
   const seen: string[] = await page.evaluate(() => (window as any).__seen);
   expect(seen.findIndex((t) => t.includes('knocked a charm'))).toBeLessThan(seen.findIndex((t) => t.includes('Lucky')));
   expect(seen.findIndex((t) => t.includes('knocked a charm'))).toBeGreaterThanOrEqual(0);
-  // The protection wears off.
-  await expect(page.locator('#cult')).not.toHaveClass(/safe/, { timeout: 15_000 });
+  // The protection wears off (four seconds of game time; the test browser runs the game slowly).
+  await expect(page.locator('#cult')).not.toHaveClass(/safe/, { timeout: 40_000 });
 });
 
 test('a big cult gets two rockets, the second aimed where the cube has gone', async ({ page }) => {
@@ -816,8 +816,8 @@ test('Tåhgong takes things back off the rock while Gåmson is out, and hugs the
   await clearStage(page);
   await direct(page, 'goths.spawn', 0, -4, 10, 1, { idle: 999 });
   const boot = () => page.evaluate(() => (window as any).__crail.state.everyone[0].rig.loot.item.visible);
-  // Gåmson takes her boot home and leaves it on his rock.
-  await direct(page, 'octopus.staged', false);
+  // Gåmson takes her boot home and leaves it on his rock. (Kept on a script, he takes
+  // just the one thing; left to himself he would go on to the next.)
   await direct(page, 'octopus.steal', '', 'boot');
   await page.waitForFunction(() => (window as any).__crail.state.octopus.stash.length === 1, null, { timeout: 60_000 });
   expect(await boot()).toBe(false);

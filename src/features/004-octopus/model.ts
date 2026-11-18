@@ -162,6 +162,8 @@ export function buildPool(cells: [number, number][], shelf: [number, number], de
   box(sand, '#f3d8c7', 0.16, 0.06, 0.12, 2.6, 0.06, 1.3);
   box(sand, '#e9b7a3', 0.12, 0.05, 0.1, -4.6, 0.055, 0.6);
   fuse(sand);
+  // Flat ground does not need to cast shadows; the stones are low enough not to miss them.
+  sand.traverse((o) => (o.castShadow = false));
   // The shelf: a flat rock on the shore, where he keeps what he took.
   const rock = group(root, shelf[0], 0, shelf[1]);
   box(rock, '#8d8a96', 0.92, 0.3, 0.92, 0, 0.15, 0);
