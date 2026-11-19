@@ -17,6 +17,8 @@ const { values } = parseArgs({
     // Scripted setup, as JSON: [["goths.clear"], ["goths.spawn", 0, -1, 0, 0, {"idle": 99}], ...]
     stage: { type: 'string', default: '[]' },
     seconds: { type: 'string', default: '0' },
+    // Where the camera looks, as "x,z" (default: wherever the game puts it).
+    focus: { type: 'string' },
   },
 });
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -29,7 +31,7 @@ try {
   await page.waitForFunction(() => window.__crail?.game);
   await page.addStyleTag({
     content: `
-    .hud, #sound, #map-btn, #cult, #help-btn, #help, .landmark { display: none !important; }
+    .hud, #sound, #map-btn, #cult, #help-btn, #help, .landmark, .cinema .vs { display: none !important; }
     #cover { position: fixed; inset: 0; color: #1d1b19; text-align: center;
              font-family: 'Inter Display', 'Inter', system-ui, sans-serif; }
     #cover .day { position: absolute; left: 0; right: 0; top: 13.5%; }
@@ -40,18 +42,26 @@ try {
     #cover .brand { position: absolute; left: 0; right: 0; top: 79%; font-weight: 800; font-size: 20px; letter-spacing: .34em; padding-left: .34em; opacity: .7; }`,
   });
   await page.evaluate(
-    ({ day, l1, l2, zoom, stage, seconds }) => {
+    ({ day, l1, l2, zoom, stage, seconds, focus }) => {
       const { game, direct } = window.__crail;
       game.ctx.camera.zoom = zoom;
       game.ctx.camera.updateProjectionMatrix();
       for (const [name, ...args] of stage) direct(name, ...args);
-      for (let t = 0; t < seconds; t += 1 / 30) game.step(1 / 30);
+      const look = () => {
+        if (focus) game.ctx.focusOverride = (game.ctx.focusOverride ?? game.ctx.focus.clone()).set(focus[0], 0, focus[1]);
+      };
+      for (let t = 0; t < seconds; t += 1 / 30) {
+        look();
+        game.step(1 / 30);
+      }
+      look();
+      game.snapCamera();
       game.step(0);
       const el = Object.assign(document.createElement('div'), { id: 'cover' });
       el.innerHTML = `<div class="day"><span>DAY ${day}</span></div><div class="l1">${l1}</div><div class="l2">${l2}</div><div class="brand">CRAIL</div>`;
       document.body.appendChild(el);
     },
-    { day: Number(values.day), l1: esc(values.line1), l2: esc(values.line2), zoom: Number(values.zoom), stage: JSON.parse(values.stage), seconds: Number(values.seconds) },
+    { day: Number(values.day), l1: esc(values.line1), l2: esc(values.line2), zoom: Number(values.zoom), stage: JSON.parse(values.stage), seconds: Number(values.seconds), focus: values.focus ? values.focus.split(',').map(Number) : null },
   );
   const out = `captures/day-${String(values.day).padStart(3, '0')}-cover.png`;
   await page.screenshot({ path: out, timeout: 240_000 });
