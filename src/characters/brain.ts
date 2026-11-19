@@ -1,4 +1,4 @@
-import { stepToward } from '../core/path';
+import { findPath, stepToward } from '../core/path';
 import type { Grid, Occupant } from '../core/grid';
 
 /**
@@ -164,6 +164,9 @@ export interface Npc {
   focus: { x: number; z: number } | null;
   /** How long they have been waiting behind someone in the way (before going round). */
   patience: number;
+  /** A planned way round (through a gate, past a fence), and where it leads. */
+  route: { x: number; z: number }[] | null;
+  routeTo: { x: number; z: number } | null;
   /** Someone just waved at her from this cell; handled when she next stands on a cell. */
   greeted: { x: number; z: number } | null;
   /** The next greeting comes with a bow. */
@@ -235,7 +238,7 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id, mobile: true };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    patience: 0, id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, spare: 0, spareAt: -1, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
+    patience: 0, route: null, routeTo: null, id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, spare: 0, spareAt: -1, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
     variant, x, z, home: { x, z }, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -554,8 +557,42 @@ function surround(n: Npc, w: World): void {
   approach(n, w, spot);
 }
 
+/** Follow a planned route one cell: true if they stepped (or are waiting their turn on it). */
+function followRoute(n: Npc, w: World, to: { x: number; z: number }): boolean {
+  const r = n.route;
+  if (!r || !n.routeTo || n.routeTo.x !== to.x || n.routeTo.z !== to.z) {
+    n.route = n.routeTo = null;
+    return false;
+  }
+  while (r.length && r[0].x === n.x && r[0].z === n.z) r.shift();
+  const next = r[0];
+  const d = next ? ([0, 1, 2, 3] as DirIndex[]).find((k) => n.x + DIRS[k][0] === next.x && n.z + DIRS[k][1] === next.z) : undefined;
+  if (!next || d === undefined) {
+    n.route = n.routeTo = null;
+    return false;
+  }
+  if (!w.grid.isFree(next.x, next.z, n.occ)) {
+    // Someone on the route: give them a moment. Scenery (or a long wait): plan again.
+    const o = w.grid.at(next.x, next.z);
+    if (o?.mobile && n.patience < 2.5) {
+      n.patience += 0.3;
+      n.wait = 0.3;
+      n.dir = d;
+      return true;
+    }
+    n.route = n.routeTo = null;
+    return false;
+  }
+  r.shift();
+  n.patience = Math.max(0, n.patience - 0.6);
+  if (turn(n, d)) return true;
+  step(n, w, d);
+  return true;
+}
+
 /** One step toward a cell: the direct way if it is free, otherwise round whatever is in the way. */
 function approach(n: Npc, w: World, to: { x: number; z: number }): void {
+  if (followRoute(n, w, to)) return;
   const dx = to.x - n.x;
   const dz = to.z - n.z;
   const alongX: DirIndex = dx > 0 ? 0 : 2;
@@ -582,8 +619,16 @@ function approach(n: Npc, w: World, to: { x: number; z: number }): void {
       n.wait = 0.3;
       return void (n.dir = ways[0]);
     }
-    // Every direct way is taken: find a real way round (a short search of the cells
-    // nearby), instead of shuffling back and forth in front of the obstacle.
+    // Every direct way is taken: plan the whole way round (through the gate, past the
+    // fence), and stick to it, instead of shuffling back and forth in front of the
+    // obstacle. People do not block a plan: they move.
+    const plan = findPath(w.grid, n.occ, n, to, { onto: true, throughPeople: n.patience >= 2.5 ? false : true });
+    if (plan && plan.length && plan.length < 90) {
+      n.route = plan;
+      n.routeTo = { x: to.x, z: to.z };
+      n.avoid = null;
+      if (followRoute(n, w, to)) return;
+    }
     const route = stepToward(w.grid, n.occ, n, to, { onto: true, maxSearch: 700, margin: 4 });
     const routed = route ? (([0, 1, 2, 3] as DirIndex[]).find((k) => n.x + DIRS[k][0] === route[0] && n.z + DIRS[k][1] === route[1]) ?? undefined) : undefined;
     if (routed !== undefined && open(routed)) d = routed;
@@ -952,7 +997,11 @@ export function tick(n: Npc, w: World, dt: number): void {
     n.p += n.speed * dt;
     if (n.p < 1) return;
     w.grid.release(n.x, n.z, n.occ);
+    // The trail is the path a column follows. Doubling back onto a cell already on it
+    // cuts the loop out, so followers are never sent round in circles.
+    const loop = n.trail.findIndex((c) => c.x === n.nx && c.z === n.nz);
     n.trail.unshift({ x: n.x, z: n.z });
+    if (loop >= 0) n.trail.length = loop + 1;
     if (n.trail.length > 10) n.trail.length = 10;
     n.x = n.nx;
     n.z = n.nz;
