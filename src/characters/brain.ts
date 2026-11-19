@@ -162,6 +162,8 @@ export interface Npc {
   persona: Persona;
   /** What she is looking at when it is not the cube. */
   focus: { x: number; z: number } | null;
+  /** How long they have been waiting behind someone in the way (before going round). */
+  patience: number;
   /** Someone just waved at her from this cell; handled when she next stands on a cell. */
   greeted: { x: number; z: number } | null;
   /** The next greeting comes with a bow. */
@@ -230,10 +232,10 @@ export interface Npc {
 export function createNpc(
   id: string, variant: number, x: number, z: number, dir: DirIndex, grid: Grid, persona: Persona = GOTH,
 ): Npc | null {
-  const occ: Occupant = { kind: persona.kind, id };
+  const occ: Occupant = { kind: persona.kind, id, mobile: true };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, spare: 0, spareAt: -1, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
+    patience: 0, id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, spare: 0, spareAt: -1, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
     variant, x, z, home: { x, z }, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -510,11 +512,40 @@ const RING = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [-1, -1], [1, -
 /** Where worshippers stand, as (forward, sideways) from the cube: behind it, then the four diagonals. */
 const GATHER = [[-1, 0], [-1, 1], [-1, -1], [1, 1], [1, -1]];
 
+/**
+ * A spot to stand on, near where they were told: the spot itself, or, if scenery stands
+ * there (a tree, a fence, a cart), the nearest open cell beside it. People in the way do
+ * not count: they move.
+ */
+function standable(n: Npc, w: World, spot: { x: number; z: number }): { x: number; z: number } {
+  const o = w.grid.at(spot.x, spot.z);
+  if (!o || o === n.occ || o.mobile) return spot;
+  let best: { x: number; z: number } | null = null;
+  let bestScore = Infinity;
+  for (let r = 1; r <= 2 && !best; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const c = { x: spot.x + dx, z: spot.z + dz };
+        const at = w.grid.at(c.x, c.z);
+        if (at && at !== n.occ && !at.mobile) continue;
+        if (c.x === w.cube.x && c.z === w.cube.z) continue;
+        const score = Math.abs(dx) + Math.abs(dz) + manhattan(n, c) * 0.01;
+        if (score < bestScore) {
+          bestScore = score;
+          best = c;
+        }
+      }
+    }
+  }
+  return best ?? spot;
+}
+
 /** Take up a place right beside the cube and glare at it. */
 function surround(n: Npc, w: World): void {
   // Everyone has their own spot around the cube: four sides first, then the corners.
   const [ox, oz] = RING[n.slot % RING.length];
-  const spot = { x: w.cube.x + ox, z: w.cube.z + oz };
+  const spot = standable(n, w, { x: w.cube.x + ox, z: w.cube.z + oz });
   if (n.x === spot.x && n.z === spot.z) return void faceCube(n, w);
   const taken = !w.grid.isFree(spot.x, spot.z, n.occ);
   const close = Math.max(Math.abs(n.x - w.cube.x), Math.abs(n.z - w.cube.z)) <= 1;
@@ -543,20 +574,38 @@ function approach(n: Npc, w: World, to: { x: number; z: number }): void {
   };
   let d = ways.find(open);
   if (d === undefined) {
+    // Someone is in the way, and people move: wait a moment for them to clear it rather
+    // than stepping aside and straight back (pacing). Scenery does not move: go round.
+    const ahead = w.grid.at(n.x + DIRS[ways[0]][0], n.z + DIRS[ways[0]][1]);
+    if (ahead?.mobile && n.patience < 2.5) {
+      n.patience += 0.3;
+      n.wait = 0.3;
+      return void (n.dir = ways[0]);
+    }
     // Every direct way is taken: find a real way round (a short search of the cells
     // nearby), instead of shuffling back and forth in front of the obstacle.
     const route = stepToward(w.grid, n.occ, n, to, { onto: true, maxSearch: 700, margin: 4 });
     const routed = route ? (([0, 1, 2, 3] as DirIndex[]).find((k) => n.x + DIRS[k][0] === route[0] && n.z + DIRS[k][1] === route[1]) ?? undefined) : undefined;
     if (routed !== undefined && open(routed)) d = routed;
     else {
-      // No route either: step to whichever free cell is nearest, and remember where we came
-      // from so the next step does not undo this one.
+      // No route, and nearly there: stand and wait for the way to open, instead of
+      // shuffling back and forth in front of it.
+      if (manhattan(n, to) <= 3) {
+        n.wait = 0.6;
+        return;
+      }
+      // No route and far off: step to whichever free cell is nearest, and remember where we
+      // came from so the next step does not undo this one.
       const after = (way: DirIndex) => Math.abs(to.x - n.x - DIRS[way][0]) + Math.abs(to.z - n.z - DIRS[way][1]);
       d = ([0, 1, 2, 3] as DirIndex[]).filter(open).sort((p, q) => after(p) - after(q))[0];
       if (d === undefined) return;
     }
     n.avoid = { x: n.x, z: n.z, steps: 4 };
-  } else if (n.avoid && --n.avoid.steps <= 0) n.avoid = null;
+    n.patience = 0;
+  } else {
+    n.patience = Math.max(0, n.patience - 0.6);
+    if (n.avoid && --n.avoid.steps <= 0) n.avoid = null;
+  }
   if (turn(n, d)) return;
   step(n, w, d);
 }
@@ -859,10 +908,10 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
       const reach = 2 + Math.floor(n.slot / GATHER.length);
       const f = DIRS[lead.dir];
       const r = DIRS[(lead.dir + 1) % 4];
-      const spot = {
+      const spot = standable(n, w, {
         x: w.cube.x + (f[0] * back + r[0] * across) * reach,
         z: w.cube.z + (f[1] * back + r[1] * across) * reach,
-      };
+      });
       if (n.x === spot.x && n.z === spot.z) return void faceCube(n, w);
       if (!w.grid.isFree(spot.x, spot.z, n.occ) && manhattan(n, spot) <= 1) return void faceCube(n, w);
       return approach(n, w, spot);

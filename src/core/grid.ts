@@ -2,6 +2,8 @@
 export interface Occupant {
   kind: string;
   id: string;
+  /** Someone who moves about (a character), as opposed to scenery: worth waiting for. */
+  mobile?: boolean;
 }
 
 const key = (x: number, z: number) => `${x},${z}`;
