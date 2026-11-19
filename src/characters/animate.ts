@@ -76,7 +76,9 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
     const dz = at.z - pz;
     const dist = Math.hypot(dx, dz);
     p.headYaw = clamp(wrap(Math.atan2(dx, dz) - m.yaw), -1.1, 1.1);
-    p.headPitch = clamp(Math.atan2(1.1, Math.max(dist, 0.6)), 0, maxPitch);
+    // The cube is on the floor, so they look down at it. Anyone else they look at (a rival,
+    // someone who waved) is a person: face to face, head level.
+    p.headPitch = n.focus ? 0.04 : clamp(Math.atan2(1.1, Math.max(dist, 0.6)), 0, maxPitch);
   };
 
   if (walking) {

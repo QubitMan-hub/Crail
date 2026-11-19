@@ -999,6 +999,31 @@ test('a fight seen up close is shot like a film: bars in, a title card, bars out
   expect(s.sounds).toBeGreaterThan(40);
 });
 
+test('the leader can draft Sonny or Prinz; they still leave for a fight, helmet on, and report back after', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, '?seed=3');
+  for (const c of ['octopus', 'tahgong', 'picachu', 'rivals']) await direct(page, `${c}.staged`, true);
+  for (const c of ['goths', 'femboys', 'soldiers', 'leader']) {
+    await direct(page, `${c}.staged`, true);
+    await direct(page, `${c}.clear`);
+  }
+  await direct(page, 'fighters.staged', true);
+  await direct(page, 'fighters.place', 0, 10, 30, 99);
+  await direct(page, 'fighters.place', 1, 40, 30, 99);
+  await direct(page, 'leader.spawn', 0, 11, 30, 2, { idle: 99 });
+  await direct(page, 'cube.teleport', 12, 33);
+  await direct(page, 'leader.conscript');
+  const sonny = () => page.evaluate(() => {
+    const m = (window as any).__crail.state.everyone.find((e: any) => e.n.persona.kind === 'fighter');
+    return { drafted: m.n.drafted, helmet: !!m.rig.head.getObjectByName('helmet'), visible: m.rig.root.visible };
+  });
+  expect(await sonny()).toMatchObject({ drafted: true, helmet: true });
+  await expect(page.locator('#hint')).toContainText('drafted Sonny');
+  await direct(page, 'rivals.fight', 4);
+  await page.waitForFunction(() => (window as any).__crail.state.rivals.fights === 1 && !(window as any).__crail.state.rivals.fighting, null, { timeout: 200_000 });
+  expect(await sonny()).toMatchObject({ drafted: true, helmet: true, visible: true });
+});
+
 test('an easter egg: the golden cube', async ({ page }) => {
   await open(page, '?seed=3');
   await clearStage(page);

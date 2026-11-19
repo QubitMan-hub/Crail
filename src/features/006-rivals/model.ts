@@ -31,7 +31,7 @@ export const SONNY: FighterLook = { name: 'Sonny', top: '#d8432f', trim: '#f6efe
 export const PRINZ: FighterLook = { name: 'Prinz', top: '#4f3a86', trim: '#e2bf52', legs: '#4f3a86', boots: '#f6f1e6', skin: '#ecc9aa', hair: 'flame', aura: '#7fd8ff', band: '#f6f1e6' };
 
 const INK = '#1d1b19';
-const HAIR = '#1d1b19';
+const HAIR = '#2b2522';
 
 /**
  * Simple hair: a neat short cut, one solid piece with no gaps for skin to show through.
@@ -60,17 +60,19 @@ function addHair(head: THREE.Group, look: FighterLook, mat: THREE.Material): THR
     block(x0, x1, 0.12, 0.42, -0.25, -0.05);
   }
   if (look.name === 'Sonny') {
-    // A little volume on top, a soft fringe along the hairline, a lock at the left temple.
-    block(-0.22, 0.22, 0.5, 0.55, -0.24, 0.2);
-    block(-0.24, 0.24, 0.415, 0.47, 0.2, 0.272);
-    block(-0.07, 0.17, 0.4, 0.43, 0.24, 0.275);
-    block(-0.25, -0.185, 0.33, 0.45, 0.16, 0.27);
+    // A little volume on top with a cowlick, and a fringe of three uneven tufts that stops
+    // short of the brows, so there is forehead to see.
+    block(-0.2, 0.2, 0.5, 0.53, -0.22, 0.16);
+    block(0.0, 0.09, 0.53, 0.58, -0.06, 0.04);
+    block(-0.245, -0.08, 0.435, 0.48, 0.2, 0.27);
+    block(-0.09, 0.07, 0.418, 0.48, 0.2, 0.275);
+    block(0.06, 0.245, 0.445, 0.48, 0.2, 0.268);
   } else {
     // Combed straight back: a clean hairline, a small peak, and height toward the crown.
     block(-0.235, 0.235, 0.425, 0.48, 0.2, 0.262);
     block(-0.045, 0.045, 0.41, 0.44, 0.24, 0.268);
-    block(-0.22, 0.22, 0.5, 0.55, -0.2, 0.16);
-    block(-0.2, 0.2, 0.55, 0.6, -0.26, -0.02);
+    block(-0.21, 0.21, 0.5, 0.535, -0.2, 0.14);
+    block(-0.19, 0.19, 0.535, 0.565, -0.25, -0.04);
   }
   const mesh = new THREE.Mesh(mergeGeometries(parts), mat);
   for (const g of parts) g.dispose();
@@ -144,7 +146,8 @@ export function buildFighterRig(look: FighterLook, emote: THREE.Sprite): Rig {
   root.add(emote);
   return bake({
     root, body, torso, head, armL: L.arm, armR: R.arm, legL: L.leg, legR: R.leg, ...f, sway: [], hang: [], emote,
-    stride: 1.2, headTop: 0.95, identity: { kind: 'fighter', trim: look.top, hair: HAIR }, loot: { item: band },
+    // The top of the hair: where a bow (or a helmet) sits.
+    stride: 1.2, headTop: 0.55, identity: { kind: 'fighter', trim: look.top, hair: HAIR }, loot: { item: band },
   });
 }
 

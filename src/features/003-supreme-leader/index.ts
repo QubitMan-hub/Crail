@@ -350,7 +350,7 @@ export const supremeLeader: Feature = {
       if (!n || n.nx !== null || !['idle', 'walk'].includes(n.mode) || drafted().length >= CONSCRIPTS) return false;
       const pick = everyone(ctx).find(
         (m) =>
-          ['goth', 'femboy'].includes(m.n.persona.kind) && !m.n.cult && !m.n.drafted && m.n.nx === null &&
+          ['goth', 'femboy', 'fighter'].includes(m.n.persona.kind) && !m.n.cult && !m.n.drafted && m.n.nx === null &&
           ['idle', 'walk'].includes(m.n.mode) && Math.abs(m.n.x - n.x) + Math.abs(m.n.z - n.z) <= reach,
       );
       if (!pick) return false;
@@ -370,7 +370,8 @@ export const supremeLeader: Feature = {
         pick.rig.head.add(helmet);
       }
       const c = ctx.state.cube;
-      if (c && Math.abs(c.x - n.x) + Math.abs(c.z - n.z) < 16) {
+      // (A fighter's draft has its own announcement, from the fighters.)
+      if (c && Math.abs(c.x - n.x) + Math.abs(c.z - n.z) < 16 && pick.n.persona.kind !== 'fighter') {
         tip(`He conscripted a ${pick.n.persona.kind}. Preach to them to win them back.`);
       }
       ctx.events.emit('army:conscripted', { id: pick.n.id });

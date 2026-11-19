@@ -7,6 +7,7 @@ import type { SfxEvent, SfxKind } from '../../core/sound';
 import { FIGHTER, floor, relocate, type DirIndex } from '../../characters/brain';
 import { createCast, everyone, type Member } from '../../characters/cast';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
+import { box } from '../../characters/rig';
 import { isWater, POOL, SHELF } from '../004-octopus';
 import { buildFighter, buildFighterRig, PRINZ, SONNY, type FighterLook, type FighterRig } from './model';
 
@@ -239,6 +240,14 @@ export const rivals: Feature = {
         leg: null, spin: 0, spin0: 0, shore, air, close, emote, emoteKind: null, emoteAge: 9, last: shore.clone(), ghostIn: 0,
       };
       ghosts.set(f, ghostsOf(rig, look.aura));
+      // An army helmet, worn into the fight if the leader has drafted them.
+      const helmet = new THREE.Group();
+      helmet.name = 'helmet';
+      box(helmet, '#6f7752', 0.62, 0.2, 0.6, 0, 0.57, -0.01);
+      box(helmet, '#565d40', 0.68, 0.05, 0.66, 0, 0.47, -0.01);
+      box(helmet, '#d6b24a', 0.08, 0.08, 0.014, 0, 0.57, 0.3);
+      helmet.visible = false;
+      rig.head.add(helmet);
       return f;
     };
     // Both on the near side of the pool, so the whole fight fits on screen: Sonny on the
@@ -551,6 +560,8 @@ export const rivals: Feature = {
         });
         if (watching()) showTitle();
         say2('Two fighters just dropped out of the sky next to Gåmson’s pool.', true);
+        const awol = both.filter((f) => resident(f.name)?.n.drafted).map((f) => f.name);
+        if (awol.length) say2(`${awol.join(' and ')} ${awol.length > 1 ? 'are' : 'is'} supposed to be on army duty right now.`);
       },
       tick(t, prev) {
         both.forEach((f, i) => {
@@ -1074,6 +1085,11 @@ export const rivals: Feature = {
       if (state.fighting) return;
       const o = octopus();
       if (o) o.busy = true;
+      // Drafted? They go anyway, helmet and all.
+      both.forEach((f) => {
+        const helmet = f.rig.head.getObjectByName('helmet');
+        if (helmet) helmet.visible = !!resident(f.name)?.n.drafted;
+      });
       [resident('Sonny'), resident('Prinz')].forEach((m, i) => m && goAway(m, i));
       state.fighting = true;
       state.fights += 1;
@@ -1240,6 +1256,7 @@ export const rivals: Feature = {
     // ---- Rare encounters, on an ordinary day ------------------------------------------------
     let sinceLook = 0;
     let lastStandoff = -99;
+    let lastMoment = -99;
     let clock = 0;
     const faceEach = (a: Member['n'], b: { x: number; z: number }) => {
       const dx = b.x - a.x;
@@ -1261,33 +1278,110 @@ export const rivals: Feature = {
         if (cubeNear(14)) tip('Sonny and Prinz just glared at each other. Not today.');
         return;
       }
-      for (const m of everyone(ctx)) {
-        if (m === s || m === p || !free(m.n)) continue;
-        const kind = m.n.persona.kind;
-        // Sonny spars with a soldier, who salutes him for it.
-        if (kind === 'soldier' && d(m.n, s.n) <= 2 && free(s.n) && rand() < 0.04) {
-          faceEach(s.n, m.n);
-          Object.assign(s.n, { emote: { kind: 'note', t: 0 } });
-          m.n.order = 'salute';
-          return;
+      // Everything else is rarer still: at most one little moment every 25 seconds or so.
+      if (clock - lastMoment < 25) return;
+      const near = cubeNear(14);
+      const moment = (text?: string) => {
+        lastMoment = clock;
+        if (text && near) tip(text);
+      };
+      const pz = ctx.state.picachu as { x: number; z: number; present: boolean } | undefined;
+      // Picachu wanders past: Sonny is delighted; Prinz gets zapped for staring.
+      if (pz?.present && rand() < 0.3) {
+        if (d(pz, s.n) <= 2 && free(s.n)) {
+          faceEach(s.n, pz);
+          Object.assign(s.n, { mode: 'stare', stareKind: 'bonked', t: 0, focus: { x: pz.x, z: pz.z }, emote: { kind: 'heart', t: 0 } });
+          return moment('Sonny met Picachu. Best day of his life.');
         }
-        // Prinz and the leader: neither has anything nice to say.
-        if (kind === 'leader' && d(m.n, p.n) <= 3 && free(p.n) && rand() < 0.05) {
+        if (d(pz, p.n) <= 2 && free(p.n)) {
+          floor(p.n, p.world);
+          sfx('crack', v(p.n.x, 1, p.n.z), { gain: 0.6, pitch: 1.4 });
+          return moment('Prinz looked at Picachu the wrong way. Zap.');
+        }
+      }
+      // Drafted, and the leader walks past: a salute, through gritted teeth (Prinz), or a big
+      // cheerful one (Sonny).
+      for (const f of [s, p]) {
+        if (!f.n.drafted || f.n.nx !== null) continue;
+        const boss = everyone(ctx).find((m) => m.n.persona.kind === 'leader');
+        if (boss && d(boss.n, f.n) <= 3 && rand() < 0.25) {
+          faceEach(f.n, boss.n);
+          f.n.order = 'salute';
+          f.n.emote = { kind: f === p ? 'anger' : 'note', t: 0 };
+          return moment(f === p ? 'Prinz saluted the leader. Through gritted teeth.' : 'Sonny saluted the leader. Way too enthusiastically.');
+        }
+      }
+      for (const m of everyone(ctx)) {
+        if (m === s || m === p) continue;
+        const kind = m.n.persona.kind;
+        // A cultist tries to recruit Prinz. Prinz is not interested.
+        if (m.n.cult && m.n.nx === null && d(m.n, p.n) <= 2 && free(p.n) && rand() < 0.2) {
           faceEach(p.n, m.n);
           p.n.order = 'fume';
-          m.n.order = 'fume';
-          if (cubeNear(14)) tip('Prinz and the leader have nothing nice to say to each other.');
-          return;
+          m.n.emote = { kind: 'q', t: 0 };
+          return moment('A cultist tried to recruit Prinz. Bad idea.');
         }
-        // A goth, very occasionally, quite taken with Prinz.
-        if (kind === 'goth' && d(m.n, p.n) <= 2 && rand() < 0.03) {
+        if (!free(m.n)) continue;
+        // Sonny spars with a soldier, who salutes him for it.
+        if (kind === 'soldier' && d(m.n, s.n) <= 2 && free(s.n) && rand() < 0.2) {
+          faceEach(s.n, m.n);
+          faceEach(m.n, s.n);
+          Object.assign(s.n, { emote: { kind: 'note', t: 0 } });
+          m.n.order = 'salute';
+          return moment();
+        }
+        // Prinz and the leader: neither has anything nice to say.
+        if (kind === 'leader' && d(m.n, p.n) <= 3 && free(p.n) && !p.n.drafted && rand() < 0.25) {
+          faceEach(p.n, m.n);
+          faceEach(m.n, p.n);
+          p.n.order = 'fume';
+          m.n.order = 'fume';
+          return moment('Prinz and the leader have nothing nice to say to each other.');
+        }
+        // A femboy offers Sonny a bow. He wears it with pride.
+        if (kind === 'femboy' && d(m.n, s.n) <= 2 && free(s.n) && rand() < 0.15) {
+          faceEach(m.n, s.n);
+          faceEach(s.n, m.n);
+          m.n.emote = { kind: 'heart', t: 0 };
+          s.n.emote = { kind: 'sparkle', t: 0 };
+          ctx.events.emit('direct:fighters.bow', [residents.members.indexOf(s)]);
+          return moment('A femboy gave Sonny a bow. He is never taking it off.');
+        }
+        // A femboy offers Prinz a bow. He refuses. The femboy is crushed.
+        if (kind === 'femboy' && d(m.n, p.n) <= 2 && free(p.n) && rand() < 0.15) {
+          faceEach(m.n, p.n);
+          faceEach(p.n, m.n);
+          m.n.emote = { kind: 'q', t: 0 };
+          p.n.order = 'fume';
+          return moment('Prinz refused a bow. The femboy will never recover.');
+        }
+        // A goth, very occasionally, quite taken with Prinz. He pretends not to notice.
+        if (kind === 'goth' && d(m.n, p.n) <= 2 && rand() < 0.15) {
           faceEach(m.n, p.n);
           m.n.emote = { kind: 'heart', t: 0 };
-          return;
+          if (free(p.n)) p.n.emote = { kind: 'dots', t: 0 };
+          return moment();
+        }
+        // Sonny waves at a goth. The goth stares back, unimpressed.
+        if (kind === 'goth' && d(m.n, s.n) <= 2 && free(s.n) && rand() < 0.15) {
+          faceEach(s.n, m.n);
+          s.n.emote = { kind: 'note', t: 0 };
+          m.n.greeted = { x: s.n.x, z: s.n.z };
+          return moment();
         }
       }
     };
 
+    // Drafted into the army. They will still skip duty for a good fight.
+    ctx.events.on<{ id: string }>('army:conscripted', ({ id }) => {
+      const m = residents.members.find((r) => r.n.id === id);
+      const c = cubeAt();
+      if (!m || !c || Math.abs(c.x - m.n.x) + Math.abs(c.z - m.n.z) > 16) return;
+      const sonnyDrafted = m === resident('Sonny');
+      tip(sonnyDrafted
+        ? 'The leader drafted Sonny. Sonny thinks it is a training montage.'
+        : 'The leader drafted Prinz. Prinz is furious. Prinz is also going.');
+    });
 
     // A glare on demand (video shots): wherever the two of them are.
     ctx.events.on<[number?]>('direct:rivals.standoff', ([seconds]) => {
@@ -1302,7 +1396,7 @@ export const rivals: Feature = {
     // ---- Every frame -----------------------------------------------------------------------
     let lean: THREE.Vector3 | null = null;
     let lensOwned = false;
-    const DARK = new THREE.Color('#1d1b19');
+    const DARK = new THREE.Color('#2b2522');
     const GOLD = new THREE.Color('#e3ad2a');
     const tmp = new THREE.Vector3();
     /** How the fight is framed. Video shots can frame tighter, and without the cube. */
