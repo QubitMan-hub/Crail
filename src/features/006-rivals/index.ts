@@ -4,7 +4,7 @@ import { addLandmark } from '../../core/landmarks';
 import { seededRandom } from '../../core/rng';
 import { tip } from '../../core/tip';
 import type { SfxEvent, SfxKind } from '../../core/sound';
-import { FIGHTER, floor, relocate, type DirIndex } from '../../characters/brain';
+import { FIGHTER, floor, PRINZ_TEMPER, relocate, SONNY_TEMPER, type DirIndex } from '../../characters/brain';
 import { createCast, everyone, type Member } from '../../characters/cast';
 import { makeSymbolSprite, showSymbol } from '../../characters/emotes';
 import { box } from '../../characters/rig';
@@ -141,7 +141,14 @@ export const rivals: Feature = {
     const rand = seededRandom(ctx.seed ^ 0x6ff);
     // Day to day: two ordinary residents who wander about between the park and the pool.
     const residents = createCast(ctx, {
-      key: 'fighters', persona: FIGHTER, variants: [SONNY, PRINZ], build: buildFighterRig, count: 2, seedSalt: 0x5a1,
+      key: 'fighters', persona: FIGHTER, personaOf: (look) => (look.name === 'Prinz' ? PRINZ_TEMPER : SONNY_TEMPER),
+      variants: [SONNY, PRINZ], build: buildFighterRig, count: 2, seedSalt: 0x5a1,
+      onEvent(event, n) {
+        const c = ctx.state.cube as { x: number; z: number } | undefined;
+        if (!c || Math.abs(c.x - n.x) + Math.abs(c.z - n.z) > 14) return;
+        if (event === 'respect') tip('Sonny respects the cube now. Worthy opponent.');
+        if (event === 'stormed') tip('Prinz stormed off. He will remember this.');
+      },
       home: { x: POOL.x - 6, z: POOL.z - 8 },
       bow: ['#f6a8c4', '#ee6fa4'],
     });
@@ -1371,6 +1378,10 @@ export const rivals: Feature = {
         }
       }
     };
+
+    // Bumped by the cube: Sonny, after a jab, a spin kick and a thumbs-up, respects it;
+    // Prinz, after crossed arms and stamping, storms off.
+    // (Said by the cast's onEvent, above, where we know who it was and how close.)
 
     // Drafted into the army. They will still skip duty for a good fight.
     ctx.events.on<{ id: string }>('army:conscripted', ({ id }) => {

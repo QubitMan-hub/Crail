@@ -289,6 +289,34 @@ function targetPose(n: Npc, w: World, m: Motion, time: number, px: number, pz: n
       p.y = Math.abs(Math.sin(time * 15)) * 0.08;
       p.legL = Math.max(0, Math.sin(time * 15)) * -0.5;
       break;
+    case 'spar': {
+      // Fists up, bouncing on his toes, jabbing at the cube: left, right, left.
+      lookAtCube(0.3);
+      const jab = Math.sin(time * 16);
+      p.armLx = -1.25 - Math.max(0, jab) * 0.45;
+      p.armRx = -1.25 - Math.max(0, -jab) * 0.45;
+      p.armLz = -0.25;
+      p.armRz = 0.25;
+      p.y = Math.abs(Math.sin(time * 9)) * 0.07;
+      p.legL = Math.sin(time * 9) * 0.25;
+      p.legR = -Math.sin(time * 9) * 0.25;
+      p.lean = Math.sin(time * 4.5) * 0.05;
+      p.lids = 0;
+      p.brow = -0.3;
+      p.mouthW = 1.3;
+      p.mouthH = 1.6;
+      break;
+    }
+    case 'scoff':
+      // Arms crossed, chin up, looking anywhere but at the cube.
+      Object.assign(p, CROSSED);
+      p.headPitch = -0.22;
+      p.headYaw = 0.75;
+      p.headRoll = -0.08;
+      p.lids = 0.65;
+      p.brow = 0.5;
+      p.mouthW = 0.7;
+      break;
     case 'salute':
       p.armRx = -2.55;
       p.armRz = 0.95;

@@ -39,7 +39,7 @@ export interface Persona {
   /** Also the occupant kind on the grid. */
   kind: string;
   blocked: 'stare' | 'pat' | 'inspect';
-  bonk: 'reject' | 'adopt' | 'summon' | 'salute';
+  bonk: 'reject' | 'adopt' | 'summon' | 'salute' | 'spar' | 'scoff';
   caught: 'deny' | 'wave';
   sits: boolean;
   /** Waves at characters of other kinds when they are in the way. */
@@ -77,12 +77,16 @@ export const LEADER: Persona = {
   followChance: 0, twirls: false, bounce: 0.6, restLids: 0.4,
   speed: 0.95, stride: 0.8, snappy: false, wanders: true, builds: true, rest: 'handsBehind',
 };
-/** Sonny and Prinz on an ordinary day: quick on their feet, friendly enough, too cool to be bumped. */
+/** Sonny and Prinz on an ordinary day: quick on their feet, friendly enough. */
 export const FIGHTER: Persona = {
-  kind: 'fighter', blocked: 'stare', bonk: 'reject', caught: 'deny', sits: false, greets: true,
+  kind: 'fighter', blocked: 'stare', bonk: 'spar', caught: 'deny', sits: false, greets: true,
   followChance: 0.04, twirls: false, bounce: 1.3, restLids: 0.15,
   speed: 1.6, stride: 1.3, snappy: true, wanders: true, builds: false, rest: 'plain',
 };
+/** Sonny, bumped: a sparring partner! Fists up, jabs, a spin kick, a thumbs-up. */
+export const SONNY_TEMPER: Persona = { ...FIGHTER, bonk: 'spar' };
+/** Prinz, bumped: how dare it. Arms crossed, stamping, and then he storms off. */
+export const PRINZ_TEMPER: Persona = { ...FIGHTER, bonk: 'scoff', greets: false };
 export const SOLDIER: Persona = {
   kind: 'soldier', blocked: 'stare', bonk: 'salute', caught: 'deny', sits: false, greets: false,
   followChance: 0, twirls: false, bounce: 0.5, restLids: 0.2,
@@ -104,7 +108,7 @@ export type Mode =
   | 'toSit' | 'hop' | 'sit' | 'hang' | 'plop' | 'rise' | 'hopOff'
   | 'pat' | 'wave' | 'giggle' | 'gift' | 'twirl'
   | 'build' | 'inspect' | 'order' | 'fume' | 'salute' | 'march' | 'swarm' | 'revere'
-  | 'visit' | 'riding' | 'listen' | 'floored';
+  | 'visit' | 'riding' | 'listen' | 'floored' | 'spar' | 'scoff';
 
 export type EmoteKind = 'dots' | 'q' | 'bang' | 'note' | 'anger' | 'heart' | 'sparkle';
 
@@ -412,6 +416,44 @@ function react(n: Npc, w: World): void {
   }
   n.strikes += 1;
   n.strikeAge = 0;
+  if (n.persona.bonk === 'spar') {
+    // A sparring partner! Fists up and a couple of jabs at the air, then a spin kick,
+    // then a thumbs-up for a worthy opponent.
+    faceCube(n, w);
+    if (n.strikes === 1) {
+      setMode(n, 'spar', 1.4);
+      return say(n, 'bang');
+    }
+    if (n.strikes === 2) {
+      setMode(n, 'twirl', 0.95);
+      return say(n, 'sparkle');
+    }
+    n.strikes = 0;
+    setMode(n, 'wave', 1.4);
+    w.emit('respect', n);
+    return say(n, 'heart');
+  }
+  if (n.persona.bonk === 'scoff') {
+    // How dare it. Arms crossed, chin up; then stamping; then he storms off.
+    if (n.strikes === 1) {
+      faceCube(n, w);
+      setMode(n, 'scoff', 1.8);
+      return say(n, 'anger');
+    }
+    if (n.strikes === 2) {
+      faceCube(n, w);
+      setMode(n, 'fume', 1.8);
+      return say(n, 'anger');
+    }
+    n.strikes = 0;
+    n.dir = dirAway(n, w.cube);
+    n.speed = HUFF_SPEED;
+    n.steps = 7;
+    n.wait = 0.2;
+    setMode(n, 'huff');
+    w.emit('stormed', n);
+    return say(n, 'anger');
+  }
   if (n.persona.bonk === 'adopt') {
     faceCube(n, w);
     if (n.strikes === 1) {
@@ -728,6 +770,14 @@ const MODES: Record<Mode, (n: Npc, w: World) => void> = {
     if (n.t > n.timer) wander(n, w);
   },
 
+  spar(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
+  scoff(n, w) {
+    if (n.t > n.timer) wander(n, w);
+  },
+
   gift(n, w) {
     if (n.t > n.timer) wander(n, w);
   },
@@ -913,6 +963,8 @@ export function floor(n: Npc, w: World): void {
 /** Move her somewhere else entirely (used to keep the world populated as the cube travels). */
 export function relocate(n: Npc, w: World, x: number, z: number): boolean {
   if (n.nx !== null || !['idle', 'walk', 'march'].includes(n.mode)) return false;
+  // Already there: releasing the old cell would free the one they stand on.
+  if (n.x === x && n.z === z) return true;
   if (!w.grid.claim(x, z, n.occ)) return false;
   w.grid.release(n.x, n.z, n.occ);
   n.x = x;

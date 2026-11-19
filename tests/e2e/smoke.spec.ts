@@ -1024,6 +1024,30 @@ test('the leader can draft Sonny or Prinz; they still leave for a fight, helmet 
   expect(await sonny()).toMatchObject({ drafted: true, helmet: true, visible: true });
 });
 
+test('bumped by the cube, Sonny spars (jabs, a spin kick, a thumbs-up) and Prinz scoffs, stamps and storms off', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, '?seed=3');
+  for (const c of ['octopus', 'tahgong', 'picachu', 'rivals']) await direct(page, `${c}.staged`, true);
+  for (const c of ['goths', 'femboys', 'soldiers', 'leader']) {
+    await direct(page, `${c}.staged`, true);
+    await direct(page, `${c}.clear`);
+  }
+  await direct(page, 'fighters.staged', true);
+  const mode = (i: number) => `window.__crail.state.fighters.npcs[${i}].mode`;
+  for (const [i, x, modes] of [[0, 10, ['spar', 'twirl', 'wave']], [1, 20, ['scoff', 'fume', 'huff']]] as const) {
+    await direct(page, 'fighters.place', i, x, 30, 99);
+    await direct(page, 'cube.teleport', x - 1, 30);
+    for (const m of modes) {
+      // Wait for them to be back on their spot and calm, then bump.
+      await page.waitForFunction(`['idle', 'walk'].includes(${mode(i)}) && window.__crail.state.fighters.npcs[${i}].x === ${x}`, null, { timeout: 30_000 });
+      await direct(page, 'fighters.place', i, x, 30, 99);
+      await page.keyboard.press('KeyD');
+      await page.waitForFunction(`${mode(i)} === '${m}'`, null, { timeout: 15_000 });
+    }
+  }
+  await expect(page.locator('#hint')).toContainText(/respects the cube|stormed off/);
+});
+
 test('an easter egg: the golden cube', async ({ page }) => {
   await open(page, '?seed=3');
   await clearStage(page);

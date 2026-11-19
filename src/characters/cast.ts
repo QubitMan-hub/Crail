@@ -29,6 +29,8 @@ export interface CastOptions<V> {
   /** State key and scripted-control prefix, e.g. 'goths' -> ctx.state.goths, direct('goths.spawn', ...). */
   key: string;
   persona: Persona;
+  /** A different temperament per variant (two characters of one kind who react differently). */
+  personaOf?(variant: V): Persona;
   variants: V[];
   build(variant: V, emote: THREE.Sprite): Rig;
   count: number;
@@ -77,7 +79,8 @@ export function createCast<V>(ctx: GameContext, opts: CastOptions<V>): Cast {
   ctx.state[key] = { npcs, world };
 
   const spawn = (variant: number, x: number, z: number, dir: DirIndex): Member | null => {
-    const n = createNpc(`${persona.kind}-${nextId++}`, variant % opts.variants.length, x, z, dir, ctx.grid, persona);
+    const v = variant % opts.variants.length;
+    const n = createNpc(`${persona.kind}-${nextId++}`, v, x, z, dir, ctx.grid, opts.personaOf?.(opts.variants[v]) ?? persona);
     if (!n) return null;
     const rig = opts.build(opts.variants[n.variant], makeSymbolSprite());
     ctx.scene.add(rig.root);
