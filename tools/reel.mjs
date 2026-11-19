@@ -184,7 +184,7 @@ try {
     probed = result.probed;
     for (const e of result.heard) heard.push([t, e]);
     for (; seen < result.count; seen++) landings.push(t);
-    await page.screenshot({ path: `${dir}/${String(f).padStart(5, '0')}.jpg`, quality: 95, type: 'jpeg' });
+    await page.screenshot({ path: `${dir}/${String(f).padStart(5, '0')}.jpg`, quality: 95, type: 'jpeg', timeout: 180_000 });
     if (f % 150 === 0) console.log(`frame ${f}/${frames}`);
   }
   // Render the game's sounds offline, with the same engine the game plays them live with.
