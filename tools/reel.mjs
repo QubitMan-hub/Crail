@@ -344,9 +344,15 @@ const chains = [];
 const mixed = [];
 let input = 3;
 if (!values['no-sfx']) {
-  chains.push(`[1:a]volume=${values.voice ? 0.5 : 1}[fx]`);
+  // Under a voice-over the effects step back; with spoken lines placed one by one, only
+  // while someone is actually talking (a Reel can be voiced in one part and not another).
+  const spoken = values.voice && shots.voice
+    ? shots.voice.map(([from, to, at]) => `between(t,${(at - 0.15).toFixed(2)},${(at + to - from + 0.25).toFixed(2)})`).join('+')
+    : null;
+  const level = (under) => (spoken ? `volume='if(${spoken},${under},1)':eval=frame` : `volume=${values.voice ? under : 1}`);
+  chains.push(`[1:a]${level(0.5)}[fx]`);
   mixed.push('[fx]');
-  chains.push(`[2:a]volume=${values.voice ? 0.6 : 1}[gx]`);
+  chains.push(`[2:a]${level(0.45)}[gx]`);
   mixed.push('[gx]');
 }
 for (const clip of shots.audio ?? []) {

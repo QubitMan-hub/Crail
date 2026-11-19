@@ -1,13 +1,15 @@
 // The Day 6 Reel: the top comment asked for a lawsuit. 45 seconds. Times in seconds.
-//   0-2.2     HOOK     "the comments want a lawsuit" (film braam)
-//   2.2-5.8   COMMENT  the top comment, as a card: Goku and Vegeta? That's a lawsuit.
-//   5.8-9.6   MEET     so: Sonny and Prinz. Totally different guys. (please don't sue)
-//   9.6-      FIGHT    the fight as it plays in the game (its own camera, slow motion, sound
+//   0-3.3     HOOK     "the comments want a lawsuit" (film braam)       VO: Day 6 of letting...
+//   3.3-6.2   COMMENT  the top comment, as a card                       VO: Goku and Vegeta? That's a whole lawsuit.
+//   6.2-10    MEET     Sonny and Prinz. Totally different guys.          VO: So we got something off brand from Temu.
+//   10-       FIGHT    the fight as it plays in the game (its own camera, slow motion, sound
 //                      and music), with jump cuts past the slow bits. Captions follow its beats.
 //   then      OUT      Day 7: the top comment decides. Keep it legal.
 //
-// No files needed: the comment card is drawn here. If a screenshot of the real comment is
-// put at captures/day-006-assets/top.png, it is used instead.
+// The voice-over covers the intro only; the fight has no voice. Render with
+//   npm run reel -- day-006 --voice <the recording>
+// No other files needed: the comment card is drawn here. If a screenshot of the real comment
+// is put at captures/day-006-assets/top.png, it is used instead.
 import { existsSync } from 'node:fs';
 import { esc, keyframes, pop, smooth } from './kit.mjs';
 
@@ -16,8 +18,8 @@ const SHOT = existsSync(`${ASSETS}/top.png`);
 const POOL = { x: 3, z: 14 };
 /** Where Sonny and Prinz are met: the sand down-left of the pool. */
 const M = { x: -4, z: 21 };
-const T = { comment: 2.2, meet: 5.8, glare: 8.3, fight: 9.6 };
-// Measured with a dry run: they leave at 41.0; the end card stays up after.
+const T = { comment: 3.3, meet: 6.2, glare: 8.7, fight: 10.0 };
+// Measured with a dry run: they leave at 41.4; the end card stays up after.
 const seconds = 45.0;
 
 const CASTS = ['goths', 'femboys', 'soldiers', 'leader'];
@@ -147,7 +149,7 @@ function html(t, probe) {
          <div class="what">Add <u>goku and Vegeta</u> fighting with octopus</div>
          <div class="likes">♥ 34</div>`;
     h += `<div class="card" ${scaled(s, `transform:rotate(-2deg) scale(${s.toFixed(3)})`)}><span class="tag">TOP COMMENT</span>${body}</div>`;
-    if (t > 3.4) h += `<div class="cap" ${scaled(pop(t, 3.4, 0.18) * leaving)}>${lines(['Goku and Vegeta?', 'That’s a lawsuit.'])}</div>`;
+
   }
   if (within(t, T.meet, T.fight) && probe?.tags) {
     const looks = [['Sonny', '#d8432f'], ['Prinz', '#4f3a86']];
@@ -157,10 +159,12 @@ function html(t, probe) {
       h += `<div class="name" style="left:${((x + 1) * 50).toFixed(2)}%;top:${((1 - y) * 50).toFixed(2)}%">
         <span ${scaled(s, `background:${looks[i][1]}`)}>${looks[i][0].toUpperCase()}</span></div>`;
     });
-    if (t < 7.3) h += `<div class="cap" ${scaled(pop(t, 6.0, 0.18))}>${lines(['So please welcome', 'Sonny & Prinz.'])}</div>`;
-    else h += `<div class="cap" ${scaled(pop(t, 7.3, 0.18))}>${lines(['Totally different', 'guys.'])}</div>`;
+
     if (t > T.glare) h += `<div class="aside"><span ${scaled(pop(t, T.glare + 0.15, 0.16))}>(please don’t sue)</span></div>`;
   }
+  // Captions: the spoken words, then one written line.
+  const c = captions.find(([a, b]) => within(t, a, b));
+  if (c) h += `<div class="cap" ${scaled(0.7 + 0.3 * pop(t, c[0], 0.14))}>${lines(c[2].split('|'))}</div>`;
   if (t >= T.fight && probe) {
     if (probe.beat !== lastBeat) {
       lastBeat = probe.beat;
@@ -189,6 +193,21 @@ function html(t, probe) {
   return h;
 }
 
+// Voice-over: [from, to] in the recording, and where that line starts in the Reel.
+const voice = [
+  [0.7, 3.7, 0.15], //   Day 6 of letting Instagram comments build my game.
+  [4.22, 5.06, 3.55], // Goku and Vegeta?
+  [5.66, 7.0, 4.65], //  That's a whole lawsuit.
+  [7.55, 9.65, 6.35], // So we got something off brand from Temu.
+];
+// Captions follow the actual words in the recording ('|' breaks a line).
+const captions = [
+  [0.23, 0.85, 'Day 6'], [0.85, 1.49, 'of letting'], [1.49, 2.25, 'Instagram comments'], [2.25, 3.25, 'build my game.'],
+  [3.63, 4.6, 'Goku and Vegeta?'], [4.73, 6.15, 'That’s a whole|lawsuit.'],
+  [6.42, 7.4, 'So we got|something'], [7.4, 8.5, 'off brand|from Temu.'],
+  [8.55, T.fight, 'Totally different|guys.'],
+];
+
 // Sound for the parts before the fight; the fight brings its own.
 const gameSfx = [
   [0, { kind: 'drone', dur: 2.5 }],
@@ -196,12 +215,12 @@ const gameSfx = [
   [T.comment, { kind: 'heavy', gain: 0.7 }],
   [T.meet, { kind: 'whoosh', dur: 0.4 }],
   [T.glare, { kind: 'crack', gain: 0.35 }],
-  [8.6, { kind: 'riser', dur: 1.0, gain: 0.7 }],
+  [9.0, { kind: 'riser', dur: 1.0, gain: 0.7 }],
   [T.fight + 0.9, { kind: 'heavy', gain: 0.55, pitch: 0.8 }],
 ];
-const sfx = [[3.4, 'dun'], [T.meet + 0.15, 'pop'], [T.meet + 0.6, 'pop'], [7.3, 'dun'], [T.glare + 0.15, 'pop']];
-const music = { sections: [[T.comment + 0.1, T.fight - 0.3]] };
+const sfx = [[6.0, 'dun'], [T.meet + 0.15, 'pop'], [T.meet + 0.6, 'pop'], [8.55, 'dun'], [T.glare + 0.15, 'pop']];
+const music = { sections: [[T.comment + 0.1, T.fight - 0.3]], duck: voice.map(([from, to, at]) => [at, at + (to - from)]) };
 
 export default {
-  seconds, assets: SHOT ? { dir: ASSETS } : undefined, keys: [], actions, camera, html, css, sfx, music, gameSfx, probe, skip,
+  seconds, assets: SHOT ? { dir: ASSETS } : undefined, keys: [], actions, camera, html, css, sfx, music, gameSfx, probe, skip, voice,
 };
