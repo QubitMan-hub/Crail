@@ -609,7 +609,11 @@ function approach(n: Npc, w: World, to: { x: number; z: number }): void {
     const z = n.z + DIRS[way][1];
     return w.grid.isFree(x, z) && !(n.avoid && n.avoid.x === x && n.avoid.z === z);
   };
-  let d = ways.find(open);
+  // Scenery straight ahead (a ride, a fence, a cart): stepping to the side only to step
+  // back again is how people end up pacing. Plan the way round it instead.
+  const front = w.grid.at(n.x + DIRS[ways[0]][0], n.z + DIRS[ways[0]][1]);
+  const walled = !!front && front !== n.occ && !front.mobile;
+  let d = walled ? undefined : ways.find(open);
   if (d === undefined) {
     // Someone is in the way, and people move: wait a moment for them to clear it rather
     // than stepping aside and straight back (pacing). Scenery does not move: go round.
