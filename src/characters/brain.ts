@@ -164,6 +164,8 @@ export interface Npc {
   focus: { x: number; z: number } | null;
   /** How long they have been waiting behind someone in the way (before going round). */
   patience: number;
+  /** Seconds left going round people (after waiting for them ran out), not waiting again. */
+  detour: number;
   /** A planned way round (through a gate, past a fence), and where it leads. */
   route: { x: number; z: number }[] | null;
   routeTo: { x: number; z: number } | null;
@@ -238,7 +240,7 @@ export function createNpc(
   const occ: Occupant = { kind: persona.kind, id, mobile: true };
   if (!grid.claim(x, z, occ)) return null;
   return {
-    patience: 0, route: null, routeTo: null, id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, spare: 0, spareAt: -1, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
+    patience: 0, detour: 0, route: null, routeTo: null, id, occ, persona, focus: null, greeted: null, giftNext: false, lead: null, slot: 0, cult: false, drafted: false, knocked: false, spare: 0, spareAt: -1, avoid: null, post: null, alert: 0, goal: null, carry: null, trail: [], order: null,
     variant, x, z, home: { x, z }, nx: null, nz: null, p: 0, dir, speed: persona.speed,
     mode: persona.wanders ? 'idle' : 'march', t: 0, timer: 0.4, wait: 0, steps: 0, resume: 0,
     stareKind: 'blocked', clearFor: 0, strikes: 0, strikeAge: 0, pending: false,
@@ -557,6 +559,26 @@ function surround(n: Npc, w: World): void {
   approach(n, w, spot);
 }
 
+/**
+ * How long someone will wait for a person in the way before going round them. Everyone
+ * differs a little, so two people blocking each other never give up at the same moment.
+ */
+const patienceOf = (n: Npc) => 1.6 + ((n.id.charCodeAt(n.id.length - 1) * 7) % 10) * 0.16;
+/** Wait for a person in the way (true), or, when that has gone on long enough, go round. */
+function waitFor(n: Npc, d: DirIndex): boolean {
+  if (n.detour > 0) return false;
+  if (n.patience < patienceOf(n)) {
+    n.patience += 0.3;
+    n.wait = 0.3;
+    n.dir = d;
+    return true;
+  }
+  // Long enough: go round people for a while, and do not stop to wait again meanwhile.
+  n.patience = 0;
+  n.detour = 6;
+  return false;
+}
+
 /** Follow a planned route one cell: true if they stepped (or are waiting their turn on it). */
 function followRoute(n: Npc, w: World, to: { x: number; z: number }): boolean {
   const r = n.route;
@@ -574,12 +596,7 @@ function followRoute(n: Npc, w: World, to: { x: number; z: number }): boolean {
   if (!w.grid.isFree(next.x, next.z, n.occ)) {
     // Someone on the route: give them a moment. Scenery (or a long wait): plan again.
     const o = w.grid.at(next.x, next.z);
-    if (o?.mobile && n.patience < 2.5) {
-      n.patience += 0.3;
-      n.wait = 0.3;
-      n.dir = d;
-      return true;
-    }
+    if (o?.mobile && waitFor(n, d)) return true;
     n.route = n.routeTo = null;
     return false;
   }
@@ -618,15 +635,11 @@ function approach(n: Npc, w: World, to: { x: number; z: number }): void {
     // Someone is in the way, and people move: wait a moment for them to clear it rather
     // than stepping aside and straight back (pacing). Scenery does not move: go round.
     const ahead = w.grid.at(n.x + DIRS[ways[0]][0], n.z + DIRS[ways[0]][1]);
-    if (ahead?.mobile && n.patience < 2.5) {
-      n.patience += 0.3;
-      n.wait = 0.3;
-      return void (n.dir = ways[0]);
-    }
+    if (ahead?.mobile && waitFor(n, ways[0])) return;
     // Every direct way is taken: plan the whole way round (through the gate, past the
     // fence), and stick to it, instead of shuffling back and forth in front of the
     // obstacle. People do not block a plan: they move.
-    const plan = findPath(w.grid, n.occ, n, to, { onto: true, throughPeople: n.patience >= 2.5 ? false : true });
+    const plan = findPath(w.grid, n.occ, n, to, { onto: true, throughPeople: n.detour <= 0 });
     if (plan && plan.length && plan.length < 90) {
       n.route = plan;
       n.routeTo = { x: to.x, z: to.z };
@@ -995,6 +1008,7 @@ export function tick(n: Npc, w: World, dt: number): void {
   if (n.strikeAge > 7) n.strikes = 0;
   n.followCooldown -= dt;
   if (n.alert > 0) n.alert -= dt;
+  if (n.detour > 0) n.detour -= dt;
   if (n.emote && (n.emote.t += dt) > EMOTE_SECONDS) n.emote = null;
 
   if (n.nx !== null && n.nz !== null) {
