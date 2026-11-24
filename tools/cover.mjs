@@ -31,7 +31,7 @@ try {
   await page.waitForFunction(() => window.__crail?.game);
   await page.addStyleTag({
     content: `
-    .hud, #sound, #map-btn, #cult, #help-btn, #help, .landmark, .cinema .vs { display: none !important; }
+    .hud, #sound, #map-btn, #cult, #blocks, #help-btn, #help, .landmark, .cinema .vs { display: none !important; }
     #cover { position: fixed; inset: 0; color: #1d1b19; text-align: center;
              font-family: 'Inter Display', 'Inter', system-ui, sans-serif; }
     #cover .day { position: absolute; left: 0; right: 0; top: 13.5%; }

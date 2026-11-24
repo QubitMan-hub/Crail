@@ -68,7 +68,7 @@ test('time machine and rollback switches work', async ({ page }) => {
   await page.goto('/?off=000-cube');
   await page.waitForFunction(() => (window as any).__crail);
   const ids = await page.evaluate(() => (window as any).__crail.features.map((f: any) => f.id));
-  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong', '005-picachu', '006-rivals', '006-secrets']);
+  expect(ids).toEqual(['000-world', '001-goth-baddies', '002-femboys', '003-supreme-leader', '003-park', '003-cube-cult', '004-octopus', '005-immortal-gamson', '005-tahgong', '005-picachu', '006-rivals', '006-secrets', '007-block-counter', '007-trees']);
   await page.goto('/?day=2&off=002-femboys');
   await page.waitForFunction(() => (window as any).__crail);
   await expect(page.locator('#day')).toHaveText('Day 1');
@@ -79,7 +79,13 @@ test('time machine and rollback switches work', async ({ page }) => {
 
 // ---- Day 1: goth baddies -------------------------------------------------
 
+/**
+ * Open the game. The procedural trees are left out (they grow wherever the seed says, and
+ * these tests set up their own scenes), unless the query asks for them with `trees`.
+ */
 const open = async (page: import('@playwright/test').Page, query = '') => {
+  const withTrees = query.includes('trees');
+  if (!withTrees) query = query.includes('off=') ? query.replace('off=', 'off=007-trees,') : `${query}${query ? '&' : '?'}off=007-trees`;
   await page.goto('/' + query);
   await page.waitForFunction(() => (window as any).__crail?.state.goths);
 };
@@ -109,7 +115,8 @@ const goth = (page: import('@playwright/test').Page, i = 0) =>
 
 test('boots with every feature on: day 3, goths, femboys, a leader, credits name the winners', async ({ page }) => {
   await open(page);
-  await expect(page.locator('#day')).toHaveText('Day 6');
+  await expect(page.locator('#day')).toHaveText('Day 7');
+  await expect(page.locator('#credits')).toContainText('@lonokkalani');
   expect(await page.evaluate(() => (window as any).__crail.state.leader.npcs.length)).toBe(1);
   await expect(page.locator('#credits')).toContainText('@gyarados117');
   await expect(page.locator('#credits')).toContainText('@megamouse173');
@@ -1046,6 +1053,48 @@ test('bumped by the cube, Sonny spars (jabs, a spin kick, a thumbs-up) and Prinz
     }
   }
   await expect(page.locator('#hint')).toContainText(/respects the cube|stormed off/);
+});
+
+test('the block counter counts every roll, pops at a hundred, and remembers between visits', async ({ page }) => {
+  await open(page, '?seed=3');
+  await direct(page, 'blocks.set', 98);
+  await expect(page.locator('#blocks b')).toHaveText('98');
+  await holdUntil(page, 'KeyD', 's.blocks.total >= 100');
+  await page.waitForFunction(() => !(window as any).__crail.state.cube.moving);
+  const total = await page.evaluate(() => (window as any).__crail.state.blocks.total);
+  expect(total).toBeGreaterThanOrEqual(100);
+  expect(total).toBe(98 + (await page.evaluate(() => (window as any).__crail.state.cube.rolls)));
+  await expect(page.locator('#blocks b')).toHaveText(String(total));
+  await expect(page.locator('#blocks')).toHaveClass(/hundred/);
+  await page.reload();
+  await page.waitForFunction(() => (window as any).__crail?.state.blocks);
+  expect(await page.evaluate(() => (window as any).__crail.state.blocks.total)).toBe(total);
+  await expect(page.locator('#blocks b')).toHaveText(String(total));
+});
+
+test('trees grow by themselves, the same way for the same seed, clear of the start and the named places', async ({ page }) => {
+  await open(page, '?seed=3&trees');
+  await page.waitForFunction(() => (window as any).__crail.state.trees.trees > 10);
+  const list = () => page.evaluate(() => (window as any).__crail.state.trees.list().sort().join(' '));
+  const first = await list();
+  const trees = first.split(' ').map((t: string) => t.split(','));
+  // Several kinds, none at the start, none in the park or the pool.
+  expect(new Set(trees.map((t: string[]) => t[2])).size).toBeGreaterThanOrEqual(3);
+  for (const [x, z] of trees.map((t: string[]) => t.map(Number))) {
+    expect(Math.abs(x) + Math.abs(z)).toBeGreaterThanOrEqual(9);
+    expect(x >= 6 && x <= 39 && z >= -16 && z <= 15).toBe(false);
+  }
+  await page.reload();
+  await page.waitForFunction(() => (window as any).__crail?.state.trees?.trees > 10);
+  expect(await list()).toBe(first);
+  // Bump one: leaves come down.
+  const [tx, tz] = trees[0].map(Number);
+  await direct(page, 'cube.teleport', tx - 1, tz);
+  await page.waitForTimeout(500);
+  const blocked = await page.evaluate(([x, z]) => (window as any).__crail.state.trees.list().some((t: any[]) => t[0] === x && t[1] === z), [tx, tz]);
+  expect(blocked).toBe(true);
+  await holdUntil(page, 'KeyD', 's.trees.rustles >= 1');
+  expect(await page.evaluate(() => (window as any).__crail.state.cube.x)).toBe(tx - 1);
 });
 
 test('an easter egg: the golden cube', async ({ page }) => {

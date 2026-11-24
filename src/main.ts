@@ -64,6 +64,8 @@ const HELP: [string, string, string][] = [
   ['004-octopus', 'Gåmson', 'The octopus. Steals from everyone. Roll into him to make him drop things. Bump the rock by his pool to give everything back.'],
   ['005-immortal-gamson', 'Immortal', 'Tank shells and rockets cannot hurt Gåmson any more. Only you can make him let go.'],
   ['006-rivals', 'Fights', 'Now and then two rival fighters drop in to pick a fight with Gåmson. Bump one on the ground twice and they leave, impressed.'],
+  ['007-block-counter', 'Blocks', 'The counter under your cult counts every block you have ever rolled. It remembers, visit to visit.'],
+  ['007-trees', 'Trees', 'The world grows woods as you roll: pines, birches, cherry blossom, autumn maples and more. Bump one and leaves come down.'],
   ['005-tahgong', 'Tåhgong', 'Gåmson’s squid friend. He is nice: while Gåmson is out, he takes things back off the rock to their owners. Bump into him for a hug, and now and then a charm.'],
 ];
 const helpBtn = document.getElementById('help-btn') as HTMLButtonElement;

@@ -12,9 +12,11 @@ import { tahgong } from './005-tahgong';
 import { picachu } from './005-picachu';
 import { rivals } from './006-rivals';
 import { secrets } from './006-secrets';
+import { blockCounter } from './007-block-counter';
+import { trees } from './007-trees';
 
 /**
  * Every feature in the game, oldest first.
  * Adding a community feature = one new folder + one new line here.
  */
-export const allFeatures: Feature[] = [world, cube, gothBaddies, femboys, supremeLeader, park, cubeCult, octopus, immortalGamson, tahgong, picachu, rivals, secrets];
+export const allFeatures: Feature[] = [world, cube, gothBaddies, femboys, supremeLeader, park, cubeCult, octopus, immortalGamson, tahgong, picachu, rivals, secrets, blockCounter, trees];

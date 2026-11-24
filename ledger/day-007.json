@@ -1,0 +1,22 @@
+{
+  "day": 7,
+  "method": "top-comment",
+  "reel": "Day 6 Reel on @qubitman_ftw",
+  "source": "Screenshot of the comment taken by the creator about 5 days after it was posted. The automated snapshot was not run for this round because the Instagram API token is not set up yet.",
+  "final": false,
+  "note": "Presented by the creator as the comment to build; it had 5 likes at the time of the screenshot.",
+  "winner": {
+    "username": "lonokkalani",
+    "text": "Add a block counter so we can see how my blocks we have moved",
+    "likes": 5
+  },
+  "decision_note": "A counter under the cult count shows how many blocks the cube has rolled, ever: every roll (and every blast that flings it) adds one. It is kept in the browser, so it keeps climbing visit after visit. The digits count up, the little cube icon rolls with each block, every hundred pops with a chime, and round numbers (10, 100, 500, 1,000 and on) get a line of their own. A shared total across all players would need a server; this one is per player.",
+  "also_built": [
+    {
+      "username": "lonokkalani",
+      "text": "Add trees, randomly and procedurally generated, of different types",
+      "likes": null,
+      "note": "A personal request from the same person, built as a creator pick. Trees grow as the cube travels, in chunks made from the game's seed, so the same seed always grows the same world. Eight kinds: pine, cypress, oak, birch, cherry blossom (with fallen petals), autumn maple, apple and bushes (some with berries), each sized, turned and shaded a little differently. Slow patterns over the land make pine woods, mixed woods and blossom-and-maple groves, thick in places and open in others. They keep clear of the start, the park, the pool, the temple and its pews, and the patches each kind of character calls home, and never stand right beside each other, so there is always a way through. Bumping one brings leaves down."
+    }
+  ]
+}
