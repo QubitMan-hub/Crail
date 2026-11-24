@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import type { EmoteKind } from './brain';
 
 /** Little symbols that pop up over a head. Drawn in code, in the game's ink and red. */
-export type SymbolKind = EmoteKind | 'heartbreak';
+export type SymbolKind = EmoteKind | 'heartbreak' | 'charm';
 
-const INK = '#1d1b19';
-const CREAM = '#f6f1e6';
-const RED = '#f2542d';
-const PINK = '#ee6fa4';
+const INK = '#1f2430';
+const CREAM = '#fffaf0';
+const RED = '#e8402a';
+const PINK = '#f0609e';
+const YELLOW = '#ffc933';
 const cache = new Map<SymbolKind, THREE.Texture>();
 
 function draw(kind: SymbolKind): HTMLCanvasElement {
@@ -18,7 +19,7 @@ function draw(kind: SymbolKind): HTMLCanvasElement {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   const glyph = (text: string, size: number, y = 84) => {
-    g.font = `900 ${size}px 'Avenir Next', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif`;
+    g.font = `${size}px 'Lilita One', 'Rubik Variable', system-ui, sans-serif`;
     g.strokeStyle = CREAM;
     g.lineWidth = 20;
     g.strokeText(text, 80, y);
@@ -54,24 +55,51 @@ function draw(kind: SymbolKind): HTMLCanvasElement {
       }
     }
   } else if (kind === 'sparkle') {
-    // Four-point star with a little one beside it.
-    const star = (cx: number, cy: number, r: number) => {
-      g.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const a = (i * Math.PI) / 4 - Math.PI / 2;
-        const rr = i % 2 ? r * 0.32 : r;
-        g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    // Delight, comic style: a ring of short shine marks bursting out of nothing.
+    for (const [stroke, width] of [[CREAM, 26], [YELLOW, 13]] as const) {
+      g.strokeStyle = stroke;
+      g.lineWidth = width;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
+        const r0 = i % 2 ? 34 : 28;
+        const r1 = i % 2 ? 58 : 66;
+        g.beginPath();
+        g.moveTo(80 + Math.cos(a) * r0, 84 + Math.sin(a) * r0);
+        g.lineTo(80 + Math.cos(a) * r1, 84 + Math.sin(a) * r1);
+        g.stroke();
       }
+    }
+  } else if (kind === 'charm') {
+    // The charm token, as in the corner of the screen: yellow, with a little cube.
+    g.beginPath();
+    g.arc(80, 80, 60, 0, Math.PI * 2);
+    g.fillStyle = YELLOW;
+    g.fill();
+    g.lineWidth = 14;
+    g.strokeStyle = INK;
+    g.stroke();
+    const cube = () => {
+      g.beginPath();
+      g.moveTo(80, 48);
+      g.lineTo(108, 64);
+      g.lineTo(108, 96);
+      g.lineTo(80, 112);
+      g.lineTo(52, 96);
+      g.lineTo(52, 64);
       g.closePath();
     };
-    for (const [cx, cy, r] of [[70, 86, 52], [124, 40, 24]]) {
-      star(cx, cy, r);
-      g.strokeStyle = CREAM;
-      g.lineWidth = 14;
-      g.stroke();
-      g.fillStyle = PINK;
-      g.fill();
-    }
+    cube();
+    g.fillStyle = '#fff3c4';
+    g.fill();
+    g.lineWidth = 10;
+    g.stroke();
+    g.beginPath();
+    g.moveTo(52, 64);
+    g.lineTo(80, 80);
+    g.lineTo(108, 64);
+    g.moveTo(80, 80);
+    g.lineTo(80, 112);
+    g.stroke();
   } else {
     // A heart: whole and pink, or red with a crack through it.
     const heart = () => {

@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 
-const GROUND = '#e9e3d6';
-const GRID_LINE = '#d9d1c0';
+/** Safety rubber, as under a climbing frame: pale mint, flecked. */
+const GROUND = '#d6e6dc';
+const GRID_LINE = '#c2d6ca';
+const FLECKS = ['#c4d8cc', '#e7f1ea', '#b8cdc0', '#cfe2d6'];
+const RARE_FLECKS = ['#e8402a', '#ffc933', '#2f6fe0'];
 const SIZE = 80;
 
 function gridTexture(): THREE.Texture {
@@ -11,6 +14,14 @@ function gridTexture(): THREE.Texture {
   const g = c.getContext('2d')!;
   g.fillStyle = GROUND;
   g.fillRect(0, 0, 128, 128);
+  // Rubber granules: lots of nearly-the-same flecks, and now and then a bright one.
+  let s = 9;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 260; i++) {
+    g.fillStyle = r() < 0.025 ? RARE_FLECKS[Math.floor(r() * 3)] : FLECKS[Math.floor(r() * FLECKS.length)];
+    const size = 2 + r() * 2.5;
+    g.fillRect(r() * 128, r() * 128, size, size);
+  }
   g.strokeStyle = GRID_LINE;
   g.lineWidth = 3;
   g.strokeRect(0, 0, 128, 128);
@@ -43,7 +54,7 @@ export const world: Feature = {
     floor.receiveShadow = true;
     ctx.scene.add(floor);
 
-    ctx.scene.add(new THREE.HemisphereLight(0xffffff, 0xe4d9c6, 1.5));
+    ctx.scene.add(new THREE.HemisphereLight(0xffffff, 0xc9dccf, 1.5));
 
     const sun = new THREE.DirectionalLight(0xfff4e6, 2.1);
     const sunOffset = new THREE.Vector3(-5, 10, 3);

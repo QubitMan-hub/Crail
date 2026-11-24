@@ -11,14 +11,14 @@ export type TreeKind = 'pine' | 'cypress' | 'oak' | 'birch' | 'blossom' | 'maple
 
 /** The main colour of each kind's leaves, for the leaves that fall when the cube bumps one. */
 export const LEAF_OF: Record<TreeKind, string[]> = {
-  pine: ['#4e7d52', '#3f6b45'],
-  cypress: ['#4a7350', '#3c6343'],
-  oak: ['#7fae5f', '#6a9a50'],
-  birch: ['#b7d27e', '#a3c46c'],
+  pine: ['#3f8a4e', '#2f6e40'],
+  cypress: ['#3b7d4c', '#2d673e'],
+  oak: ['#5faa45', '#4e9440'],
+  birch: ['#a5cf5c', '#8fbf4a'],
   blossom: ['#f6b9cb', '#fbd3df', '#ffffff'],
   maple: ['#e2763a', '#d9532f', '#f0a03c'],
-  apple: ['#79a85a', '#d9473a'],
-  bush: ['#78a95c', '#5f9150'],
+  apple: ['#5ea648', '#d9473a'],
+  bush: ['#5fa94a', '#4a9040'],
 };
 
 type Rand = () => number;
@@ -40,8 +40,8 @@ function pine(t: THREE.Group, r: Rand) {
   const tiers = 4 + Math.floor(r() * 3);
   const trunk = 1.4 + r() * 0.5;
   box(t, vary(TRUNK, r), 0.24, trunk, 0.24, 0, trunk / 2, 0);
-  const dark = vary('#3f6b45', r);
-  const light = vary('#4e7d52', r);
+  const dark = vary('#2f6e40', r);
+  const light = vary('#3f8a4e', r);
   for (let i = 0; i < tiers; i++) {
     const w = 1.55 - (i / tiers) * 1.25;
     box(t, i % 2 ? dark : light, w, 0.5, w, (r() - 0.5) * 0.06, trunk + 0.25 + i * 0.45, (r() - 0.5) * 0.06);
@@ -52,7 +52,7 @@ function pine(t: THREE.Group, r: Rand) {
 function cypress(t: THREE.Group, r: Rand) {
   const tall = 1 + r() * 0.5;
   box(t, vary(TRUNK, r), 0.2, 0.7, 0.2, 0, 0.35, 0);
-  const c = [vary('#4a7350', r), vary('#3c6343', r)];
+  const c = [vary('#3b7d4c', r), vary('#2d673e', r)];
   box(t, c[0], 0.86, 1.4 * tall, 0.86, 0, 0.7 + 0.7 * tall, 0);
   box(t, c[1], 0.7, 1.1 * tall, 0.7, 0, 0.7 + 1.4 * tall + 0.5 * tall, 0);
   box(t, c[0], 0.42, 0.6 * tall, 0.42, 0, 0.7 + 2.5 * tall + 0.25 * tall, 0);
@@ -73,7 +73,7 @@ function crown(t: THREE.Group, r: Rand, y: number, size: number, colors: string[
 function oak(t: THREE.Group, r: Rand) {
   const trunk = 1.7 + r() * 0.4;
   box(t, vary(TRUNK, r), 0.3, trunk, 0.3, 0, trunk / 2, 0);
-  crown(t, r, trunk + 0.35, 1 + r() * 0.15, [vary('#7fae5f', r), vary('#6a9a50', r)]);
+  crown(t, r, trunk + 0.35, 1 + r() * 0.15, [vary('#5faa45', r), vary('#4e9440', r)]);
 }
 
 function birch(t: THREE.Group, r: Rand) {
@@ -86,7 +86,7 @@ function birch(t: THREE.Group, r: Rand) {
     box(t, '#2b2522', 0.12, 0.04, 0.012, s * 0.03, y, 0.112);
     box(t, '#2b2522', 0.012, 0.04, 0.1, 0.112, y + 0.12, s * 0.03);
   }
-  const c = [vary('#b7d27e', r), vary('#a3c46c', r)];
+  const c = [vary('#a5cf5c', r), vary('#8fbf4a', r)];
   box(t, c[0], 1.0, 1.2, 1.0, 0, trunk + 0.35, 0);
   box(t, c[1], 0.72, 0.8, 0.72, (r() - 0.5) * 0.2, trunk + 1.1, (r() - 0.5) * 0.2);
 }
@@ -125,7 +125,7 @@ function maple(t: THREE.Group, r: Rand) {
 function apple(t: THREE.Group, r: Rand) {
   const trunk = 1.5 + r() * 0.3;
   box(t, vary(TRUNK, r), 0.28, trunk, 0.28, 0, trunk / 2, 0);
-  crown(t, r, trunk + 0.3, 0.95, [vary('#79a85a', r), vary('#6a9a50', r)]);
+  crown(t, r, trunk + 0.3, 0.95, [vary('#5ea648', r), vary('#4e9440', r)]);
   for (let i = 0; i < 7; i++) {
     const a = r() * Math.PI * 2;
     box(t, '#d9473a', 0.13, 0.13, 0.13, Math.cos(a) * 0.74, trunk + 0.15 + r() * 0.9, Math.sin(a) * 0.74);
@@ -135,7 +135,7 @@ function apple(t: THREE.Group, r: Rand) {
 }
 
 function bush(t: THREE.Group, r: Rand) {
-  const c = [vary('#78a95c', r), vary('#5f9150', r)];
+  const c = [vary('#5fa94a', r), vary('#4a9040', r)];
   const s = 0.8 + r() * 0.35;
   box(t, c[0], 0.95 * s, 0.6 * s, 0.95 * s, 0, 0.3 * s, 0);
   box(t, c[1], 0.65 * s, 0.4 * s, 0.65 * s, (r() - 0.5) * 0.25, 0.72 * s, (r() - 0.5) * 0.25);

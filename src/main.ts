@@ -1,37 +1,86 @@
+import '@fontsource/lilita-one/400.css';
+import '@fontsource-variable/rubik/index.css';
 import './style.css';
 import { createGame } from './core/game';
 import { currentDay, parseSelection, selectFeatures } from './core/feature';
 import { setupMap } from './core/map';
 import { renderOffline, Sound, type SfxEvent } from './core/sound';
 import { allFeatures } from './features';
+import { CHEVRON, CLOSE, COMMENT, CUBE, MAP, SOUND_OFF, SOUND_ON, withCharms } from './ui/icons';
+import { tip } from './core/tip';
 
 const features = selectFeatures(allFeatures, parseSelection(location.search));
 const params = new URLSearchParams(location.search);
 const manual = params.has('manual');
 const seed = params.has('seed') ? Number(params.get('seed')) : manual ? 1 : undefined;
+// No WebGL (some in-app browsers): say so plainly instead of showing an empty page.
+const canWebGL = (() => {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch {
+    return false;
+  }
+})();
+if (!canWebGL) {
+  document.getElementById('nogl')!.hidden = false;
+  throw new Error('CRAIL needs WebGL');
+}
 const game = createGame(document.getElementById('game')!, features, { manual, seed });
 const day = currentDay(features);
 
+document.querySelector('#brand .logo')!.innerHTML = CUBE;
 const dayBtn = document.getElementById('day') as HTMLButtonElement;
 dayBtn.textContent = `Day ${day}`;
+dayBtn.insertAdjacentHTML('beforeend', CHEVRON);
 
-// Credits: every feature, who asked for it, and their exact words.
+// Credits: every feature, who asked for it, and their exact words, newest first, each
+// stamped with its day.
 const credits = document.getElementById('credits')!;
+const creditList = credits.querySelector('ol')!;
 for (const f of [...features].reverse()) {
   if (f.meta.secret) continue;
   const row = document.createElement('li');
-  const head = document.createElement('b');
-  head.textContent = `Day ${f.meta.day} · ${f.meta.title}`;
+  const stamp = document.createElement('span');
+  stamp.className = 'stamp';
+  stamp.textContent = `Day ${f.meta.day}`;
+  const title = document.createElement('b');
+  title.textContent = f.meta.title;
+  const said = document.createElement('q');
   const who = document.createElement('span');
-  who.textContent = f.meta.credit.method === 'founder' ? 'where it started' : `@${f.meta.credit.username}: “${f.meta.credit.text}”`;
-  row.append(head, who);
-  credits.append(row);
+  who.className = 'who';
+  if (f.meta.credit.method === 'founder') {
+    who.textContent = 'where it started';
+  } else {
+    who.textContent = `@${f.meta.credit.username}`;
+    said.textContent = f.meta.credit.text;
+  }
+  row.append(stamp, title, who);
+  if (said.textContent) row.append(said);
+  creditList.append(row);
 }
-dayBtn.addEventListener('click', () => {
-  const open = credits.toggleAttribute('hidden') === false;
+// The way in for your own idea: the series runs on comments.
+const ask = document.createElement('p');
+ask.className = 'ask';
+ask.innerHTML = COMMENT;
+ask.append(`Day ${day + 1} could be yours: comment on the newest Reel from @qubitman_ftw.`);
+credits.append(ask);
+const toggleCredits = (open = credits.hidden) => {
+  credits.hidden = !open;
   dayBtn.setAttribute('aria-expanded', String(open));
-  dayBtn.blur();
+};
+dayBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleCredits();
 });
+// Closes with Esc or a tap anywhere outside it.
+window.addEventListener('pointerdown', (e) => {
+  if (!credits.hidden && !credits.contains(e.target as Node) && e.target !== dayBtn && !dayBtn.contains(e.target as Node)) toggleCredits(false);
+});
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape' && !credits.hidden) toggleCredits(false);
+});
+document.getElementById('map-btn')!.innerHTML = MAP;
 
 const map = setupMap(game.ctx, document.getElementById('map-btn') as HTMLButtonElement);
 
@@ -71,28 +120,40 @@ const HELP: [string, string, string][] = [
 const helpBtn = document.getElementById('help-btn') as HTMLButtonElement;
 const help = document.getElementById('help')!;
 const ids = new Set(features.map((f) => f.meta.id));
+// In the order things were added: the way the game grew.
+HELP.sort((a, b) => Number(a[0].slice(0, 3)) - Number(b[0].slice(0, 3)));
 for (const [id, term, text] of HELP) {
   if (!ids.has(id)) continue;
   const dt = document.createElement('dt');
   dt.textContent = term;
   const dd = document.createElement('dd');
-  dd.textContent = text;
+  withCharms(dd, text);
   help.querySelector('dl')!.append(dt, dd);
 }
 const toggleHelp = (open = help.hidden) => {
   help.hidden = !open;
   helpBtn.setAttribute('aria-expanded', String(open));
 };
+const helpClose = help.querySelector('.close') as HTMLButtonElement;
+helpClose.innerHTML = CLOSE;
 helpBtn.addEventListener('click', () => {
   toggleHelp();
-  helpBtn.blur();
+  if (!help.hidden) helpClose.focus();
 });
+helpClose.addEventListener('click', () => {
+  toggleHelp(false);
+  helpBtn.focus();
+});
+// Only a tap on the dim backdrop closes it: touching the card (to scroll it) does not.
 help.addEventListener('pointerdown', (e) => {
   e.stopPropagation();
-  toggleHelp(false);
+  if (e.target === help) toggleHelp(false);
 });
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape' && !help.hidden) toggleHelp(false);
+  if (e.code === 'Escape' && !help.hidden) {
+    toggleHelp(false);
+    helpBtn.focus();
+  }
 });
 
 // Zoom: scroll, pinch, or + and -. Remembered between visits. Video capture sets its own.
@@ -163,7 +224,8 @@ try {
   /* storage can be blocked; sound simply defaults to on */
 }
 const applySound = () => {
-  soundBtn.textContent = soundOn ? 'Sound on' : 'Sound off';
+  soundBtn.innerHTML = soundOn ? SOUND_ON : SOUND_OFF;
+  soundBtn.setAttribute('aria-label', soundOn ? 'Sound on' : 'Sound off');
   soundBtn.setAttribute('aria-pressed', String(soundOn));
   game.ctx.events.emit('sound:set', soundOn);
 };
@@ -192,3 +254,54 @@ applySound();
   /** Only in ?manual mode: renders the game's sounds offline, in step with the video. */
   renderSound: manual ? renderOffline : undefined,
 };
+
+// ---- Arriving from the Reel: what is new today, and who asked for it ---------------------
+// Shown once per new day, out of the way, gone at the first move.
+if (!manual) {
+  const arrival = document.getElementById('arrival')!;
+  let seen = 0;
+  try {
+    seen = Number(localStorage.getItem('crail.seenDay')) || 0;
+  } catch {
+    /* storage blocked: show it every visit */
+  }
+  const today = features.filter((f) => f.meta.day === day && !f.meta.secret);
+  if (seen < day && today.length) {
+    const card = document.createElement('div');
+    card.className = 'card bolted';
+    const h = document.createElement('h2');
+    h.textContent = `Day ${day}`;
+    const list = document.createElement('ul');
+    for (const f of today) {
+      const li = document.createElement('li');
+      const what = document.createElement('b');
+      what.textContent = f.meta.title;
+      const who = document.createElement('span');
+      who.textContent = `asked for by @${f.meta.credit.username}`;
+      li.append(what, who);
+      list.append(li);
+    }
+    card.append(h, list);
+    arrival.append(card);
+    arrival.hidden = false;
+    let gone = false;
+    const leave = () => {
+      if (gone) return;
+      gone = true;
+      arrival.classList.add('leaving');
+      setTimeout(() => (arrival.hidden = true), 450);
+      try {
+        localStorage.setItem('crail.seenDay', String(day));
+      } catch {
+        /* ignore */
+      }
+    };
+    game.ctx.events.on('cube:rolled', leave);
+    setTimeout(leave, 7000);
+  }
+  // A while into a session, the reminder that the next day is up to them.
+  let rolled = 0;
+  game.ctx.events.on('cube:rolled', () => {
+    if (++rolled === 150) tip(`What should Day ${day + 1} be? Comment on the newest Reel from @qubitman_ftw.`, 7);
+  });
+}

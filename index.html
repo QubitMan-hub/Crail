@@ -2,33 +2,47 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#e9e3d6" />
-    <meta name="description" content="CRAIL: a game that started as one cube. Instagram comments decide everything else." />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f2430" />
+    <meta name="description" content="CRAIL: a game built by Instagram comments, one feature a day. Every feature names who asked for it." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <title>CRAIL</title>
   </head>
   <body>
     <div id="game"></div>
-    <div id="vignette"></div>
     <div id="brand" class="hud">
-      <h1>CRAIL</h1>
-      <button id="day" type="button" aria-expanded="false" aria-controls="credits">Day 0</button>
+      <h1><span class="logo"></span>CRAIL</h1>
+      <button id="day" type="button" aria-expanded="false" aria-controls="credits" aria-label="Who built this: the comments behind every day">Day 0</button>
     </div>
-    <ul id="credits" hidden></ul>
-    <button id="sound" type="button">Sound on</button>
-    <button id="map-btn" type="button" aria-pressed="false">Map</button>
-    <button id="help-btn" type="button" aria-expanded="false" aria-controls="help" aria-label="How to play">?</button>
-    <div id="help" role="dialog" aria-label="How to play" hidden>
-      <div class="card">
-        <h2>How to play</h2>
+    <section id="credits" class="bolted" hidden aria-label="The comments that built CRAIL">
+      <h2>Built by the comments</h2>
+      <ol></ol>
+    </section>
+    <div id="controls">
+      <button id="map-btn" class="plate" type="button" aria-pressed="false" aria-label="Map (M)"></button>
+      <button id="sound" class="plate" type="button" aria-pressed="true" aria-label="Sound"></button>
+    </div>
+    <div id="board" class="hud bolted" aria-label="Your stats"></div>
+    <button id="help-btn" class="plate" type="button" aria-expanded="false" aria-controls="help" aria-label="How to play">?</button>
+    <div id="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+      <div class="card bolted" tabindex="-1">
+        <header>
+          <h2 id="help-title">How to play</h2>
+          <button class="close plate" type="button" aria-label="Close"></button>
+        </header>
         <dl></dl>
-        <p class="foot">Tap anywhere or press Esc to close</p>
       </div>
     </div>
-    <div id="hint" class="hud">
-      <span class="keys">WASD or arrow keys to roll. Click to go there. M for the map.</span>
+    <div id="hint" class="hud" role="status" aria-live="polite">
+      <span class="keys">Roll with WASD or the arrow keys, or click where to go. M for the map.</span>
       <span class="touch">Tap anywhere to roll there.</span>
+    </div>
+    <div id="arrival" hidden></div>
+    <div id="nogl" hidden>
+      <div class="card bolted">
+        <h2>CRAIL needs 3D graphics</h2>
+        <p>This browser could not start WebGL. Open the link in Safari or Chrome instead of the in-app browser, and the cube will be waiting.</p>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

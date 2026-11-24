@@ -756,7 +756,10 @@ test('the how-to-play card lists what this build has, and closes', async ({ page
   await page.locator('#help-btn').click();
   await expect(page.locator('#help dl')).toContainText('Femboys');
   await expect(page.locator('#help dl')).not.toContainText('Gåmson');
-  await page.locator('#help').click();
+  // Touching the card (to scroll it) keeps it open; the close button shuts it.
+  await page.locator('#help dl').click();
+  await expect(page.locator('#help')).toBeVisible();
+  await page.locator('#help .close').click();
   await expect(page.locator('#help')).toBeHidden();
   expect(await cubeState(page)).toMatchObject({ rolls: 0 });
 });

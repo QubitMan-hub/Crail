@@ -11,14 +11,14 @@ import { landmarks } from './landmarks';
  * It is flat, at the same angle as the game, so "up-left" here is "up-left" on screen.
  */
 
-const INK = '#1d1b19';
-const PAPER = '#f7f2e7';
+const INK = '#1f2430';
+const PAPER = '#fffaf0';
 const RED = '#f2542d';
 /** How many cells from the cube the map reaches. Anything further is pinned to the edge. */
 const REACH = 22;
 /** The octopus's name (his landmark is only used to say whether he is out). */
 const OCTOPUS = 'Gåmson';
-const FONT = `'Avenir Next', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif`;
+const FONT = `'Rubik Variable', system-ui, sans-serif`;
 
 /** Who belongs to which group on the map, and how the group is shown. */
 const GROUPS: Record<string, { color: string; one: string; many: string }> = {
@@ -154,7 +154,7 @@ export function setupMap(ctx: GameContext, button: HTMLButtonElement): { toggle(
     const taken: [number, number, number, number][] = [[half - 30, half - 30, 60, 52]];
     const free = (x: number, y: number, w: number, h: number) =>
       !taken.some(([qx, qy, qw, qh]) => x < qx + qw && x + w > qx && y < qy + qh && y + h > qy);
-    const label = (text: string, px: number, py: number, color = INK, px2 = 11, weight = 800, track = 0.12) => {
+    const label = (text: string, px: number, py: number, color = INK, px2 = 11, weight = 700, track = 0.02) => {
       font(px2, weight);
       g.letterSpacing = `${track}em`;
       const w = g.measureText(text).width + 6;

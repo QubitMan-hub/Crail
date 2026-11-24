@@ -53,7 +53,7 @@ export const secrets: Feature = {
         if (n.nx !== null || !['idle', 'walk', 'march'].includes(n.mode) || Math.abs(n.x - c.x) + Math.abs(n.z - c.z) > 8) continue;
         Object.assign(n, { mode: 'revere', t: 0, timer: 2.5, emote: { kind: 'sparkle', t: 0 } });
       }
-      tip('✨ The golden cube. Everyone bows.', 5, { urgent: true });
+      tip('The golden cube. Everyone bows.', 5, { urgent: true });
       ctx.events.emit('secrets:golden');
     };
 

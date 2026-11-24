@@ -24,9 +24,9 @@ const SUN = '#f6cf6b';
 const STEEL = '#8d8a96';
 const STONE = '#b3ada3';
 const WATER = '#8cc9ea';
-const LEAF = '#8fb873';
-const LEAF_DARK = '#739a5c';
-const PINE = '#5f8a66';
+const LEAF = '#6db24f';
+const LEAF_DARK = '#4f9a42';
+const PINE = '#3f8a4e';
 const TRUNK = '#8a6248';
 const WOOD = '#b98a62';
 const PASTELS = [PINK, BLUE, SUN, LAV];
@@ -409,7 +409,7 @@ export const park: Feature = {
       m.renderOrder = -1;
       root.add(m);
     };
-    wash('#b4cf92', 0.55, PARK.x, PARK.z, PARK.w, PARK.d, 0.004);
+    wash('#8cc96b', 0.72, PARK.x, PARK.z, PARK.w, PARK.d, 0.004);
     // Paths: a broad walk in from the gate, a cross walk, a plaza in the middle,
     // and a spur out to each ride. [x, z, width, depth]
     const paths: [number, number, number, number][] = [
@@ -421,7 +421,7 @@ export const park: Feature = {
       [17, 7, 4, 1], // to the trampoline
       [24, 7, 3, 1], // to the swing
     ];
-    paths.forEach(([x, z, w, d], i) => wash('#f6efe0', 0.8, x, z, w, d, 0.006 + i * 0.0004));
+    paths.forEach(([x, z, w, d], i) => wash('#f3e3bf', 0.9, x, z, w, d, 0.006 + i * 0.0004));
 
     const scenery = new THREE.Group();
     root.add(scenery);

@@ -1,3 +1,5 @@
+import { withCharms } from '../ui/icons';
+
 /**
  * A short line of text at the bottom of the screen, for telling the player what just
  * happened or what something costs. Features share the one line, so messages queue:
@@ -24,7 +26,7 @@ const now = () => performance.now() / 1000;
 function show(m: Message): void {
   const el = document.getElementById('hint');
   if (!el) return;
-  el.textContent = m.text;
+  withCharms(el, m.text);
   el.classList.remove('gone');
   current = { ...m, since: now() };
   clearTimeout(timer);

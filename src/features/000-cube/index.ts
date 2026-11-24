@@ -55,6 +55,13 @@ export const cube: Feature = {
     mesh.name = 'cube';
     mesh.position.set(0, 0.5, 0);
     mesh.castShadow = true;
+    // Behind a ride or a tree, the cube still shows: an ink silhouette where it is hidden.
+    const ghost = new THREE.Mesh(
+      mesh.geometry,
+      new THREE.MeshBasicMaterial({ color: '#1f2430', transparent: true, opacity: 0.38, depthFunc: THREE.GreaterDepth, depthWrite: false }),
+    );
+    ghost.renderOrder = 20;
+    mesh.add(ghost);
     // One ink dot, so you can see which way up it is.
     const dot = new THREE.Mesh(
       new THREE.CircleGeometry(0.13, 32),

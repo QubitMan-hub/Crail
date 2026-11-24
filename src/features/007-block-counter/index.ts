@@ -1,5 +1,6 @@
 import type { Feature } from '../../core/feature';
 import { tip } from '../../core/tip';
+import { CUBE } from '../../ui/icons';
 
 /**
  * A block counter: how many blocks the cube has rolled, ever. It sits under the cult
@@ -50,10 +51,8 @@ export const blockCounter: Feature = {
 
     const el = document.createElement('div');
     el.id = 'blocks';
-    el.setAttribute('role', 'status');
-    el.setAttribute('aria-label', 'Blocks rolled');
-    el.innerHTML = '<i aria-hidden="true"></i><b></b><span>blocks</span>';
-    document.body.appendChild(el);
+    el.innerHTML = `${CUBE}<b></b><span>blocks</span>`;
+    (document.getElementById('board') ?? document.body).appendChild(el);
     const num = el.querySelector('b') as HTMLElement;
     // The number counts up to the real total rather than jumping, so it reads like an odometer.
     let shown = state.total;

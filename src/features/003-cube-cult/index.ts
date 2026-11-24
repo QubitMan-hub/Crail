@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Feature } from '../../core/feature';
 import type { Occupant } from '../../core/grid';
 import { addLandmark } from '../../core/landmarks';
+import { CHARM, CULT } from '../../ui/icons';
 import { addStealable } from '../../core/loot';
 import { tip } from '../../core/tip';
 import { DIRS, type DirIndex, type Lead, type Npc } from '../../characters/brain';
@@ -530,14 +531,18 @@ export const cubeCult: Feature = {
     const charmsEl = document.createElement('span');
     const membersEl = document.createElement('span');
     hud.append(charmsEl, membersEl);
-    document.body.appendChild(hud);
+    (document.getElementById('board') ?? document.body).appendChild(hud);
     let announced = 0;
     function refresh(bump: boolean) {
       const rank = [...RANKS].reverse().find(([size]) => members.length >= size);
       state.rank = rank?.[1] ?? '';
-      charmsEl.innerHTML = `<b>✦</b> ${state.charms}`;
-      charmsEl.title = 'Charms';
-      membersEl.textContent = `Cult ${members.length}${state.rank ? ` · ${state.rank}` : ''}`;
+      charmsEl.innerHTML = `${CHARM}<b>${state.charms}</b><span>${state.charms === 1 ? 'charm' : 'charms'}</span>`;
+      charmsEl.className = 'charms';
+      membersEl.className = 'members';
+      membersEl.innerHTML = CULT;
+      const cultLabel = document.createElement('span');
+      cultLabel.textContent = `Cult ${members.length}${state.rank ? ` · ${state.rank}` : ''}`;
+      membersEl.append(cultLabel);
       if (rank && rank[0] > announced) {
         announced = rank[0];
         tip(rank[2]);
@@ -721,7 +726,7 @@ export const cubeCult: Feature = {
 
       markers.forEach((marker, ride) => {
         const on = rideReady(ride);
-        showSymbol(marker, on ? 'sparkle' : null, 1, 99, 1.5 + Math.sin(time * 3) * 0.12);
+        showSymbol(marker, on ? 'charm' : null, 1, 99, 0.95 + Math.sin(time * 3) * 0.08);
         if (on) marker.position.y += Math.sin(time * 2.2) * 0.004;
       });
 

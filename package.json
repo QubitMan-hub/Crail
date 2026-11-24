@@ -16,6 +16,8 @@
     "votes": "node tools/collect-comments.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/rubik": "^5.3.0",
+    "@fontsource/lilita-one": "^5.3.0",
     "three": "^0.187.0"
   },
   "devDependencies": {
