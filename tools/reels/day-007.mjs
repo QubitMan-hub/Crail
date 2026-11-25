@@ -80,8 +80,8 @@ const css = `
   .wipe-edge { position:absolute; top:0; bottom:0; width:10px; background:var(--paper); box-shadow:0 0 18px rgba(31,36,48,.35); }
   .inset { position:absolute; left:50%; top:22%; width:170px; height:170px; margin-left:-85px; border:3px solid var(--ink);
            border-radius:18px; overflow:hidden; box-shadow:0 10px 24px -6px rgba(31,36,48,.45);
-           background:url('/reelasset/before.png') 49px -406px / 540px 960px no-repeat; }
-  .inset b { position:absolute; left:-10px; right:-10px; top:58px; padding:6px 0 3px; text-align:center;
+           background:#efe9dc url('/reelasset/before.png') 8px -900px / 1080px 1920px no-repeat; }
+  .inset b { position:absolute; left:-10px; right:-10px; top:118px; padding:6px 0 3px; text-align:center;
              font:400 40px/1 var(--display); color:var(--paper); background:var(--red); transform:rotate(-14deg);
              border-top:3px solid var(--ink); border-bottom:3px solid var(--ink); }
   .card { position:absolute; left:26px; right:26px; top:17%; padding:22px 24px 20px; background:var(--paper);
