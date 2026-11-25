@@ -57,25 +57,55 @@ export const world: Feature = {
     ctx.scene.add(new THREE.HemisphereLight(0xffffff, 0xc9dccf, 1.5));
 
     const sun = new THREE.DirectionalLight(0xfff4e6, 2.1);
-    const sunOffset = new THREE.Vector3(-5, 10, 3);
+    // The sun's direction never changes; it sits far up that line so its shadow box can be big.
+    const toSun = new THREE.Vector3(-5, 10, 3).normalize();
+    const SUN_DISTANCE = 40;
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.radius = 4;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.radius = 3;
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.03;
     const s = sun.shadow.camera;
-    s.left = s.bottom = -7;
-    s.right = s.top = 7;
     s.near = 1;
-    s.far = 30;
+    s.far = 90;
     ctx.scene.add(sun, sun.target);
 
+    // The light's own axes, for keeping the shadow map still as the view moves.
+    const across = new THREE.Vector3().crossVectors(toSun, new THREE.Vector3(0, 1, 0)).normalize();
+    const upward = new THREE.Vector3().crossVectors(across, toSun).normalize();
+    const view = new THREE.Vector3();
+    const snapped = new THREE.Vector3();
+    let half = 0;
+
     ctx.onUpdate(() => {
-      // The floor and the sun travel with the player in whole cells, so the
-      // world never ends and the grid never appears to slide.
+      // The floor travels with the player in whole cells, so the world never ends and the
+      // grid never appears to slide.
       const x = Math.round(ctx.focus.x);
       const z = Math.round(ctx.focus.z);
       floor.position.set(x, 0, z);
-      sun.target.position.set(x, 0, z);
-      sun.position.set(x, 0, z).add(sunOffset);
+
+      // Shadows cover everything on screen (plus room for tall things just off it), so none
+      // pop in or out at the edges. The box only changes size in steps, not every frame.
+      const cam = ctx.camera;
+      const zoom = Math.max(0.3, cam.zoom * Math.min(1, ctx.lens));
+      const reach = Math.hypot(cam.right, cam.top * 1.75) / zoom + 4;
+      const want = Math.ceil(reach / 4) * 4;
+      if (want !== half) {
+        half = want;
+        s.left = s.bottom = -half;
+        s.right = s.top = half;
+        s.updateProjectionMatrix();
+      }
+      // Centre the box where the camera is actually looking (it leans away from the cube in
+      // a fight), then snap it to the shadow map's own pixel grid, so shadow edges stay put
+      // instead of crawling as the view glides.
+      view.copy(cam.position).sub(new THREE.Vector3(12, 12, 12)).setY(0);
+      const texel = (2 * half) / sun.shadow.mapSize.x;
+      const a = Math.round(view.dot(across) / texel) * texel;
+      const b = Math.round(view.dot(upward) / texel) * texel;
+      snapped.copy(across).multiplyScalar(a).addScaledVector(upward, b).addScaledVector(toSun, view.dot(toSun));
+      sun.target.position.copy(snapped);
+      sun.position.copy(snapped).addScaledVector(toSun, SUN_DISTANCE);
     });
   },
 };
