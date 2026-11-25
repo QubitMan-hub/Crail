@@ -209,6 +209,17 @@ export const trees: Feature = {
       }
     });
 
+    // Scripted control (video shots): put the cube just west of the nearest tree that has
+    // room beside it, so rolling east bumps it.
+    ctx.events.on('direct:trees.bump', () => {
+      const c = ctx.state.cube as { x: number; z: number } | undefined;
+      if (!c) return;
+      const options = [...at.keys()]
+        .map((k) => k.split(',').map(Number))
+        .filter(([x, z]) => ctx.grid.isFree(x - 1, z))
+        .sort((a, b) => Math.hypot(a[0] - c.x, a[1] - c.z) - Math.hypot(b[0] - c.x, b[1] - c.z));
+      if (options[0]) ctx.events.emit('direct:cube.teleport', [options[0][0] - 1, options[0][1]]);
+    });
     ctx.events.on('direct:trees.clear', () => {
       for (const [k, c] of [...chunks]) forget(k, c);
     });
